@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Security.Cryptography;
 using DriveAlt.Api.Auth;
 using DriveAlt.Api.Data;
@@ -195,12 +194,8 @@ public static class FileEndpoints
             var f = await db.Files.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
             if (f is null) return Results.NotFound();
             if (f.Parts.Length == 1) return ServeFile(storage.Original(f.Id, f.Parts[0]), f.OriginalName, inline: false);
-            return Results.Stream(async stream =>
-            {
-                using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
-                foreach (var p in f.Parts)
-                    await zip.CreateEntryFromFileAsync(storage.Original(f.Id, p), p, CompressionLevel.NoCompression);
-            }, "application/zip", Storage.SafeName(f.Title) + ".zip");
+            var zip = await ZipBuilder.BuildAsync(f.Parts.Select(p => (storage.Original(f.Id, p), p)), ct);
+            return Results.File(zip, "application/zip", Storage.SafeName(f.Title) + ".zip");
         });
 
         // ---------- media (students only ever get masked pages and crops) ----------

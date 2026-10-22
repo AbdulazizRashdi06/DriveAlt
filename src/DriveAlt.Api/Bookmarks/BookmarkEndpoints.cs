@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using DriveAlt.Api.Auth;
 using DriveAlt.Api.Data;
 using DriveAlt.Api.Files;
@@ -81,20 +80,10 @@ public static class BookmarkEndpoints
             }).ToListAsync(ct);
             if (items.Count == 0) return Results.NotFound();
             var name = string.IsNullOrWhiteSpace(course) ? "saved" : $"saved-{course}";
-            return Results.Stream(async stream =>
-            {
-                using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
-                var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var i in items)
-                {
-                    var path = i.RegionId is { } rid ? storage.Crop(rid) : storage.MaskedPage(i.FileId, i.Number);
-                    if (!File.Exists(path)) continue;
-                    var baseName = Storage.SafeName($"{i.Course} - {i.Title} - p{i.Number}{(i.QuestionNumber is null ? "" : " Q" + i.QuestionNumber)}");
-                    var entry = baseName + ".jpg";
-                    for (var n = 2; !used.Add(entry); n++) entry = $"{baseName} ({n}).jpg";
-                    await zip.CreateEntryFromFileAsync(path, entry, CompressionLevel.NoCompression);
-                }
-            }, "application/zip", name + ".zip");
+            var zip = await ZipBuilder.BuildAsync(items.Select(i => (
+                i.RegionId is { } rid ? storage.Crop(rid) : storage.MaskedPage(i.FileId, i.Number),
+                Storage.SafeName($"{i.Course} - {i.Title} - p{i.Number}{(i.QuestionNumber is null ? "" : " Q" + i.QuestionNumber)}") + ".jpg")), ct);
+            return Results.File(zip, "application/zip", name + ".zip");
         });
     }
 }

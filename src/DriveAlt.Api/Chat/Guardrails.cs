@@ -34,7 +34,7 @@ public static partial class Guardrails
 
     public const string NothingLine = "I dug everywhere and came back empty-pawed. Try other words, or check Browse?";
 
-    [GeneratedRegex(@"\b(the\s+answer\s+is|answer\s*:|answers?\s+(?:are|would\s+be)|solution\s+is|solution\s*:|correct\s+(?:option|choice|answer)|the\s+result\s+is|step\s*1\b|first,?\s+you|you\s+(?:should|need\s+to|have\s+to)\s+(?:use|apply|compute|calculate|swap|insert|draw)|hint\s*:|=\s*-?\d)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(the\s+answer\s+is|answer\s*:|answers?\s+(?:are|would\s+be)|solution\s+is|solution\s*:|correct\s+(?:option|choice|answer)|the\s+result\s+is|step\s*1\b|first,?\s+you|you\s+(?:should|need\s+to|have\s+to)\s+(?:use|apply|compute|calculate|swap|insert|draw)|hint\s*:)|=\s*-?\d", RegexOptions.IgnoreCase)]
     private static partial Regex LeakPhrases();
 
     [GeneratedRegex(@"[\p{L}\p{N}]+")]
