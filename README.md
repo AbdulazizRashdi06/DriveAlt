@@ -105,8 +105,9 @@ The database password and the sign-in secret are not secrets you set: the first 
 
 ```bash
 cd deploy
-cp .env.example .env        # set POSTGRES_PASSWORD, Auth__OtpSecret, Resend__ApiKey, Gemini__ApiKey, uploaders
-docker compose up -d --build
+cp .env.example .env        # set Resend__ApiKey, Gemini__ApiKey, uploaders
+printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
+docker compose --env-file generated.env --env-file .env up -d --build
 ```
 
 The app listens on `127.0.0.1:8080`. Put it behind the VPS's existing reverse proxy, e.g. nginx:
