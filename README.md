@@ -88,7 +88,6 @@ Add these at **Settings → Secrets and variables → Actions** (https://github.
 | Secret | What |
 |---|---|
 | `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` | SSH access to the VPS (private key; the user must be able to run `docker`). `VPS_PORT` if not 22 |
-| `POSTGRES_PASSWORD`, `OTP_SECRET` | Long random strings (`openssl rand -hex 32`) |
 | `RESEND_API_KEY` | Sends the sign-in codes |
 | `GEMINI_API_KEY` | Page reading + bot |
 | `GOOGLE_API_KEY` | Optional, for the Drive import |
@@ -100,7 +99,7 @@ Optional **Variables** (same page, Variables tab):
 - `DEPLOY_DIR` (default `~/drivealt`)
 - `GEMINI_MODEL`
 
-The VPS needs Docker with the compose plugin.
+The database password and the sign-in secret are not secrets you set: the first deploy generates them on the VPS (`generated.env`) and keeps them. The VPS needs Docker with the compose plugin.
 
 ### By hand
 

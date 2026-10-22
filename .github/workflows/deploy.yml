@@ -4,8 +4,8 @@
 # Secrets (Settings → Secrets and variables → Actions → Secrets):
 #   VPS_HOST, VPS_USER, VPS_SSH_KEY          SSH access to the Zarqa VPS (private key, user must be able to run docker)
 #   VPS_PORT                                 optional, default 22
-#   POSTGRES_PASSWORD, OTP_SECRET            long random strings
-#   RESEND_API_KEY, GEMINI_API_KEY           API keys
+#   GEMINI_API_KEY, RESEND_API_KEY           API keys
+# The database password and sign-in secret are generated on the VPS on the first deploy (generated.env) and kept.
 #   GOOGLE_API_KEY                           optional (Drive import)
 # Variables (same page → Variables tab), all optional:
 #   UPLOADERS      comma-separated uni IDs, e.g. 24-0161,24-0200
@@ -69,11 +69,9 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          OTP_SECRET: ${{ secrets.OTP_SECRET }}
         run: |
           missing=""
-          for n in VPS_HOST VPS_USER VPS_SSH_KEY POSTGRES_PASSWORD OTP_SECRET; do
+          for n in VPS_HOST VPS_USER VPS_SSH_KEY; do
             [ -z "${!n}" ] && missing="$missing $n"
           done
           if [ -n "$missing" ]; then echo "::error::Missing secrets:$missing"; exit 1; fi
@@ -101,8 +99,6 @@ jobs:
 
       - name: Write .env from secrets
         env:
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          OTP_SECRET: ${{ secrets.OTP_SECRET }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
@@ -115,11 +111,9 @@ jobs:
           {
             echo "DRIVEALT_IMAGE=drivealt:${{ github.sha }}"
             echo "APP_PORT=${APP_PORT:-8080}"
-            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
             echo "App__Name=DriveAlt"
             echo "App__PublicUrl=${PUBLIC_URL:-http://localhost:8080}"
             echo "Auth__EmailTemplate={id}@student.gutech.edu.om"
-            echo "Auth__OtpSecret=$OTP_SECRET"
             i=0
             for id in $(echo "${UPLOADERS:-}" | tr ',' ' '); do echo "Auth__Uploaders__${i}=${id}"; i=$((i+1)); done
             echo "Resend__ApiKey=$RESEND_API_KEY"
@@ -136,6 +130,8 @@ jobs:
         run: |
           dir="${DEPLOY_DIR:-drivealt}"
           ssh vps "mkdir -p '$dir' && chmod 700 '$dir'"
+          # First deploy only: generate the database password and sign-in secret on the server and keep them.
+          ssh vps "cd '$dir' && [ -f generated.env ] || { umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' \"\$(openssl rand -hex 32)\" \"\$(openssl rand -hex 32)\" > generated.env; }"
           docker save drivealt:${{ github.sha }} | gzip | ssh vps 'gunzip | docker load'
           scp deploy/docker-compose.yml "vps:$dir/docker-compose.yml"
           scp deploy.env "vps:$dir/.env"
@@ -147,11 +143,11 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
         run: |
           dir="${DEPLOY_DIR:-drivealt}"
-          ssh vps "cd '$dir' && docker compose up -d --no-build --remove-orphans && docker image prune -f --filter 'until=168h' >/dev/null"
+          ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build --remove-orphans && docker image prune -f --filter 'until=168h' >/dev/null"
           for i in $(seq 1 30); do
             if ssh vps "curl -fsS http://127.0.0.1:\$(grep '^APP_PORT=' '$dir/.env' | cut -d= -f2)/api/health" >/dev/null 2>&1; then
               echo "DriveAlt is up"; exit 0
             fi
             sleep 4
           done
-          echo "::error::App did not become healthy"; ssh vps "cd '$dir' && docker compose logs --tail 80 app"; exit 1
+          echo "::error::App did not become healthy"; ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env logs --tail 80 app"; exit 1

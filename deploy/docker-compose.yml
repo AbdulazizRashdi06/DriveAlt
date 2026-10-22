@@ -1,5 +1,8 @@
 # Normally deployed by .github/workflows/deploy.yml, which ships the image and writes .env from GitHub Secrets.
-# Manual alternative on the VPS, from this folder:  cp .env.example .env  (fill it in)  &&  docker compose up -d --build
+# Manual alternative on the VPS, from this folder:
+#   cp .env.example .env  (fill it in)
+#   printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
+#   docker compose --env-file generated.env --env-file .env up -d --build
 # The app listens on 127.0.0.1:8080; point the VPS reverse proxy (nginx/Caddy) at it.
 services:
   db:
@@ -8,7 +11,7 @@ services:
     environment:
       POSTGRES_DB: drivealt
       POSTGRES_USER: drivealt
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing generated.env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +26,7 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
-    env_file: .env
+    env_file: [generated.env, .env]
     environment:
       ConnectionStrings__Db: Host=db;Database=drivealt;Username=drivealt;Password=${POSTGRES_PASSWORD}
     ports:
