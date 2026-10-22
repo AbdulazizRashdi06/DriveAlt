@@ -32,7 +32,8 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
 
     public async Task<int> RunAsync(string[] args, CancellationToken ct)
     {
-        var folderId = args.FirstOrDefault(a => !a.StartsWith("--")) ?? Year2FolderId;
+        var valued = new[] { "--only", "--limit", "--uploader" };
+        var folderId = args.Where((a, i) => !a.StartsWith("--") && (i == 0 || !valued.Contains(args[i - 1]))).FirstOrDefault() ?? Year2FolderId;
         var only = Arg(args, "--only")?.ToLowerInvariant().Trim('/');
         var limit = int.TryParse(Arg(args, "--limit"), out var l) ? l : int.MaxValue;
         var dryRun = args.Contains("--dry-run");
@@ -49,7 +50,7 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
 
         log.LogInformation("Listing Drive folder {Folder}…", folderId);
         var plan = new List<Planned>();
-        await WalkAsync(folderId, [], plan, ct);
+        await WalkAsync(folderId, [], plan, only, ct);
         if (only is not null) plan = plan.Where(p => string.Join('/', p.Segments).ToLowerInvariant().StartsWith(only)).ToList();
 
         int queued = 0, skipped = 0, failed = 0;
@@ -128,15 +129,27 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
         "slides" or "slide" or "lectures" or "past papers" or "past paper" or "quizzes" or "quiz" or "exercises" or "labs" or "notes"
         or "mid & final" or "midterm & final" or "mid&final" or "quizzes & past papers" or "sql quizzes" or "tutorials" or "tutorial slides";
 
-    private async Task WalkAsync(string folderId, string[] segments, List<Planned> plan, CancellationToken ct)
+    private async Task WalkAsync(string folderId, string[] segments, List<Planned> plan, string? only, CancellationToken ct)
     {
-        var items = await ListAsync(folderId, ct);
+        List<DriveItem> items;
+        try
+        {
+            items = await ListAsync(folderId, ct);
+        }
+        catch (HttpRequestException e)
+        {
+            log.LogWarning("Could not list {Path} ({Error}), skipping it", string.Join('/', segments), e.Message);
+            return;
+        }
         var photos = new List<(DriveItem, string)>();
         foreach (var item in items.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase))
         {
             if (item.Kind == "folder")
             {
-                await WalkAsync(item.Id, [.. segments, item.Name.Trim()], plan, ct);
+                string[] sub = [.. segments, item.Name.Trim()];
+                var path = string.Join('/', sub).ToLowerInvariant();
+                if (only is null || path.StartsWith(only) || only.StartsWith(path + "/") || only == path)
+                    await WalkAsync(item.Id, sub, plan, only, ct);
                 continue;
             }
             var name = item.Name;

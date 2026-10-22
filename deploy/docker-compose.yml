@@ -1,0 +1,37 @@
+# Run on the VPS from this folder:  cp .env.example .env  (fill it in)  &&  docker compose up -d --build
+# The app listens on 127.0.0.1:8080; point the VPS reverse proxy (nginx/Caddy) at it.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: drivealt
+      POSTGRES_USER: drivealt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivealt -d drivealt"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ConnectionStrings__Db: Host=db;Database=drivealt;Username=drivealt;Password=${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    volumes:
+      - files:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  files:

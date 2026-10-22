@@ -1,5 +1,6 @@
 // Drives the running app (API on :5257 serving the built SPA) and screenshots every screen at desktop and phone size.
 // Usage: node e2e/screens.mjs [outDir]
+// Note: sign-in is rate limited (one code per 45 s, 6 per hour per ID, 20 requests per 10 min per IP).
 import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 
@@ -64,8 +65,8 @@ for (const [name, viewport, mobile] of [['desktop', { width: 1440, height: 1000 
   await page.goto(`${BASE}/browse`)
   await shot('05-browse-root')
   await page.goto(`${BASE}/browse/data-structures`)
-  await page.locator('.file').first().waitFor()
-  await page.locator('.file').first().click()
+  await page.locator('.file:not(.folder)').first().waitFor()
+  await page.locator('.file:not(.folder)').first().click()
   await page.locator('.pg').first().waitFor()
   await shot('06-browse-file')
 

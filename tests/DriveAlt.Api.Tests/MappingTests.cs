@@ -1,6 +1,6 @@
+using DriveAlt.Api.Files;
 using DriveAlt.Api.Ai;
 using DriveAlt.Api.Data;
-using DriveAlt.Api.Files;
 using DriveAlt.Api.Import;
 using DriveAlt.Api.Search;
 
@@ -82,4 +82,16 @@ public class MappingTests
         Assert.Equal("quiz | 3", SearchService.OrTsQuery("Quiz 3 from last year"));
         Assert.Null(SearchService.OrTsQuery("the of and"));
     }
+}
+
+public class TypeWordTests
+{
+    [Theory]
+    [InlineData("topic examples", null)]
+    [InlineData("the latest syllabus", null)]
+    [InlineData("midterm 1", "past_paper")]
+    [InlineData("quiz 3 revision", "quiz")]
+    [InlineData("lab 2 sheet", "lab")]
+    [InlineData("practice exercises #7", "exercise")]
+    public void Matches_type_words_as_words(string text, string? type) => Assert.Equal(type, Heuristics.MaterialType(text));
 }

@@ -489,3 +489,4 @@ web/dist/
 .env
 web/e2e/shots/
 web/test-results/
+deploy/.env
