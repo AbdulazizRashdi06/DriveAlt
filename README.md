@@ -72,6 +72,38 @@ For frontend work, run `npm run dev` in `web/` (proxies `/api` to :5257).
 
 ## Deploy on the Zarqa VPS
 
+### With GitHub Actions (recommended)
+
+`.github/workflows/deploy.yml` runs the tests on every push and pull request. On a push to `main` (or **Run workflow** in the Actions tab) it:
+1. builds the Docker image;
+2. copies the image to the VPS over SSH;
+3. writes the server's `.env` from GitHub Secrets;
+4. runs `docker compose up`;
+5. waits for `/api/health`.
+
+No keys are stored in the repo or typed on the server.
+
+Add these at **Settings → Secrets and variables → Actions** (https://github.com/AbdulazizRashdi06/DriveAlt/settings/secrets/actions):
+
+| Secret | What |
+|---|---|
+| `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` | SSH access to the VPS (private key; the user must be able to run `docker`). `VPS_PORT` if not 22 |
+| `POSTGRES_PASSWORD`, `OTP_SECRET` | Long random strings (`openssl rand -hex 32`) |
+| `RESEND_API_KEY` | Sends the sign-in codes |
+| `GEMINI_API_KEY` | Page reading + bot |
+| `GOOGLE_API_KEY` | Optional, for the Drive import |
+
+Optional **Variables** (same page, Variables tab):
+- `UPLOADERS`: comma-separated uni IDs
+- `PUBLIC_URL`
+- `APP_PORT` (default 8080)
+- `DEPLOY_DIR` (default `~/drivealt`)
+- `GEMINI_MODEL`
+
+The VPS needs Docker with the compose plugin.
+
+### By hand
+
 ```bash
 cd deploy
 cp .env.example .env        # set POSTGRES_PASSWORD, Auth__OtpSecret, Resend__ApiKey, Gemini__ApiKey, uploaders

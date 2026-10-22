@@ -1,4 +1,5 @@
-# Run on the VPS from this folder:  cp .env.example .env  (fill it in)  &&  docker compose up -d --build
+# Normally deployed by .github/workflows/deploy.yml, which ships the image and writes .env from GitHub Secrets.
+# Manual alternative on the VPS, from this folder:  cp .env.example .env  (fill it in)  &&  docker compose up -d --build
 # The app listens on 127.0.0.1:8080; point the VPS reverse proxy (nginx/Caddy) at it.
 services:
   db:
@@ -17,6 +18,7 @@ services:
       retries: 20
 
   app:
+    image: ${DRIVEALT_IMAGE:-drivealt:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
