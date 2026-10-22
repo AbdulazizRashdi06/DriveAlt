@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DriveAlt.Api/DriveAlt.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DriveAlt.Api.Tests/DriveAlt.Api.Tests.csproj" />
+  </Folder>
+</Solution>

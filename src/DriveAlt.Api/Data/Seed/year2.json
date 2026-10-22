@@ -1,0 +1,18 @@
+{
+  "courses": [
+    { "slug": "its", "name": "Intelligent Transportation Systems", "semester": 1, "group": "AI", "aliases": ["ITS", "ITS 2024", "intelligent transport"], "color": "#2F6BFF" },
+    { "slug": "rps", "name": "Representation and Problem Solving", "semester": 1, "group": "AI", "aliases": ["RPS", "representation", "problem solving"], "color": "#FF8CC2" },
+    { "slug": "accounting", "name": "Accounting and Controlling", "semester": 1, "group": "ALL", "aliases": ["accounting", "acc", "controlling"], "color": "#FFD34D" },
+    { "slug": "data-structures", "name": "Data Structures", "semester": 1, "group": "ALL", "aliases": ["DS", "data structure", "data structures", "CS 1 107"], "color": "#2F6BFF" },
+    { "slug": "database-systems", "name": "Database Systems", "semester": 1, "group": "ALL", "aliases": ["DB", "databases", "database", "SQL"], "color": "#2BC48A" },
+    { "slug": "organisation-hr", "name": "Organisation & HR", "semester": 1, "group": "CS & CYS", "aliases": ["organisation", "organization", "HR", "org & hr"], "color": "#FF6B2C" },
+    { "slug": "probability-statistics", "name": "Probability and Statistics", "semester": 1, "group": "CS & CYS", "aliases": ["probability", "statistics", "stats", "prob stat"], "color": "#FF8CC2" },
+    { "slug": "ai-for-business", "name": "AI for Business", "semester": 2, "group": "", "aliases": ["AI business", "AIB"], "color": "#2BC48A" },
+    { "slug": "efficient-algorithms", "name": "Efficient Algorithms", "semester": 2, "group": "", "aliases": ["algorithms", "EA", "algo"], "color": "#2F6BFF" },
+    { "slug": "information-security", "name": "Introduction to Information Security", "semester": 2, "group": "", "aliases": ["infosec", "information security", "security", "IIS"], "color": "#FF6B2C" },
+    { "slug": "machine-learning", "name": "Introduction to Machine Learning", "semester": 2, "group": "", "aliases": ["ML", "machine learning", "intro to ML"], "color": "#FFD34D" },
+    { "slug": "numerical-computation", "name": "Numerical Computation", "semester": 2, "group": "", "aliases": ["numerical", "numerics", "NC"], "color": "#FF8CC2" },
+    { "slug": "proseminar", "name": "Proseminar", "semester": 2, "group": "", "aliases": ["seminar"], "color": "#2BC48A" },
+    { "slug": "software-engineering", "name": "Software Engineering", "semester": 2, "group": "", "aliases": ["SWE", "SE", "software eng"], "color": "#2F6BFF" }
+  ]
+}
