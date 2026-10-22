@@ -46,10 +46,12 @@ public class GuardrailTests
     [Fact]
     public void Refusal_lines_rotate_and_blame_abdulaziz()
     {
-        var lines = Enumerable.Range(0, RefusalLines.All.Length).Select(RefusalLines.Next).ToList();
+        var lines = Enumerable.Range(0, RefusalLines.All.Length).Select(i => RefusalLines.Next(i)).ToList();
         Assert.Equal(lines.Count, lines.Distinct().Count());
         Assert.All(lines, l => Assert.Contains("Abdulaziz", l));
         Assert.NotEqual(RefusalLines.Next(0), RefusalLines.Next(1));
+        Assert.All(RefusalLines.WithScreenshot, l => Assert.Contains("Abdulaziz", l));
+        Assert.NotEqual(RefusalLines.Next(0, withScreenshot: true), RefusalLines.Next(0));
     }
 
     [Theory]

@@ -56,7 +56,7 @@ export interface Box { x: number; y: number; w: number; h: number }
 
 export interface ResultCard {
   ref: string
-  kind: 'question' | 'slide' | 'page'
+  kind: 'question' | 'answer' | 'slide' | 'page'
   imageUrl: string
   pageImageUrl: string
   thumbUrl: string
@@ -81,6 +81,9 @@ export interface ResultCard {
   width: number
   height: number
   saved: boolean
+  /** Screenshot of this question's answer, cropped from the original file (never typed out). */
+  answerRef: string | null
+  answerImageUrl: string | null
 }
 
 export interface Conversation { id: string; title: string; updatedAt: string }
@@ -142,7 +145,7 @@ export interface InspectPage {
   error: string | null
   editedAt: string | null
   originalUrl: string
-  maskedUrl: string
+  pageUrl: string
   regions: RegionDto[]
 }
 

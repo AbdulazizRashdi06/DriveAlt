@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
 import type { ResultCard as Card } from '../lib/api'
 import { CARD_COLORS, onDark } from '../lib/api'
@@ -8,10 +9,12 @@ import { originalHref, resultLabel } from './Viewer'
 
 const TILTS = [-1.5, 1, -0.5, 0.75]
 
-/** A result: always a screenshot of the original, never text. */
+/** A result: always a screenshot of the original, never text. Questions can flip to their answer screenshot. */
 export function ResultCard({ card, index, all }: { card: Card; index: number; all: Card[] }) {
   const { openViewer, toast } = useApp()
   const [saved, toggle] = useSaved(card.ref, card.saved)
+  const [showAnswer, setShowAnswer] = useState(false)
+  const answer = showAnswer && card.answerImageUrl
   const color = CARD_COLORS[index % CARD_COLORS.length]
   const dark = onDark(color)
   const meta = [card.fileTitle, `p.${card.pageNumber}`, card.year].filter(Boolean).join(' · ')
@@ -31,12 +34,20 @@ export function ResultCard({ card, index, all }: { card: Card; index: number; al
       style={{ background: color, transform: `rotate(${TILTS[index % TILTS.length]}deg)`, animationDelay: `${Math.min(index, 8) * 55}ms` }}>
       <div className="card-top" style={{ color: dark ? '#fff' : undefined }}>
         <span className="ellipsis" title={card.courseName}>{top}</span>
-        <span>{resultLabel(card)}</span>
+        <span>{answer ? `Answer · ${resultLabel(card)}` : resultLabel(card)}</span>
       </div>
-      <button className="shot" type="button" aria-label={`Open ${resultLabel(card)} from ${card.fileTitle}, page ${card.pageNumber}`}
-        onClick={() => openViewer(all, index)}>
-        <img src={card.imageUrl} alt={`Screenshot of ${resultLabel(card)} from ${card.fileTitle}, page ${card.pageNumber}`} loading="lazy" />
-      </button>
+      <div className="shot-wrap">
+        <button className="shot" type="button" aria-label={`Open ${resultLabel(card)} from ${card.fileTitle}, page ${card.pageNumber}`}
+          onClick={() => openViewer(all, index)}>
+          <img key={answer ? 'a' : 'q'} className="shot-img" src={answer || card.imageUrl} loading="lazy"
+            alt={`Screenshot of ${answer ? 'the answer to ' : ''}${resultLabel(card)} from ${card.fileTitle}, page ${card.pageNumber}`} />
+        </button>
+        {card.answerImageUrl && (
+          <button className={`ans-toggle ${showAnswer ? 'on' : ''}`} type="button" aria-pressed={showAnswer} onClick={() => setShowAnswer(a => !a)}>
+            {showAnswer ? 'Show question' : 'Show answer'}
+          </button>
+        )}
+      </div>
       <div className="card-meta ellipsis" style={{ color: dark ? '#fff' : undefined }} title={meta}>{meta}</div>
       {card.tags.length > 0 && (
         <div className="tags">{card.tags.slice(0, 3).map(t => <span key={t} className="tg">{t}</span>)}</div>

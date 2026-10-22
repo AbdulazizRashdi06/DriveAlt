@@ -7,10 +7,9 @@ namespace DriveAlt.Api.Files;
 /// Disk layout under Storage:Root. Originals are written once and never modified.
 ///   originals/{fileId}/{part}       uploaded files (source of truth)
 ///   pdf/{fileId}.pdf                PDF converted from Office files
-///   pages/{fileId}/{n}.jpg          rendered page (unmasked)
-///   pages/{fileId}/{n}.masked.jpg   page with answer regions hatched out
-///   thumbs/{fileId}/{n}.jpg         small masked thumbnail
-///   crops/{regionId}.jpg            question crop (cut from the masked page)
+///   pages/{fileId}/{n}.jpg          rendered page
+///   thumbs/{fileId}/{n}.jpg         small thumbnail
+///   crops/{regionId}.jpg            question or answer crop
 /// </summary>
 public sealed class Storage
 {
@@ -28,7 +27,6 @@ public sealed class Storage
     public string Pdf(Guid fileId) => Path.Combine(Root, "pdf", fileId.ToString("N") + ".pdf");
     public string PageDir(Guid fileId) => Path.Combine(Root, "pages", fileId.ToString("N"));
     public string PageImage(Guid fileId, int n) => Path.Combine(PageDir(fileId), $"{n}.jpg");
-    public string MaskedPage(Guid fileId, int n) => Path.Combine(PageDir(fileId), $"{n}.masked.jpg");
     public string ThumbDir(Guid fileId) => Path.Combine(Root, "thumbs", fileId.ToString("N"));
     public string Thumb(Guid fileId, int n) => Path.Combine(ThumbDir(fileId), $"{n}.jpg");
     public string Crop(Guid regionId) => Path.Combine(Root, "crops", regionId.ToString("N") + ".jpg");

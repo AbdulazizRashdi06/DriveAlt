@@ -115,7 +115,7 @@ export function Login() {
         <span className="sticker" style={{ background: '#2BC48A', transform: 'rotate(-3deg)' }} data-s="3">quizzes</span>
         <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 600 }}>
           <h1 className="disp login-h1">Ask for any page. Get the real thing.</h1>
-          <p className="login-sub">Your batch's slides, past papers and quizzes, found by a bot that sends screenshots, not answers.</p>
+          <p className="login-sub">Your batch's slides, past papers and quizzes, found by a bot that sends screenshots of the real pages and never types out answers.</p>
         </div>
       </section>
 

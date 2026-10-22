@@ -55,7 +55,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, ILogger<MaterialAi> 
         - course_guess: the slug of the matching course from the list below, or null.
         - regions: boxes on the page, each with label:
             * "question": one per question or sub-question block, including its stem, sub-parts, figures, tables, code and answer choices. Do NOT include the answer or solution area.
-            * "answer": any answer, solution, worked example solution, filled-in/handwritten response, circled/ticked choice or marking scheme. Make these tight so they can be hidden.
+            * "answer": any answer, solution, worked example solution, filled-in/handwritten response, circled/ticked choice or marking scheme. Keep them tight: they are cropped and shown on their own when a student asks for the answer.
             * "other": headers, instructions, logos, page furniture, slide titles/bodies on non-assessment pages.
           box_2d is [ymin, xmin, ymax, xmax] normalized to 0–1000. question_number like "1", "2(b)", "Q3", or null. text is the region's text.
           Slides normally have no question/answer regions unless they contain an exercise.

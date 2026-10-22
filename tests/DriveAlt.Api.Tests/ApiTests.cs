@@ -7,6 +7,7 @@ using DriveAlt.Api.Auth;
 using DriveAlt.Api.Data;
 using DriveAlt.Api.Files;
 using DriveAlt.Api.Processing;
+using DriveAlt.Api.Search;
 using Microsoft.EntityFrameworkCore;
 using SkiaSharp;
 
@@ -112,7 +113,7 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Answers_are_burned_out_of_pages_and_crops()
+    public async Task Pages_are_shown_as_is_and_answers_get_their_own_crop()
     {
         using var scope = app.Services.CreateScope();
         var storage = scope.ServiceProvider.GetRequiredService<Storage>();
@@ -122,25 +123,31 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         using (var white = new SKBitmap(800, 1000))
         {
             white.Erase(SKColors.White);
+            using (var canvas = new SKCanvas(white))
+            using (var red = new SKPaint { Color = SKColors.Red })
+                canvas.DrawRect(new SKRect(80, 400, 720, 600), red); // the "answer" ink
             ImageOps.SaveJpeg(white, storage.PageImage(fileId, 1), 90);
         }
         var page = new Page { FileId = fileId, Number = 1, Width = 800, Height = 1000 };
-        var question = new Region { Label = RegionLabels.Question, X = 0.1f, Y = 0.1f, W = 0.8f, H = 0.5f };
-        page.Regions.Add(question);
-        page.Regions.Add(new Region { Label = RegionLabels.Answer, X = 0.1f, Y = 0.4f, W = 0.8f, H = 0.2f });
+        var question = new Region { Label = RegionLabels.Question, X = 0.1f, Y = 0.1f, W = 0.8f, H = 0.25f };
+        var answer = new Region { Label = RegionLabels.Answer, X = 0.1f, Y = 0.4f, W = 0.8f, H = 0.2f };
+        var other = new Region { Label = RegionLabels.Other, X = 0f, Y = 0f, W = 1f, H = 0.05f };
+        page.Regions.AddRange([question, answer, other]);
 
         await renderer.RenderAsync(fileId, page, CancellationToken.None);
 
-        using var masked = ImageOps.LoadUpright(storage.MaskedPage(fileId, 1));
-        var inAnswer = masked.GetPixel(120, 420);
-        Assert.True(inAnswer.Red < 90 && inAnswer.Green < 90, $"answer area should be hidden, was {inAnswer}");
-        var outside = masked.GetPixel(400, 900);
-        Assert.True(outside.Red > 240, "rest of the page stays visible");
+        Assert.True(File.Exists(storage.Crop(question.Id)));
+        Assert.False(File.Exists(storage.Crop(other.Id)));
+        using var answerCrop = ImageOps.LoadUpright(storage.Crop(answer.Id));
+        var mid = answerCrop.GetPixel(answerCrop.Width / 2, answerCrop.Height / 2);
+        Assert.True(mid.Red > 200 && mid.Green < 80, $"the answer crop shows the real answer, was {mid}");
+        // Nothing is painted over the page any more.
+        using var thumb = ImageOps.LoadUpright(storage.Thumb(fileId, 1));
+        var t = thumb.GetPixel(thumb.Width / 2, thumb.Height / 2);
+        Assert.True(t.Red > 200 && t.Green < 80, "the page keeps its answers");
 
-        // The question crop overlaps the answer: its lower part must be hidden too.
-        using var crop = ImageOps.LoadUpright(storage.Crop(question.Id));
-        var low = crop.GetPixel(30, crop.Height - 30);
-        Assert.True(low.Red < 90, "answer overlapping a question crop is hidden in the crop");
+        Assert.Equal(answer.Id, ResultCards.AnswerFor(question, page.Regions)?.Id);
+        Assert.Equal(question.Id, ResultCards.QuestionFor(answer, page.Regions)?.Id);
     }
 
     [Fact]
@@ -175,7 +182,26 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         var regions = await db.Regions.Where(r => r.PageId == Guid.Parse(pageId)).ToListAsync();
         Assert.DoesNotContain(regions, r => r.Label == RegionLabels.Answer && r.SearchText.Length > 0);
         var questionId = regions.Single(r => r.Label == RegionLabels.Question).Id;
-        Assert.True(File.Exists(scope.ServiceProvider.GetRequiredService<Storage>().Crop(questionId)));
+        var answerId = regions.Single(r => r.Label == RegionLabels.Answer).Id;
+        var storage = scope.ServiceProvider.GetRequiredService<Storage>();
+        Assert.True(File.Exists(storage.Crop(questionId)));
+        Assert.True(File.Exists(storage.Crop(answerId)));
+        await app.DrainJobsAsync();
+
+        // The question card links to its answer screenshot...
+        var chatId = (await (await client.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        var found = await SendAsync(client, chatId, "quiz questions on push and pop");
+        var card = found["results"]!.AsArray().First(r => r!["ref"]!.GetValue<string>() == $"r:{questionId}")!;
+        Assert.Equal($"r:{answerId}", card["answerRef"]!.GetValue<string>());
+
+        // ...and asking for the answer sends that screenshot, with an Abdulaziz line instead of typed text.
+        var asked = await SendAsync(client, chatId, "what's the answer to Q1?");
+        Assert.True(asked["refused"]!.GetValue<bool>());
+        Assert.Contains("Abdulaziz", asked["text"]!.GetValue<string>());
+        var shown = Assert.Single(asked["results"]!.AsArray());
+        Assert.Equal("answer", shown!["kind"]!.GetValue<string>());
+        Assert.Equal($"r:{answerId}", shown["ref"]!.GetValue<string>());
+        Assert.Equal("image/jpeg", (await client.GetAsync(shown["imageUrl"]!.GetValue<string>())).Content.Headers.ContentType!.MediaType);
     }
 
     private static async Task<JsonObject> SendAsync(HttpClient client, string chatId, string text)

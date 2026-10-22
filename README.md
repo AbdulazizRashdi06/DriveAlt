@@ -1,11 +1,11 @@
 # DriveAlt
 
-The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot for slides, past papers, quizzes, exercises and labs, and get back **screenshots of the real pages**: never typed-out content, never answers.
+The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot for slides, past papers, quizzes, exercises and labs, and get back **screenshots of the real pages**: never typed-out content, and never typed-out answers (answers come as screenshots from the file).
 
 - **Chat:** ask in plain words ("past paper questions on queue rear counting in DS", "Quiz 3 from last year", "where did we cover AVL trees?").
   - The bot figures out course, type and year itself. It only asks when something is truly ambiguous.
   - Results are question crops or full slides, each with its source (course, file, year, page, question number) and tags.
-  - Ask it for an answer, hint or check and it refuses with a rotating "blame Abdulaziz" line.
+  - Ask it for an answer, hint or check and it won't type anything: it blames Abdulaziz and sends the answer screenshot from the file instead.
 - **Viewer:** zoom, flip through results with ← / →, open the full page or the original file at that page, save.
 - **Browse:** the Drive's Year 2 tree:
   - Semester 1 is grouped into AI / ALL / CS & CYS, then course → type → folders → files → pages.
@@ -22,17 +22,17 @@ The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot 
 
 Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emil Kowalski motion rules), on both desktop and phone.
 
-## How answers stay hidden
+## Answers: screenshots yes, typing no
 
-1. Gemini labels every region on a page as **question**, **answer** or **other**.
-2. Answer regions are **burned out** (opaque hatching) of the page images students see. Question crops are cut from that masked page.
-3. Answer text is stored but **never indexed, embedded or sent to the bot**. The bot's tools only see question/slide snippets.
-4. The bot picks results by reference, and the server renders them from the database. It only accepts references its own searches returned.
-5. The bot's one-line comment is filtered on the server:
+1. Gemini labels every region on a page as **question**, **answer** or **other**. Questions and answers each get their own crop from the original page; pages themselves are shown exactly as they are.
+2. A question card links to its answer (same question number, or the first answer below it on the page). "Show answer" flips the card to the answer screenshot.
+3. When a student asks the bot for an answer, a hint or a check, the bot replies with a rotating "blame Abdulaziz" line and **sends the answer screenshot from the file** (if the file has one). It never types the answer, explains it or checks work.
+4. Answer text is stored but **never indexed, embedded or sent to the model**. The model only sees question/slide snippets plus an `answer_ref` it can attach.
+5. The bot picks results by reference, and the server renders them from the database. It only accepts references its own searches (or earlier messages) returned.
+6. The bot's one-line comment is filtered on the server:
    - It is capped at 2 sentences.
-   - It is rejected if it contains answer-like phrases or quotes 5+ words from any page involved.
-6. Refusal lines are written by the server, not the model (`Chat/RefusalLines`).
-7. **"Open original"** shows the untouched file. The spec allows the file to contain answers; the bot just never says them.
+   - It is rejected if it contains answer-like phrases or quotes 5+ words from any page involved, answers included.
+7. Refusal lines are written by the server, not the model (`Chat/RefusalLines`).
 
 ## Stack
 
@@ -40,7 +40,7 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 |---|---|
 | API | ASP.NET Core 10, EF Core + Npgsql, background job workers (Postgres `SKIP LOCKED` queue) |
 | DB | PostgreSQL 17 + pgvector: full-text search + vector embeddings, merged with reciprocal-rank fusion |
-| Files | Originals on disk (`/data`, never modified), LibreOffice (Office → PDF), poppler (PDF → page images, text layer), libheif (HEIC), SkiaSharp (crops/masks) |
+| Files | Originals on disk (`/data`, never modified), LibreOffice (Office → PDF), poppler (PDF → page images, text layer), libheif (HEIC), SkiaSharp (crops, thumbnails) |
 | AI | Gemini (`Gemini:Model`, default `gemini-3.8-flash`) for page extraction (structured output, `box_2d` regions) and the tool-calling bot; `gemini-embedding-001` (768-d) for search |
 | Email | Resend: `{uniId}@student.gutech.edu.om` gets a 6-digit code |
 | Web | React 19 + Vite + TanStack Query + React Router, pdf.js, react-zoom-pan-pinch; served by the API from `wwwroot` |
@@ -48,7 +48,7 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 **Without a Gemini key the app still runs in offline mode:**
 - text comes from the PDF text layer;
 - each assessment page counts as one question region;
-- answers are **not** masked;
+- there are no separate answer crops, so "give me the answer" just gets the refusal line;
 - search is keyword-only;
 - the bot is rule-based.
 

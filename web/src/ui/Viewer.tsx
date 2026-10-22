@@ -11,11 +11,13 @@ export function originalHref(r: Pick<ResultCard, 'fileId' | 'pageNumber'>) {
 }
 
 export function resultLabel(r: ResultCard) {
-  if (r.kind === 'question') return r.questionNumber ? `Q${r.questionNumber.replace(/^q/i, '')}` : 'Question'
+  const q = r.questionNumber ? `Q${r.questionNumber.replace(/^q/i, '')}` : null
+  if (r.kind === 'question') return q ?? 'Question'
+  if (r.kind === 'answer') return q ? `Answer · ${q}` : 'Answer'
   return r.kind === 'slide' ? `Slide ${r.pageNumber}` : `Page ${r.pageNumber}`
 }
 
-/** Full-page viewer: the matched region outlined on the (answer-masked) page, zoom, flip through results. */
+/** Full-page viewer: the matched region outlined on the page, zoom, flip through results. */
 export function Viewer({ items, start, onClose }: { items: ResultCard[]; start: number; onClose: () => void }) {
   const [index, setIndex] = useState(Math.min(Math.max(start, 0), items.length - 1))
   const [scale, setScale] = useState(1)
@@ -88,7 +90,7 @@ export function Viewer({ items, start, onClose }: { items: ResultCard[]; start: 
           onTransform={(_, s) => setScale(s.scale)}>
           <TransformComponent wrapperStyle={{ height: '100%', maxWidth: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'visible' }}>
             <figure className="viewer-fig" style={{ aspectRatio: `${item.width} / ${item.height}` }} key={index === start ? 'first' : 'flip'}>
-              <img src={item.pageImageUrl} alt={`${item.fileTitle}, page ${item.pageNumber}${box ? ', with your result outlined' : ''}. Answer areas are hidden.`}
+              <img src={item.pageImageUrl} alt={`${item.fileTitle}, page ${item.pageNumber}${box ? ', with your result outlined' : ''}`}
                 width={item.width} height={item.height} draggable={false} />
               {box && (
                 <>

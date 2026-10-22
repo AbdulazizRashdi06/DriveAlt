@@ -65,7 +65,7 @@ function pageCard(file: FileDto, p: PageThumb): Card {
     fileId: file.id, pageId: p.id, regionId: null, fileTitle: file.title, fileName: file.originalName, sourceKind: file.sourceKind,
     courseSlug: file.courseSlug ?? '', courseName: file.courseName ?? '', courseColor: file.courseColor ?? '#FF6B2C', semester: 0,
     materialType: file.materialType, year: file.year, assessmentLabel: file.assessmentLabel, pageNumber: p.number, pageCount: file.pageCount,
-    questionNumber: null, tags: p.tags, box: null, width: p.width, height: p.height, saved: false,
+    questionNumber: null, tags: p.tags, box: null, width: p.width, height: p.height, saved: false, answerRef: null, answerImageUrl: null,
   }
 }
 
@@ -101,7 +101,7 @@ function FilePages({ fileId }: { fileId: string }) {
         {cards.map((c, i) => (
           <button key={c.ref} className="pg" type="button" aria-label={`Page ${c.pageNumber}`} onClick={() => openViewer(cards, i)}
             style={{ animation: `pop-in 300ms var(--ease-out) ${Math.min(i, 10) * 50}ms both` }}>
-            <span className="pg-img"><img src={c.thumbUrl} alt={`Page ${c.pageNumber}, answers hidden`} loading="lazy" width={c.width} height={c.height} /></span>
+            <span className="pg-img"><img src={c.thumbUrl} alt={`Page ${c.pageNumber}`} loading="lazy" width={c.width} height={c.height} /></span>
             <span className="pg-meta"><span>Page {c.pageNumber}</span><span className="ellipsis">{c.tags.slice(0, 2).join(', ')}</span></span>
           </button>
         ))}

@@ -15,8 +15,22 @@ public static class RefusalLines
         "Hints count as answers in Abdulaziz's rulebook. I don't make the rules (he does).",
     ];
 
+    /// <summary>When the answer exists in the file: the bot won't type it, but it sends the screenshot.</summary>
+    public static readonly string[] WithScreenshot =
+    [
+        "Sorry, I can't say it out loud, Abdulaziz told me not to 🤐 But nobody said I can't show you the page.",
+        "Take it up with Abdulaziz, I'm just following orders. The orders say screenshots are fine though 👀",
+        "Abdulaziz would unplug me if I typed it. Here's the answer straight from the file instead.",
+        "No spoilers from me (Abdulaziz rules). The file has no such rule, so here it is.",
+        "I don't explain, I just point. Abdulaziz's orders. Here's where the answer lives.",
+    ];
+
     /// <summary>Round-robin per conversation, so the same line never shows twice in a row.</summary>
-    public static string Next(int refusalCount) => All[refusalCount % All.Length];
+    public static string Next(int refusalCount, bool withScreenshot = false)
+    {
+        var lines = withScreenshot ? WithScreenshot : All;
+        return lines[refusalCount % lines.Length];
+    }
 }
 
 /// <summary>Last line of defence on the bot's free text: it may only chat about the search, never leak content.</summary>

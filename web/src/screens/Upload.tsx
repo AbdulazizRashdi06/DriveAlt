@@ -7,7 +7,7 @@ import { FileBadge } from './Browse'
 import { IconCamera, IconRefresh, IconTrash } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
 
-const STEPS = ['Splitting pages', 'Reading', 'Tagging topics', 'Hiding answers', 'Ready']
+const STEPS = ['Splitting pages', 'Reading', 'Tagging topics', 'Cropping', 'Ready']
 const ACCEPT = '.pdf,.pptx,.ppt,.docx,.doc,image/*,.heic,.heif'
 
 export function Pipeline({ file }: { file: FileDto }) {
@@ -218,7 +218,7 @@ export function Upload() {
           {list.map(f => <UploadRow key={f.id} file={f} courses={courses.data ?? []} onChange={refresh} />)}
         </div>
         <p className="lbl" style={{ margin: '4px 0 0', textTransform: 'none', letterSpacing: 0, fontWeight: 700 }}>
-          Steps: splitting pages → reading → tagging → hiding answers → ready. Files are searchable as soon as they're ready.
+          Steps: splitting pages → reading → tagging → cropping → ready. Files are searchable as soon as they're ready.
         </p>
       </section>
     </main>

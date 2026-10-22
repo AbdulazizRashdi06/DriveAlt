@@ -13,7 +13,7 @@ interface Draft extends NBox { key: string; id: string | null; label: Label; que
 
 const LABELS: { value: Label; text: string }[] = [
   { value: 'question', text: 'Question' },
-  { value: 'answer', text: 'Answer (hidden)' },
+  { value: 'answer', text: 'Answer' },
   { value: 'other', text: 'Other' },
 ]
 const KINDS = ['slide', 'assessment', 'notes', 'other']
@@ -27,7 +27,7 @@ type Drag =
   | { kind: 'draw'; start: { x: number; y: number }; current: { x: number; y: number } }
 
 function regionTitle(r: Draft, i: number) {
-  const base = r.label === 'question' ? `Question${r.questionNumber ? ` · ${r.questionNumber}` : ''}` : r.label === 'answer' ? 'Answer · hidden' : 'Other'
+  const base = r.label === 'question' ? `Question${r.questionNumber ? ` · ${r.questionNumber}` : ''}` : r.label === 'answer' ? `Answer${r.questionNumber ? ` · ${r.questionNumber}` : ''}` : 'Other'
   return `${i + 1}. ${base}`
 }
 
@@ -138,7 +138,7 @@ function PageEditor({ page, onSaved }: { page: InspectPage; onSaved: (p: Inspect
           <span aria-hidden="true" style={{ width: 2, height: 24, background: '#F3E6CB', margin: '0 6px' }} />
           <span className="legend">
             <span><i style={{ background: '#2F6BFF' }} />Question</span>
-            <span><i style={{ background: '#2A1B0F' }} />Answer (hidden)</span>
+            <span><i style={{ background: '#2A1B0F' }} />Answer</span>
             <span><i style={{ border: '2px dashed #9A7B57' }} />Other</span>
           </span>
         </div>
@@ -151,7 +151,7 @@ function PageEditor({ page, onSaved }: { page: InspectPage; onSaved: (p: Inspect
                 style={{ left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) }}
                 role="button" tabIndex={0} aria-label={regionTitle(r, i)} aria-pressed={r.key === selected}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(r.key) } }}>
-                <span>{r.label === 'question' ? `Question${r.questionNumber ? ` · ${r.questionNumber}` : ''}` : r.label === 'answer' ? 'Answer · hidden' : 'Other'}</span>
+                <span>{r.label === 'question' ? `Question${r.questionNumber ? ` · ${r.questionNumber}` : ''}` : r.label === 'answer' ? `Answer${r.questionNumber ? ` · ${r.questionNumber}` : ''}` : 'Other'}</span>
                 {r.key === selected && (['nw', 'ne', 'sw', 'se'] as Handle[]).map(h => <i key={h} className={`hdl ${h}`} data-handle={h} />)}
               </div>
             ))}
@@ -206,23 +206,23 @@ function PageEditor({ page, onSaved }: { page: InspectPage; onSaved: (p: Inspect
                     style={{ flex: 1, minHeight: 42, fontSize: 13, padding: '0 10px' }} onClick={() => update(sel.key, { label: l.value })}>{l.text}</button>
                 ))}
               </div>
-              {sel.label === 'question' && (
+              {sel.label !== 'other' && (
                 <span className="field">
                   <label className="lbl" htmlFor="qn">Question number</label>
                   <input id="qn" className="sel" style={{ backgroundImage: 'none', minWidth: 0, width: 160 }} placeholder="e.g. 2(b)" value={sel.questionNumber ?? ''}
                     onChange={e => update(sel.key, { questionNumber: e.target.value || null })} />
                 </span>
               )}
-              {sel.cropUrl && sel.label === 'question' && !dirty && (
+              {sel.cropUrl && sel.label !== 'other' && !dirty && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span className="lbl">Crop students see</span>
+                  <span className="lbl">{sel.label === 'answer' ? 'Answer screenshot students get' : 'Crop students see'}</span>
                   <div style={{ borderRadius: 18, overflow: 'hidden', border: '3px solid #F3E6CB', lineHeight: 0, background: '#fff' }}>
                     <img src={sel.cropUrl} alt="Crop students will see" style={{ width: '100%', height: 'auto', maxHeight: 260, objectFit: 'contain' }} />
                   </div>
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label className="lbl" htmlFor="rtext">Region text · {sel.label === 'answer' ? 'never shown or searched' : 'used for search only'}</label>
+                <label className="lbl" htmlFor="rtext">Region text · {sel.label === 'answer' ? 'never typed by the bot, not searched' : 'used for search only'}</label>
                 <textarea id="rtext" className="textarea" rows={4} value={sel.text} onChange={e => update(sel.key, { text: e.target.value })} />
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
