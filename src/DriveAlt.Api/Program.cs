@@ -26,6 +26,7 @@ builder.Services.Configure<AuthOptions>(cfg.GetSection("Auth"));
 builder.Services.Configure<ResendOptions>(cfg.GetSection("Resend"));
 builder.Services.Configure<GeminiOptions>(cfg.GetSection("Gemini"));
 builder.Services.Configure<DeepSeekOptions>(cfg.GetSection("DeepSeek"));
+builder.Services.Configure<CodexOptions>(cfg.GetSection("Codex"));
 builder.Services.Configure<StorageOptions>(cfg.GetSection("Storage"));
 builder.Services.Configure<ProcessingOptions>(cfg.GetSection("Processing"));
 builder.Services.Configure<GoogleOptions>(cfg.GetSection("Google"));
@@ -40,6 +41,8 @@ builder.Services.AddSingleton<DocumentConverter>();
 builder.Services.AddSingleton<PageRenderer>();
 builder.Services.AddHttpClient<GeminiClient>(c => c.Timeout = TimeSpan.FromMinutes(3));
 builder.Services.AddHttpClient<DeepSeekClient>(c => c.Timeout = TimeSpan.FromMinutes(3));
+// A Codex page can wait in the gateway's queue and then run for up to 4 minutes.
+builder.Services.AddHttpClient<CodexClient>(c => c.Timeout = TimeSpan.FromMinutes(10));
 builder.Services.AddScoped<IMaterialAi, MaterialAi>();
 builder.Services.AddScoped<ProcessingService>();
 builder.Services.AddScoped<SearchService>();
@@ -103,7 +106,7 @@ if (!app.Environment.IsDevelopment())
         throw new InvalidOperationException("Set Auth__OtpSecret to a long random value before running in production.");
     if (string.IsNullOrWhiteSpace(cfg["Resend:ApiKey"]))
         app.Logger.LogWarning("Resend__ApiKey is not set: sign-in codes are only written to this log, not emailed.");
-    if (string.IsNullOrWhiteSpace(cfg["Gemini:ApiKey"]) && string.IsNullOrWhiteSpace(cfg["DeepSeek:ApiKey"]))
+    if (string.IsNullOrWhiteSpace(cfg["Gemini:ApiKey"]) && string.IsNullOrWhiteSpace(cfg["DeepSeek:ApiKey"]) && string.IsNullOrWhiteSpace(cfg["Codex:BaseUrl"]))
         app.Logger.LogWarning("Gemini__ApiKey is not set: running in offline mode (no AI regions or answer crops, keyword search only).");
     else if (string.IsNullOrWhiteSpace(cfg["Gemini:ApiKey"]))
         app.Logger.LogWarning("Gemini__ApiKey is not set: DeepSeek reads pages and chats, but search is keyword-only (no embeddings).");
@@ -133,11 +136,12 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { ok = true }));
 app.MapGet("/api/config", (Microsoft.Extensions.Options.IOptions<AppOptions> a, Microsoft.Extensions.Options.IOptions<AuthOptions> au,
-    Microsoft.Extensions.Options.IOptions<GeminiOptions> g, Microsoft.Extensions.Options.IOptions<DeepSeekOptions> d) => new
+    Microsoft.Extensions.Options.IOptions<GeminiOptions> g, Microsoft.Extensions.Options.IOptions<DeepSeekOptions> d,
+    Microsoft.Extensions.Options.IOptions<CodexOptions> cx) => new
 {
     name = a.Value.Name,
     emailDomain = au.Value.EmailTemplate.Replace("{id}", ""),
-    aiOnline = g.Value.Enabled || d.Value.Enabled,
+    aiOnline = g.Value.Enabled || d.Value.Enabled || cx.Value.Enabled,
 });
 AuthEndpoints.Map(app);
 FileEndpoints.Map(app);

@@ -1,3 +1,4 @@
+using DriveAlt.Api.Ai;
 using DriveAlt.Api.Data;
 using DriveAlt.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +26,7 @@ public static class JobQueue
 }
 
 /// <summary>Background workers that run upload processing jobs.</summary>
-public sealed class JobWorker(IServiceScopeFactory scopes, IOptions<ProcessingOptions> opts, ILogger<JobWorker> log) : BackgroundService
+public sealed class JobWorker(IServiceScopeFactory scopes, IOptions<ProcessingOptions> opts, IOptions<CodexOptions> codex, ILogger<JobWorker> log) : BackgroundService
 {
     public const int MaxAttempts = 3;
 
@@ -87,6 +88,18 @@ public sealed class JobWorker(IServiceScopeFactory scopes, IOptions<ProcessingOp
             }
             job.State = "done";
             job.Error = null;
+        }
+        catch (Exception e) when (AiUnavailableException.In(e) && !ct.IsCancellationRequested)
+        {
+            // Not the file's fault: wait out the limit without using up an attempt. Pages already read are kept.
+            var pause = TimeSpan.FromMinutes(Math.Max(1, codex.Value.PauseMinutes));
+            log.LogWarning("AI paused for file {File} ({Reason}); retrying in {Minutes} min", job.FileId, e.GetBaseException().Message, pause.TotalMinutes);
+            db.ChangeTracker.Clear();
+            db.Jobs.Attach(job).State = EntityState.Modified;
+            job.State = "queued";
+            job.Attempts = Math.Max(0, job.Attempts - 1);
+            job.RunAfter = DateTime.UtcNow.Add(pause);
+            job.Error = "Paused: " + (e.GetBaseException().Message is { Length: > 300 } m ? m[..300] : e.GetBaseException().Message);
         }
         catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
         {
