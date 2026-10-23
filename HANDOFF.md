@@ -8,20 +8,19 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | Written on `docs/agents-handoff`, from `origin/main` at `e02ca2d` (merge of PR #4) |
-| Updated | 2026-10-23 15:04 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | Written on `docs/agents-handoff` (PR #6), from `origin/main` at `e02ca2d` (merge of PR #4) |
+| Updated | 2026-10-23 15:10 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Move to multi-agent work: add `AGENTS.md` and rewrite this page in the handover skill's format, reflecting everything up to PR #5 |
 
 **In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. Next: review PR #5 (question-only crops), then run the full Drive import (407 files) and report on the ChatGPT plan's usage limits.
 
 ## 2. State of the world
 
-**Git** (checked 2026-10-23 15:00 UTC):
+**Git** (checked 2026-10-23 15:10 UTC):
 ```
-$ git status --short            # on docs/agents-handoff
- M HANDOFF.md
-?? AGENTS.md
-?? CLAUDE.md
+$ git status --short            # on docs/agents-handoff: clean once this update is committed
+$ git log --oneline -1 origin/docs/agents-handoff
+66779e0 Add AGENTS.md and a shared HANDOFF.md for multi-agent work   (+ this page's PR-state update)
 $ git log --oneline -3 origin/main
 e02ca2d Merge pull request #4 from AbdulazizRashdi06/feat/codex-pages
 140780f Read pages through the Codex gateway (gpt-6.1-sol) and pause on usage limits
@@ -37,6 +36,7 @@ fda5822 Merge pull request #2 from AbdulazizRashdi06/fix/uni-id-dash
 | #3 | merged | `feat/deepseek` | DeepSeek for chat and page reading; ghcr.io deploys |
 | #4 | merged, **deployed** | `feat/codex-pages` | Pages read by Codex `gpt-6.1-sol`; pause on usage limits |
 | **#5** | **open**, CI `test` **pending** at 15:04 UTC | `codex/question-only-crops` (by the Codex agent) | Question crops only, no answer crops or "Show answer"; question searches no longer treated as answer requests |
+| **#6** | **open** | `docs/agents-handoff` (by Claude Code) | Adds `AGENTS.md` and `CLAUDE.md`; this page. Docs only. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -96,6 +96,7 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 - **Zarqa `codex-model-choice`:** the gateway accepts `CODEX_MODELS` (`gpt-6-luna,gpt-6.1-sol`), allows 240 s per run (was 105 s) and answers 429 on usage limits; 9/9 gateway tests passed.
 - **2026-10-23, another session (probably the Codex agent):** deployed the gateway (13:33 UTC), merged and deployed PR #4, re-ran AI on the test file (jobs 14:33 and 14:47 UTC), opened PR #5. All of this was checked here against the VPS and GitHub. The agent's own notes weren't seen.
 - **2026-10-23 15:04, Claude Code:** added `AGENTS.md` (with `CLAUDE.md` importing it) and rewrote this page.
+- **2026-10-23 15:10, Claude Code:** committed them on `docs/agents-handoff` (`66779e0`) and opened **PR #6** into `main`. The owner chose to commit the server details.
 
 ## 4. User decisions
 
@@ -122,7 +123,7 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 - **DeepSeek model:** `deepseek-chat`, the non-thinking mode. Forced tool calls and JSON mode fail in thinking mode (an HTTP 400 seen in testing).
 - **Gateway update:** only the `codex` container is rebuilt, with a backup of the old file. Zarqa's `deploy.sh` would have shipped the owner's unpushed LostraAi commits.
 - **`CLAUDE.md`:** there was no `CLAUDE.md` to rename. `AGENTS.md` holds the rules, and `CLAUDE.md` is one line (`@AGENTS.md`), so Claude Code loads the same rules.
-- **Server details in a public repo:** this page names the VPS IP, user and paths. They're not secrets (DNS already exposes the IP, and SSH takes keys only), but the owner may prefer to keep them out of a public repo.
+- **Server details in a public repo:** this page names the VPS IP, user and paths. They're not secrets (DNS already exposes the IP, and SSH takes keys only). The owner was offered to strip them and chose to commit them as they are ("Commit AGENTS.md, CLAUDE.md and HANDOFF.md … and open a PR into main").
 
 ## 6. File inventory
 
@@ -166,6 +167,7 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 
 | # | Step | Owner | Verify |
 |---|---|---|---|
+| 0 | Owner merges **PR #6** (docs only), so every agent's checkout has `AGENTS.md` and this page | **owner** | `git log --oneline -1 origin/main` shows the PR #6 merge |
 | 1 | Get PR #5's CI green, then the owner reviews and merges it. That deploys it. | agent (CI), **owner** (merge) | `gh pr checks 5 -R AbdulazizRashdi06/DriveAlt`; after the merge, the VPS image tag equals the merge SHA |
 | 2 | Re-run AI on the test file under PR #5 (Inspect → "midterm 1 (photos)" → **Re-run AI**) | **owner** clicks; agent checks | SQL in section 9: 7 pages, `offline=f`, only question regions |
 | 3 | Start the full import (owner's OK): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
@@ -184,7 +186,7 @@ Run these. If the output differs, this page is stale: find out why and update it
 cd C:/Projects/DriveAlt && git fetch -q && git log --oneline -1 origin/main
 # expect: e02ca2d Merge pull request #4 …   (newer = something was merged since)
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# expect: #5 codex/question-only-crops
+# expect: #5 codex/question-only-crops and #6 docs/agents-handoff (while unmerged)
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=ghcr.io/abdulazizrashdi06/drivealt:e02ca2d4501985276482cc38dda9029fbcb095fa
 #         {"ok":true}{"signedIn":true}
