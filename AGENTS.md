@@ -55,6 +55,7 @@ Based on the `handover` skill, adapted for a Markdown file kept in the repo:
 - **`HANDOFF.md` conflicts:** keep both sides' facts and re-check them against reality. Don't pick a side blindly.
 - **Open handoff PRs:** if one is already open, build your branch on top of its commit instead of starting a parallel one, and say in your PR that it must be merged after that one.
 - **Deploying:** merging to `main` deploys (`.github/workflows/deploy.yml`, about 2–3 min). Don't merge without the owner's OK.
+- **Docs-only PRs** (only `*.md`): merge them with `[skip ci]` in the merge commit's subject, e.g. `gh pr merge N --merge --subject "Merge pull request #N … [skip ci]"`. Then there's no image build and no restart, which would interrupt any processing in progress. The live image then matches the last `main` commit that changed code, not `origin/main`.
 
 ## Rules
 

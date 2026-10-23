@@ -198,7 +198,9 @@ cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d 
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
 # expect: only PRs listed as open in section 2 (#7 and #9 until merged)
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
-# expect: DRIVEALT_IMAGE=…drivealt:<SHA of origin/main> (git rev-parse origin/main; now 6852f1d012beceb6ffcdc875bb01917b3439f157). A docs-only merge redeploys too.
+# expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
+#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now 6852f1d012beceb6ffcdc875bb01917b3439f157)
+#   Docs-only PRs (#7, #9) are merged with [skip ci], so they don't build or deploy and the image stays put.
 #         {"ok":true}{"signedIn":true}
 #         5da0c724e36f4562
 ```
