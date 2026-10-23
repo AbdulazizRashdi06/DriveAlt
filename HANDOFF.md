@@ -9,10 +9,10 @@
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `codex/drive-import-monitoring`, from main `5a95318` |
-| Updated | 2026-10-23, Codex; import launched 18:58:30 UTC |
+| Updated | 2026-10-23, Codex; latest monitoring sample 19:15:21 UTC |
 | Purpose of this update | Record the successful question-only re-read and claim the already-approved full import and usage-limit monitoring |
 
-**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. The already-approved full Drive import started at 18:58:30 UTC (22:58:30 Muscat); Codex is monitoring processing and usage limits and report on the ChatGPT plan's usage limits.
+**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. The already-approved full Drive import started at 18:58:30 UTC (22:58:30 Muscat); Codex is monitoring processing and will report how usage limits affect completion time.
 
 ## 2. State of the world
 
@@ -35,7 +35,6 @@
 | **#7** | **merged** | `codex/handoff-question-only-deployment` (Codex) | This page after PR #5. Docs only. |
 | #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
 | **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
-
 | **#10** | **draft, open** | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and usage-limit monitoring. Do not merge without owner approval; use `[skip ci]`. |
 
 **Other repos:**
@@ -64,7 +63,9 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 
 Pre-import baseline was one ready file, seven AI-read pages, zero offline pages, zero paused jobs. `import-drive --dry-run` found **407 files**, with videos and ZIPs skipped. Its log is `~/drivealt/import-dryrun.log`.
 
-**Usage limits:** no `AI paused` log lines in the 3 hours before 15:00 UTC.
+**Monitoring sample, 2026-10-23 19:15:21 UTC:** 343 registered files (330 queued, 7 reading, 5 ready, 1 tagging); 249 pages read successfully, zero offline pages. Download/queuing is still running. Five files paused between 19:07:56 and 19:08:54 UTC because the gateway returned **503 (login check)**, not 429/plan usage limits. A later gateway health check returned signedIn=true, and other pages continue progressing. Leave paused jobs to retry normally. Two importer failures are HTTP/socket connection errors, not HTTP status/quota errors; plan a controlled idempotent retry after the current importer exits, preserving its existing log and exit markers. No actual usage-limit event observed yet. The gateway is CPU-capped at about 100%; **hypothesis:** login-status checks can time out under load. No service/configuration change was made.
+
+**Usage-limit accounting:** observed pause events above are gateway login checks. Do not count them as ChatGPT plan quota delays. Keep the count and duration of true plan-limit intervals separate.
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
 - The `drivealt.tryzarqa.com` block exists only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo.
@@ -103,6 +104,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   **A lesson for the process:** two agents updated this page at the same minute. Check `gh pr list` for an open handoff PR before starting another.
 
 - **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
+
+- **2026-10-23 19:15, Codex:** read-only monitoring confirmed 249 successful page reads with zero offline pages. Diagnosed five paused files as gateway 503 login checks; signed-in health subsequently returned true. Two importer failures were connection errors. Import still runs; retries are deferred until it exits. No restarts or VPS changes were made. Detailed safe observations are stored in the chat workspace `work/import-monitor/observations.jsonl`.
 
 ## 4. User decisions
 
