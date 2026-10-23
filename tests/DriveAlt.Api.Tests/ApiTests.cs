@@ -188,19 +188,25 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         Assert.True(File.Exists(storage.Crop(answerId)));
         await app.DrainJobsAsync();
 
-        // The question card links to its answer screenshot...
+        // Legacy answer boxes must not become separate student results or answer links.
         var chatId = (await (await client.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
         var found = await SendAsync(client, chatId, "quiz questions on push and pop");
         var card = found["results"]!.AsArray().First(r => r!["ref"]!.GetValue<string>() == $"r:{questionId}")!;
-        Assert.Equal($"r:{answerId}", card["answerRef"]!.GetValue<string>());
+        Assert.Null(card["answerRef"]);
+        Assert.Null(card["answerImageUrl"]);
 
-        // ...and asking for the answer sends that screenshot, with an Abdulaziz line instead of typed text.
+        var cards = scope.ServiceProvider.GetRequiredService<ResultCards>();
+        var legacy = Assert.Single(await cards.HydrateAsync([$"r:{answerId}"], null, CancellationToken.None));
+        Assert.Equal("question", legacy.Kind);
+        Assert.Equal($"r:{questionId}", legacy.Ref);
+
+        // Asking for help keeps the question visible; any answers remain on the original sheet.
         var asked = await SendAsync(client, chatId, "what's the answer to Q1?");
         Assert.True(asked["refused"]!.GetValue<bool>());
         Assert.Contains("Abdulaziz", asked["text"]!.GetValue<string>());
         var shown = Assert.Single(asked["results"]!.AsArray());
-        Assert.Equal("answer", shown!["kind"]!.GetValue<string>());
-        Assert.Equal($"r:{answerId}", shown["ref"]!.GetValue<string>());
+        Assert.Equal("question", shown!["kind"]!.GetValue<string>());
+        Assert.Equal($"r:{questionId}", shown["ref"]!.GetValue<string>());
         Assert.Equal("image/jpeg", (await client.GetAsync(shown["imageUrl"]!.GetValue<string>())).Content.Headers.ContentType!.MediaType);
     }
 

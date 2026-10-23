@@ -23,7 +23,7 @@ public class CodexTests
 
         // Reversed corners still parse: FromJson takes min/max of each axis.
         var x = MaterialAi.FromJson(MaterialAi.PixelBoxesToNormalized(JsonNode.Parse("""
-            { "page_kind": "assessment", "regions": [ { "label": "answer", "bbox": [400, 300, 300, 200], "text": "" } ] }
+            { "page_kind": "assessment", "regions": [ { "label": "question", "bbox": [400, 300, 300, 200], "text": "" } ] }
             """)!, 452, 678), "{}");
         var a = Assert.Single(x.Regions);
         Assert.Equal(300 / 452f, a.X, 2);

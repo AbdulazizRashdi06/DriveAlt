@@ -67,7 +67,7 @@ public class MappingTests
                {"label":"other","box_2d":[0,0,0,0],"text":"too small"}]}
             """)!;
         var x = MaterialAi.FromJson(json, json.ToJsonString());
-        Assert.Equal(2, x.Regions.Count);
+        Assert.Single(x.Regions);
         var q = x.Regions[0];
         Assert.Equal(RegionLabels.Question, q.Label);
         Assert.Equal(0.05f, q.X, 3); Assert.Equal(0.1f, q.Y, 3); Assert.Equal(0.9f, q.W, 3); Assert.Equal(0.2f, q.H, 3);
