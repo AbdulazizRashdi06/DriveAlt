@@ -9,10 +9,10 @@
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `codex/drive-import-monitoring`, from main `5a95318` |
-| Updated | 2026-10-23, Codex; test verification sampled at 18:55:40 UTC |
+| Updated | 2026-10-23, Codex; import launched 18:58:30 UTC |
 | Purpose of this update | Record the successful question-only re-read and claim the already-approved full import and usage-limit monitoring |
 
-**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. Next: Codex is starting the already-approved full Drive import (407 previewed files) and report on the ChatGPT plan's usage limits.
+**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. The already-approved full Drive import started at 18:58:30 UTC (22:58:30 Muscat); Codex is monitoring processing and usage limits and report on the ChatGPT plan's usage limits.
 
 ## 2. State of the world
 
@@ -36,6 +36,8 @@
 | #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
 | **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
 
+| **#10** | **draft, open** | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and usage-limit monitoring. Do not merge without owner approval; use `[skip ci]`. |
+
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
 
@@ -58,7 +60,9 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 
 **Question-only test-file validation passed.** At 18:55:40 UTC, read-only SQL returned `ready | 7 | 7`, every page `extracted=t, offline=f`, and only question regions. The file updated at 15:21:20 UTC after the PR #5 deployment. Per-page question counts: 7, 5, 2, 6, 1, 5, 3 (29 total); answer/other counts are zero. Pages 2 and 6 each have five questions. Visual inspection of crop placement has not been performed by Codex because browser access was declined.
 
-**Full import startup is claimed by Codex (`codex/drive-import-monitoring`). Do not launch it in another session.** Preflight confirmed one ready file, seven AI-read pages, zero offline pages, no queued jobs, no active importer and no import.log. Startup will use a detached process and record start/exit markers.  `import-drive --dry-run` found **407 files**, with videos and ZIPs skipped. Its log is `~/drivealt/import-dryrun.log`.
+**Full import started at 2026-10-23T18:58:30Z (22:58:30 Muscat).** Codex owns it on `codex/drive-import-monitoring`, draft PR #10; do not launch it again. Detached `dotnet DriveAlt.Api.dll import-drive` was confirmed running over a second SSH session. Start marker: `~/drivealt/import.started.utc`; launcher PID: 2284190. Output is in `import.log`; the wrapper writes `import.download-finished.utc` and `import.exit-code` when downloading/queuing ends. File/page processing continues in the app afterwards. HTTP client informational logging is suppressed for this importer invocation to keep API-key URLs out of its log. No source, secrets or service configuration was changed.
+
+Pre-import baseline was one ready file, seven AI-read pages, zero offline pages, zero paused jobs. `import-drive --dry-run` found **407 files**, with videos and ZIPs skipped. Its log is `~/drivealt/import-dryrun.log`.
 
 **Usage limits:** no `AI paused` log lines in the 3 hours before 15:00 UTC.
 
@@ -98,7 +102,7 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 
   **A lesson for the process:** two agents updated this page at the same minute. Check `gh pr list` for an open handoff PR before starting another.
 
-- **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Claimed import startup and monitoring on `codex/drive-import-monitoring`; no other open handoff PR was found.
+- **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
 
 ## 4. User decisions
 
@@ -132,7 +136,8 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 | Path | Role | Status |
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | created (this update) |
-| `HANDOFF.md` | This page | rewritten (this update) |
+| `HANDOFF.md` | This page | import progress tracked in draft PR #10 |
+| VPS `~/drivealt/import.{log,started.utc,launcher.pid,download-finished.utc,exit-code}` | Import output and lifecycle markers; never overwrite or blindly relaunch | started 18:58:30 UTC |
 | `README.md` | Features, local setup, import | **needs work**: its AI section is stale |
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
 | `deploy/docker-compose.yml`, `deploy/Dockerfile`, `deploy/.env.example` | Containers and their config; the app joins `zarqa_default` | current |
@@ -157,8 +162,8 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 ## 7. Open threads
 
 1. **Question-only test-file validation:** complete by SQL: seven AI-read pages, zero offline pages, 29 questions and no answer/other regions. The owner can still inspect box placement in the UI; Codex has not inspected it visually.
-2. **Full Drive import:** startup and monitoring claimed by Codex on `codex/drive-import-monitoring`. Already approved by the owner, test-file SQL validation passed. Check process/markers before any attempted relaunch.
-3. **Usage-limit report:** owed to the owner after the import.
+2. **Full Drive import:** running since 18:58:30 UTC; Codex owns startup and monitoring on `codex/drive-import-monitoring`, draft PR #10. Check markers/processes before attempting any relaunch.
+3. **Usage-limit report:** Codex is tracking this through the app follow-up `monitor-drivealt-import-and-codex-usage-limits`, initially every 15 minutes then hourly once steady. Remain quiet while unchanged. Report ready/failed files, total/offline pages, actual usage-limit pauses and estimated blocking time, and wall clock. Do not add overlapping per-file retries as independent wall-clock delays.
 4. **Zarqa repo:** open a PR for `codex-model-choice`, and add the `drivealt.tryzarqa.com` block to `deploy/Caddyfile` there. Until then, a Zarqa redeploy that rewrites the Caddyfile or the gateway would undo both.
 5. **README:** the AI section needs updating to match section 2.
 6. **Codex's limit wording is unverified:** the gateway matches `usage limit|rate limit|quota|too many requests`. If a limit arrives as a plain 502, pages are read offline instead of pausing. Watch `read_offline` during the import.
@@ -172,8 +177,8 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 | 0 | **Done:** PR #6 merged; read AGENTS.md and this handoff | all agents | Main contains `7228c22` |
 | 1 | **Done:** PR #5 merged and deployed with owner approval; evidence in section 2 | Codex, `codex/question-only-crops` | VPS image tag must equal `6852f1d012beceb6ffcdc875bb01917b3439f157` |
 | 2 | **Done:** test file re-read under PR #5 and verified by SQL | Codex | Seven pages, no offline failures, 29 question regions, zero answer/other regions |
-| 3 | Start the full import (already approved, after step 2 passes): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
-| 4 | Monitor about hourly until every file is `ready` or `failed`. At about 6 pages a minute, expect 10–20 h. | agent | Monitoring SQL and the `AI paused` count (section 9) |
+| 3 | **Started 18:58:30 UTC:** full import command (do not launch again): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
+| 4 | **In progress, Codex:** monitor every 15 minutes initially, then hourly, until every file is `ready` or `failed`. At about 6 pages a minute, expect 10–20 h. | agent | Monitoring SQL and the `AI paused` count (section 9) |
 | 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
