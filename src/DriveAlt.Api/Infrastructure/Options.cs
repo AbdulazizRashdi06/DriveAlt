@@ -43,6 +43,18 @@ public sealed class GeminiOptions
     public bool Enabled => !string.IsNullOrWhiteSpace(ApiKey);
 }
 
+/// <summary>When set, DeepSeek runs the chat bot and reads pages; Gemini then only does embeddings.</summary>
+public sealed class DeepSeekOptions
+{
+    public string ApiKey { get; set; } = "";
+    public string BaseUrl { get; set; } = "https://api.deepseek.com";
+
+    /// <summary>Non-thinking mode: forced tool calls and JSON output only work there.</summary>
+    public string Model { get; set; } = "deepseek-chat";
+
+    public bool Enabled => !string.IsNullOrWhiteSpace(ApiKey);
+}
+
 public sealed class StorageOptions
 {
     public string Root { get; set; } = "storage";

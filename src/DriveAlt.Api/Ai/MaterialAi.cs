@@ -32,12 +32,13 @@ public interface IMaterialAi
 }
 
 /// <summary>
-/// Gemini-backed page understanding. When no API key is configured it falls back to an offline mode that
-/// uses the PDF text layer and simple heuristics, so the app still works end-to-end in development and tests.
+/// Page understanding by DeepSeek when its key is set, else Gemini; embeddings always come from Gemini. When no API key is
+/// configured it falls back to an offline mode that uses the PDF text layer and simple heuristics, so the app still works
+/// end-to-end in development and tests.
 /// </summary>
-public sealed partial class MaterialAi(GeminiClient gemini, ILogger<MaterialAi> log) : IMaterialAi
+public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deepseek, ILogger<MaterialAi> log) : IMaterialAi
 {
-    public bool Online => gemini.Enabled;
+    public bool Online => gemini.Enabled || deepseek.Enabled;
 
     private const string ExtractInstructions = """
         You read one page of university course material (lecture slides, past exam papers, quizzes, exercise sheets, labs, notes)
@@ -108,9 +109,27 @@ public sealed partial class MaterialAi(GeminiClient gemini, ILogger<MaterialAi> 
     private static string CourseList(IReadOnlyList<Course> courses) =>
         string.Join("\n", courses.Select(c => $"- {c.Slug}: {c.Name} (aka {string.Join(", ", c.Aliases)})"));
 
+    /// <summary>DeepSeek has no response schema: it gets the schema in the prompt and JSON mode.</summary>
+    private async Task<string> DeepSeekJsonAsync(byte[] jpeg, string prompt, JsonObject schema, CancellationToken ct)
+    {
+        var body = new JsonObject
+        {
+            ["messages"] = new JsonArray(new JsonObject
+            {
+                ["role"] = "user",
+                ["content"] = new JsonArray(
+                    DeepSeekClient.ImagePart(jpeg),
+                    DeepSeekClient.TextPart($"{prompt}\n\nReply with one JSON object matching this schema:\n{schema.ToJsonString()}")),
+            }),
+            ["response_format"] = new JsonObject { ["type"] = "json_object" },
+        };
+        var msg = await deepseek.ChatAsync(body, ct);
+        return msg["content"]?.GetValue<string>() ?? "";
+    }
+
     public async Task<PageExtraction> ExtractPageAsync(byte[] jpeg, FileContext ctx, string? embeddedText, IReadOnlyList<Course> courses, CancellationToken ct)
     {
-        if (!gemini.Enabled) return Offline(ctx, embeddedText);
+        if (!Online) return Offline(ctx, embeddedText);
 
         var prompt = $"""
             {ExtractInstructions}
@@ -121,6 +140,12 @@ public sealed partial class MaterialAi(GeminiClient gemini, ILogger<MaterialAi> 
             The uploader filed this as: course "{ctx.CourseName}", type "{ctx.MaterialType}", title "{ctx.Title}"{(ctx.Year is { } y ? $", year {y}" : "")}{(ctx.AssessmentLabel is { } l ? $", label \"{l}\"" : "")}. This is page {ctx.PageNumber} of {ctx.PageCount}.
             {(string.IsNullOrWhiteSpace(embeddedText) ? "" : $"The PDF text layer for this page (may be incomplete or out of order):\n\"\"\"\n{Truncate(embeddedText, 6000)}\n\"\"\"")}
             """;
+        if (deepseek.Enabled)
+        {
+            var text = await DeepSeekJsonAsync(jpeg, prompt, ExtractSchema, ct);
+            var parsed = Json.Parse(text) ?? throw new InvalidOperationException("DeepSeek returned non-JSON extraction: " + Truncate(text, 200));
+            return FromJson(parsed, text);
+        }
         var body = new JsonObject
         {
             ["contents"] = new JsonArray(new JsonObject
@@ -176,7 +201,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, ILogger<MaterialAi> 
 
     public async Task<FileSuggestion?> SuggestAsync(byte[] jpeg, string fileName, string? embeddedText, IReadOnlyList<Course> courses, CancellationToken ct)
     {
-        if (!gemini.Enabled) return null;
+        if (!Online) return null;
         var prompt = $"""
             This is the first page of a file named "{fileName}" uploaded to a university batch's course material drive (Year 2, CS/CYS/AI).
             Guess which course it belongs to (slug from the list, or null), the material type, the year it is from and an assessment label such as "Quiz 3" or "Midterm 1" if any.
@@ -200,8 +225,9 @@ public sealed partial class MaterialAi(GeminiClient gemini, ILogger<MaterialAi> 
         };
         try
         {
-            var res = await gemini.GenerateAsync(body, ct);
-            var j = Json.Parse(GeminiClient.CandidateText(res));
+            var j = Json.Parse(deepseek.Enabled
+                ? await DeepSeekJsonAsync(jpeg, prompt, SuggestSchema, ct)
+                : GeminiClient.CandidateText(await gemini.GenerateAsync(body, ct)));
             if (j is null) return null;
             var year = j.Int("academic_year");
             return new FileSuggestion(j.Str("course_guess"), j.Str("material_type") is { } t ? MaterialTypes.Normalize(t) : null,

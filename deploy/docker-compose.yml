@@ -1,4 +1,4 @@
-# Normally deployed by .github/workflows/deploy.yml, which ships the image and writes .env from GitHub Secrets.
+# Normally deployed by .github/workflows/deploy.yml, which pulls the image from ghcr.io and writes .env from GitHub Secrets.
 # Manual alternative on the VPS, from this folder:
 #   cp .env.example .env  (fill it in)
 #   printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
