@@ -22,6 +22,7 @@ public sealed partial class ChatService(
     SearchService search,
     ResultCards cards,
     GeminiClient gemini,
+    DeepSeekClient deepseek,
     IOptions<AppOptions> app,
     TimeProvider clock,
     ILogger<ChatService> log)
@@ -63,8 +64,8 @@ public sealed partial class ChatService(
         Reply reply;
         try
         {
-            reply = gemini.Enabled
-                ? await RunGeminiAsync(text, history, turn, status, ct)
+            reply = deepseek.Enabled ? await RunDeepSeekAsync(text, history, turn, status, ct)
+                : gemini.Enabled ? await RunGeminiAsync(text, history, turn, status, ct)
                 : await RunOfflineAsync(text, turn, status, ct);
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -261,6 +262,67 @@ public sealed partial class ChatService(
                 responses.Add(new JsonObject { ["functionResponse"] = fr });
             }
             contents.Add(new JsonObject { ["role"] = "user", ["parts"] = responses });
+        }
+
+        return new Reply(null, turn.LastSearch.Take(MaxResults).ToList(), false);
+    }
+
+    // ---------------- DeepSeek tool loop (same tools and rules, OpenAI-style messages) ----------------
+
+    private static readonly JsonArray DeepSeekTools = DeepSeekClient.ToolsFromGemini(Tools);
+
+    private async Task<Reply> RunDeepSeekAsync(string text, List<Message> history, Turn turn, Func<ChatStatus, Task> status, CancellationToken ct)
+    {
+        var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
+        var messages = new JsonArray(DeepSeekClient.Message("system", SystemPrompt(courses)));
+        foreach (var m in history)
+        {
+            var line = m.Role == "user"
+                ? m.Text
+                : m.Text + (m.Results.Length > 0 ? $"\n[shown results: {string.Join(", ", m.Results)}]" : "") + (m.Refused ? "\n[refused]" : "");
+            messages.Add(DeepSeekClient.Message(m.Role == "user" ? "user" : "assistant", line));
+        }
+        messages.Add(DeepSeekClient.Message("user", text));
+
+        for (var step = 0; step < MaxSteps; step++)
+        {
+            var msg = await deepseek.ChatAsync(new JsonObject
+            {
+                ["messages"] = messages.DeepClone(),
+                ["tools"] = DeepSeekTools.DeepClone(),
+                ["tool_choice"] = "required",
+            }, ct);
+            messages.Add(msg.DeepClone());
+
+            var calls = msg["tool_calls"] as JsonArray ?? [];
+            if (calls.Count == 0)
+            {
+                // Model answered in plain text despite tool_choice: treat as commentary on the last search.
+                return new Reply(msg["content"]?.GetValue<string>(), turn.LastSearch.Take(MaxResults).ToList(), false);
+            }
+
+            foreach (var call in calls)
+            {
+                var name = call!["function"]?["name"]?.GetValue<string>();
+                var args = Json.Parse(call["function"]?["arguments"]?.GetValue<string>() ?? "{}") as JsonObject ?? [];
+                if (name == "reply")
+                {
+                    var refs = args["result_refs"] is JsonArray a ? a.Select(x => x?.GetValue<string>() ?? "").ToList() : [];
+                    return new Reply(args.Str("commentary"), refs, args["refused"]?.GetValue<bool>() == true);
+                }
+                JsonObject output = name switch
+                {
+                    "search_material" => await ToolSearchAsync(args, courses, turn, status, ct),
+                    "list_courses" => await ToolListCoursesAsync(courses, ct),
+                    _ => new JsonObject { ["error"] = $"unknown tool {name}" },
+                };
+                messages.Add(new JsonObject
+                {
+                    ["role"] = "tool",
+                    ["tool_call_id"] = call["id"]?.DeepClone(),
+                    ["content"] = output.ToJsonString(),
+                });
+            }
         }
 
         return new Reply(null, turn.LastSearch.Take(MaxResults).ToList(), false);

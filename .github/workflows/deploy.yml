@@ -4,7 +4,8 @@
 # Secrets (Settings → Secrets and variables → Actions → Secrets):
 #   VPS_HOST, VPS_USER, VPS_SSH_KEY          SSH access to the Zarqa VPS (private key, user must be able to run docker)
 #   VPS_PORT                                 optional, default 22
-#   GEMINI_API_KEY, RESEND_API_KEY           API keys
+#   GEMINI_API_KEY, RESEND_API_KEY           API keys (Gemini does embeddings, and everything else when DeepSeek is unset)
+#   DEEPSEEK_API_KEY                         optional: when set, DeepSeek runs the chat bot and reads pages
 # The database password and sign-in secret are generated on the VPS on the first deploy (generated.env) and kept.
 #   GOOGLE_API_KEY                           optional (Drive import)
 # Variables (same page → Variables tab), all optional:
@@ -13,6 +14,7 @@
 #   APP_PORT       host port on 127.0.0.1, default 8080
 #   DEPLOY_DIR     folder on the VPS, default ~/drivealt
 #   GEMINI_MODEL   default gemini-3.8-flash
+#   DEEPSEEK_MODEL default deepseek-chat
 name: Test and deploy
 
 on:
@@ -102,6 +104,8 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
           UPLOADERS: ${{ vars.UPLOADERS }}
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
           APP_PORT: ${{ vars.APP_PORT }}
@@ -121,6 +125,8 @@ jobs:
             echo "Gemini__ApiKey=$GEMINI_API_KEY"
             echo "Gemini__Model=${GEMINI_MODEL:-gemini-3.8-flash}"
             echo "Gemini__EmbeddingModel=gemini-embedding-001"
+            echo "DeepSeek__ApiKey=$DEEPSEEK_API_KEY"
+            echo "DeepSeek__Model=${DEEPSEEK_MODEL:-deepseek-chat}"
             echo "Google__ApiKey=$GOOGLE_API_KEY"
           } > deploy.env
 
