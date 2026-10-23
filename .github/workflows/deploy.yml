@@ -28,7 +28,7 @@ on:
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -52,7 +52,10 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install converters
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+        timeout-minutes: 5
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends poppler-utils
       - name: Backend tests
         env:
           DRIVEALT_TEST_PG: Host=localhost;Username=postgres;Password=postgres;Database=postgres
