@@ -110,7 +110,18 @@ printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$
 docker compose --env-file generated.env --env-file .env up -d --build
 ```
 
-The app listens on `127.0.0.1:8080`. Put it behind the VPS's existing reverse proxy, e.g. nginx:
+The app listens on `127.0.0.1:8080` and joins the Zarqa stack's `zarqa_default` Docker network as `drivealt`. On the Zarqa VPS, add a block to `/opt/zarqa/deploy/Caddyfile`:
+
+```caddy
+drivealt.tryzarqa.com {
+	encode zstd gzip
+	reverse_proxy drivealt:8080 {
+		flush_interval -1    # chat replies stream (Server-Sent Events)
+	}
+}
+```
+
+Behind nginx on the host instead:
 
 ```nginx
 server {

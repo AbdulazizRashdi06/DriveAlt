@@ -3,7 +3,9 @@
 #   cp .env.example .env  (fill it in)
 #   printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
 #   docker compose --env-file generated.env --env-file .env up -d --build
-# The app listens on 127.0.0.1:8080; point the VPS reverse proxy (nginx/Caddy) at it.
+# The app listens on 127.0.0.1:8080 and joins the Zarqa stack's Docker network, so Zarqa's Caddy reaches it as drivealt:8080.
+name: drivealt
+
 services:
   db:
     image: pgvector/pgvector:pg17
@@ -36,6 +38,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      default:
+      zarqa:
+        aliases:
+          - drivealt
+
+networks:
+  zarqa:
+    external: true
+    # Check with `docker network ls` on the server.
+    name: ${ZARQA_NETWORK:-zarqa_default}
 
 volumes:
   pgdata:
