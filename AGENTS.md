@@ -24,6 +24,11 @@ Every commit, PR, merge, deploy, VPS change, secret or variable change, or decis
 
 If your session ends mid-task, say so in the handoff, along with your working hypotheses. Never leave it looking tidier than it is.
 
+**Merges and deploys:**
+- **Write for after the merge:** in your PR, write the handoff for the state *after* your PR merges and deploys, because the merge itself is the owner's step.
+- **Merge-proof checks:** write Resume checks that survive later merges ("`main` contains `<sha>`", "the image tag equals `origin/main`"), not "`main` is exactly `<sha>`".
+- **No direct pushes:** if a merge or deploy still leaves the page stale, fix it in a small docs PR. Never push to `main` directly.
+
 ### How the handoff is written
 Based on the `handover` skill, adapted for a Markdown file kept in the repo:
 - **Reader:** someone with zero context. No "as discussed", no shorthand from your chat, no pronoun whose meaning only existed in your session.
@@ -48,6 +53,7 @@ Based on the `handover` skill, adapted for a Markdown file kept in the repo:
 - **One task, one branch, one PR.** Name branches after the agent and task (`codex/…`, `claude/…`, `feat/…`). Before starting, check `gh pr list` and the handoff for open work that touches the same files.
 - **Conflicts:** don't push to another agent's branch or rewrite its commits. If two branches change the same files, coordinate through the handoff's Open threads.
 - **`HANDOFF.md` conflicts:** keep both sides' facts and re-check them against reality. Don't pick a side blindly.
+- **Open handoff PRs:** if one is already open, build your branch on top of its commit instead of starting a parallel one, and say in your PR that it must be merged after that one.
 - **Deploying:** merging to `main` deploys (`.github/workflows/deploy.yml`, about 2–3 min). Don't merge without the owner's OK.
 
 ## Rules

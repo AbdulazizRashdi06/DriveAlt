@@ -8,9 +8,9 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | Updated on `codex/handoff-question-only-deployment`, base `main` at `6852f1d` |
-| Updated | 2026-10-23 15:19:19 UTC, by Codex |
-| Purpose of this update | Record PR #5, its CI mirror fix, deployment verification and the pending question-only test-file re-read |
+| Branch / base | Updated on `docs/handoff-merge-proof`, which is built **on top of** PR #7 (`codex/handoff-question-only-deployment` at `930905b`, base `main` at `6852f1d`) |
+| Updated | 2026-10-23 15:35 UTC, by Claude Code (Opus 5.5), on top of Codex's 15:19:19 UTC update |
+| Purpose of this update | Codex: record PR #5, its CI mirror fix, deployment verification and the pending question-only test-file re-read. Claude Code: the merge-proof resume check, the leftover answer regions, and the `AGENTS.md` rule for handoffs around merges. |
 
 **In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. Next: re-read the test file with question-only crops, then run the already-approved full Drive import (407 files) and report on the ChatGPT plan's usage limits.
 
@@ -31,7 +31,10 @@
 | #3 | merged | `feat/deepseek` | DeepSeek for chat and page reading; ghcr.io deploys |
 | #4 | merged, **deployed** | `feat/codex-pages` | Pages read by Codex `gpt-6.1-sol`; pause on usage limits |
 | **#5** | **merged and deployed** | `codex/question-only-crops` (by the Codex agent) | Question crops only, no answer crops or "Show answer"; question searches no longer treated as answer requests |
-| **#6** | **merged** | `docs/agents-handoff` (by Claude Code) | Adds `AGENTS.md` and `CLAUDE.md`; this page. Docs only. |
+| **#6** | **merged** 15:12:09 UTC, deployed 15:14 | `docs/agents-handoff` (by Claude Code) | Adds `AGENTS.md` and `CLAUDE.md`; this page. Docs only. |
+| **#7** | **open** | `codex/handoff-question-only-deployment` (Codex) | This page after PR #5. Docs only. |
+| **#8** | **open**, superseded by this branch's PR | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel. Conflicts with #7. **Close #8 without merging.** |
+| **#9** | **open** | `docs/handoff-merge-proof` (Claude Code) | Built on #7's commit. Adds only the items listed under "Purpose" above. Merge **#7 first**, then #9, which is then conflict-free. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -53,7 +56,7 @@ GitHub main run 39976312738 → test success, build success, deploy success
 ```
 The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database configuration was changed by PR #5.
 
-**Data before the post-PR #5 re-read (still pending):** the only file imported is **"midterm 1 (photos)"** (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`, Data Structures past paper, 7 phone photos). Sol re-read it at 14:49 UTC: status `ready`, and all 7 pages were read by the AI (`pages.error` is null on every page).
+**Data before the post-PR #5 re-read (still pending):** the only file imported is **"midterm 1 (photos)"** (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`, Data Structures past paper, 7 phone photos). Sol re-read it at 14:49 UTC: status `ready`, and all 7 pages were read by the AI (`pages.error` is null on every page). Regions in the DB at 15:19 UTC: `question 31, answer 22, other 5`. **The 22 answer regions are left over from that pre-PR #5 read.** PR #5 no longer creates them and resolves old answer refs to their question; the pending re-run replaces them.
 
 | Page | Questions | Answers |
 |---|---|---|
@@ -94,8 +97,16 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 - **2026-10-23, another session (probably the Codex agent):** deployed the gateway (13:33 UTC), merged and deployed PR #4, re-ran AI on the test file (jobs 14:33 and 14:47 UTC), opened PR #5. All of this was checked here against the VPS and GitHub. The agent's own notes weren't seen.
 - **2026-10-23 15:04, Claude Code:** added `AGENTS.md` (with `CLAUDE.md` importing it) and rewrote this page.
 - **2026-10-23 15:10, Claude Code:** committed them on `docs/agents-handoff` (`66779e0`) and opened **PR #6** into `main`. The owner chose to commit the server details.
+- **2026-10-23 15:12, Claude Code:** merged **PR #6** after its CI passed, with the owner's OK ("Yes, merge PR #6 once its tests pass"). It deployed at 15:12–15:14 UTC (run `39976236075`).
 
 - **2026-10-23, Codex:** merged PR #5 as `6852f1d` after full CI passed. New extraction accepts question boxes only. Chat no longer substitutes answer crops, the Show answer toggle is removed, and legacy answer refs open their question or original page. The reported false-refusal query has a regression test. CI run `39972107374` stalled for over 20 minutes; cancelled logs showed repeated `Ign: ... azure.archive.ubuntu.com` entries. CI now uses Ubuntu's official HTTPS mirror, 20-second network timeouts, a five-minute installer limit and cancellation of superseded PR runs. Deployment verification is recorded in section 2. Full import has not started.
+
+- **2026-10-23 15:20–15:35, Claude Code:** opened PR #8 with a parallel handoff update (it conflicts with #7). It was then rebuilt as **PR #9**, on top of #7's commit `930905b`, so that both agents' facts are kept. #9 adds three things:
+  - the merge-proof resume check (section 9);
+  - the count of leftover answer regions (section 2);
+  - a rule in `AGENTS.md`: write the handoff for the state after your PR merges, and fix leftover staleness in a docs PR, never by pushing to `main`.
+
+  **A lesson for the process:** two agents updated this page at the same minute. Check `gh pr list` for an open handoff PR before starting another.
 
 ## 4. User decisions
 
@@ -182,12 +193,12 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 Run these. If the output differs, this page is stale: find out why and update it first. The local gh CLI is not authenticated in the Codex runtime; use GitHub MCP as AbdulazizRashdi06 for PR operations. Codex used an isolated clone under its chat workspace, leaving C:/Projects/DriveAlt and LostraAi unchanged.
 
 ```bash
-cd C:/Projects/DriveAlt && git fetch -q && git log --oneline -1 origin/main
-# expect: 6852f1d Merge pull request #5 … (newer means another change landed)
+cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
+# expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# PRs #5 and #6 are merged. Only the handoff follow-up or newer PRs should be open.
+# expect: only PRs listed as open in section 2 (#7, #8 until closed, #9)
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
-# expect: DRIVEALT_IMAGE=ghcr.io/abdulazizrashdi06/drivealt:6852f1d012beceb6ffcdc875bb01917b3439f157
+# expect: DRIVEALT_IMAGE=…drivealt:<SHA of origin/main> (git rev-parse origin/main; now 6852f1d012beceb6ffcdc875bb01917b3439f157). A docs-only merge redeploys too.
 #         {"ok":true}{"signedIn":true}
 #         5da0c724e36f4562
 ```
@@ -199,8 +210,9 @@ D="docker compose --env-file generated.env --env-file .env"
 $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page_count) pages from files group by status" \
   -c "select count(*) filter (where error is null and extracted) read_ok, count(*) filter (where error is not null) read_offline from pages" \
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
-$D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"
-# expect now: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; 0
+$D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
+$D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
+# expect now: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; answer 22, other 5, question 31 (no answer rows after the re-run) ; 0
 ```
 
 **Rollback:**
