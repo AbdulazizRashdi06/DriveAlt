@@ -8,24 +8,23 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | Written on `docs/agents-handoff` (PR #6), from `origin/main` at `e02ca2d` (merge of PR #4) |
-| Updated | 2026-10-23 15:10 UTC, by Claude Code (Opus 5.5) |
-| Purpose of this update | Move to multi-agent work: add `AGENTS.md` and rewrite this page in the handover skill's format, reflecting everything up to PR #5 |
+| Branch / base | Written on `docs/handoff-after-6` (PR #7), from `origin/main` at `6852f1d` (merge of PR #5) |
+| Updated | 2026-10-23 15:20 UTC, by Claude Code (Opus 5.5) |
+| Purpose of this update | Record the PR #6 and PR #5 merges and deploys. Make the resume check survive later merges. |
 
-**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. Next: review PR #5 (question-only crops), then run the full Drive import (407 files) and report on the ChatGPT plan's usage limits.
+**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`, **question crops only** (PR #5). Next: re-run AI on the test file under PR #5, then run the full Drive import (407 files) and report on the ChatGPT plan's usage limits.
 
 ## 2. State of the world
 
-**Git** (checked 2026-10-23 15:10 UTC):
+**Git** (checked 2026-10-23 15:20 UTC):
 ```
-$ git status --short            # on docs/agents-handoff: clean once this update is committed
-$ git log --oneline -1 origin/docs/agents-handoff
-66779e0 Add AGENTS.md and a shared HANDOFF.md for multi-agent work   (+ this page's PR-state update)
-$ git log --oneline -3 origin/main
-e02ca2d Merge pull request #4 from AbdulazizRashdi06/feat/codex-pages
-140780f Read pages through the Codex gateway (gpt-6.1-sol) and pause on usage limits
-fda5822 Merge pull request #2 from AbdulazizRashdi06/fix/uni-id-dash
+$ git log --oneline -4 origin/main
+6852f1d Merge pull request #5 from AbdulazizRashdi06/codex/question-only-crops
+7228c22 Merge pull request #6 from AbdulazizRashdi06/docs/agents-handoff
+95822c8 Use Ubuntu HTTPS mirror instead of stalled Azure mirror in CI
+1596830 HANDOFF: record PR #6 and the owner's choice to commit server details
 ```
+The only open PR is #7, this page's update.
 
 **PRs:**
 
@@ -35,28 +34,28 @@ fda5822 Merge pull request #2 from AbdulazizRashdi06/fix/uni-id-dash
 | #2 | merged | `fix/uni-id-dash` | Uni ID dash appears right after the year |
 | #3 | merged | `feat/deepseek` | DeepSeek for chat and page reading; ghcr.io deploys |
 | #4 | merged, **deployed** | `feat/codex-pages` | Pages read by Codex `gpt-6.1-sol`; pause on usage limits |
-| **#5** | **open**, CI `test` **pending** at 15:04 UTC | `codex/question-only-crops` (by the Codex agent) | Question crops only, no answer crops or "Show answer"; question searches no longer treated as answer requests |
-| **#6** | **open** | `docs/agents-handoff` (by Claude Code) | Adds `AGENTS.md` and `CLAUDE.md`; this page. Docs only. |
+| #6 | merged 15:12:09 UTC, deployed 15:14 | `docs/agents-handoff` (Claude Code) | Adds `AGENTS.md`, `CLAUDE.md` and this page. Docs only. |
+| #5 | merged 15:12:42 UTC from the owner's account, **deployed 15:18** | `codex/question-only-crops` (Codex agent) | Question crops only, no answer crops or "Show answer"; question searches no longer treated as answer requests. Includes `95822c8` (CI apt mirror fix). |
+| **#7** | **open** | `docs/handoff-after-6` (Claude Code) | This update. Docs only. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
 
 **Tests:**
 - **PR #4:** CI passed (run `39960420833`, `test pass 1m37s`).
-- **Unit tests on `main`:** 28/28 passed locally on `feat/codex-pages`, before PR #5.
-- **PR #5:** its description says 39 backend unit tests, 8 frontend tests, `tsc` and the build passed locally. Its CI is pending and **unverified here**.
+- **`main` at `6852f1d` (with PR #5):** CI passed (deploy run `39976312738`, `test: success`, 15:14:21–15:15:40 UTC). PR #5's description says 39 backend unit tests and 8 frontend tests pass.
 
-**Running on the VPS** (`deploy@173.249.40.122`, checked 15:00 UTC):
+**Running on the VPS** (`deploy@173.249.40.122`, checked 15:19 UTC):
 ```
-drivealt-app-1 Up 42 minutes          image ghcr.io/abdulazizrashdi06/drivealt:e02ca2d…
-drivealt-db-1  Up 4 hours (healthy)
-zarqa-codex-1  Up About an hour        gateway.mjs sha256 5da0c724… = branch codex-model-choice
-zarqa-caddy-1  Up 4 days               serves drivealt.tryzarqa.com
+drivealt-app-1   image ghcr.io/abdulazizrashdi06/drivealt:6852f1d012beceb6ffcdc875bb01917b3439f157
+drivealt-db-1    healthy
+zarqa-codex-1    {"signedIn":true}     gateway.mjs sha256 5da0c724… = branch codex-model-choice
+zarqa-caddy-1    serves drivealt.tryzarqa.com
 https://drivealt.tryzarqa.com/api/health → {"ok":true}
-DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45 GB disk free
+DB: 1 files (ready), 7 pages (7 read by the AI, 0 offline)     ~/drivealt/.env has Codex__BaseUrl set     45 GB disk free
 ```
 
-**Data:** the only file imported is **"midterm 1 (photos)"** (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`, Data Structures past paper, 7 phone photos). Sol re-read it at 14:49 UTC: status `ready`, and all 7 pages were read by the AI (`pages.error` is null on every page).
+**Data:** the only file imported is **"midterm 1 (photos)"** (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`, Data Structures past paper, 7 phone photos). Sol re-read it at 14:49 UTC, **before PR #5**: status `ready`, and all 7 pages were read by the AI. Regions in the DB are `question 31, answer 22, other 5`. **The 22 answer regions are left over from the pre-PR #5 read.** PR #5 extracts questions only and resolves old answer refs to their question; re-running AI on the file replaces them. Per-page counts from that read:
 
 | Page | Questions | Answers |
 |---|---|---|
@@ -70,7 +69,7 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 
 **The full Drive import has not started.** `import-drive --dry-run` found **407 files**, with videos and ZIPs skipped. Its log is `~/drivealt/import-dryrun.log`.
 
-**Usage limits:** no `AI paused` log lines in the 3 hours before 15:00 UTC.
+**Usage limits:** no `AI paused` log lines in the 24 h before 15:19 UTC.
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
 - The `drivealt.tryzarqa.com` block exists only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo.
@@ -97,6 +96,9 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 - **2026-10-23, another session (probably the Codex agent):** deployed the gateway (13:33 UTC), merged and deployed PR #4, re-ran AI on the test file (jobs 14:33 and 14:47 UTC), opened PR #5. All of this was checked here against the VPS and GitHub. The agent's own notes weren't seen.
 - **2026-10-23 15:04, Claude Code:** added `AGENTS.md` (with `CLAUDE.md` importing it) and rewrote this page.
 - **2026-10-23 15:10, Claude Code:** committed them on `docs/agents-handoff` (`66779e0`) and opened **PR #6** into `main`. The owner chose to commit the server details.
+- **2026-10-23 15:12, Claude Code:** merged **PR #6** after its CI passed, with the owner's OK ("Yes, merge PR #6 once its tests pass"). It deployed at 15:12–15:14 UTC (run `39976236075`).
+- **2026-10-23 15:12:42, owner's account:** merged **PR #5** (question-only crops). That brought in `95822c8` from the Codex agent, which switches CI to an Ubuntu HTTPS apt mirror. It deployed at 15:14–15:18 UTC (run `39976312738`); the image is `6852f1d`.
+- **2026-10-23 15:20, Claude Code:** this update (PR #7). It records both merges. The resume check now checks "`main` contains" instead of an exact commit, so later merges don't make it stale. `AGENTS.md` gains the rule "write the handoff for the state after your PR merges".
 
 ## 4. User decisions
 
@@ -104,7 +106,7 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 - **Keys:** the owner made a new Resend key `drivealt` and pasted it into GitHub. They first said to take keys from the other projects, then reversed that: "I will make new ones for this". Later they asked for DeepSeek "from zoors repo for now", so `DEEPSEEK_API_KEY` is Zoor's key.
 - **Repo public:** "make the repo public it is ok", so ghcr.io storage and pulls are free. The history was scanned first and no secrets were found.
 - **Builds:** "build in github", not on the VPS. The VPS already holds about 36 GB of build cache from the apps built there.
-- **Answers:** in the owner's words, *"dont black the answers out … the rule is dont output them as text but leave them in paper"*. PR #5 goes further and removes answer crops altogether. **Hypothesis:** the owner asked the Codex agent for that; the request wasn't seen in this session.
+- **Answers:** in the owner's words, *"dont black the answers out … the rule is dont output them as text but leave them in paper"*. PR #5 goes further and removes answer crops altogether: students open the original page to find answers. The owner's account merged PR #5 at 15:12:42 UTC, so treat **question-only crops as the decided behaviour**. Bringing back answer crops or "Show answer" is a product change that needs the owner.
 - **Page-reading model:**
   - **Gemini 3.8 Flash** on the free tier took 80–136 s a call, so it was dropped.
   - **DeepSeek:** its boxes drift.
@@ -112,7 +114,7 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
   - **Codex on the ChatGPT plan:** the owner said "chat gpt cost nothing", and added "zarqa isnt live", so sharing Zarqa's gateway is fine.
   - **Final choice: `gpt-6.1-sol`.** The owner said the first test harness was bad; it was rerun fairly. Then: "use sol then let me know if limits had limited".
 - **Owner's standing request:** report whether the ChatGPT plan's usage limits slowed the import, and by how much.
-- **Merges:** the owner approved PRs #1–#4 in chat. Merging needs their OK every time.
+- **Merges:** the owner approved PRs #1–#4 and #6 in chat, and merged #5 from their own account. Merging needs their OK every time.
 
 ## 5. Judgment calls (made without asking)
 
@@ -129,16 +131,16 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 
 | Path | Role | Status |
 |---|---|---|
-| `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | created (this update) |
-| `HANDOFF.md` | This page | rewritten (this update) |
+| `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | on `main` (PR #6); `AGENTS.md` gets one rule in PR #7 |
+| `HANDOFF.md` | This page | updated (PR #7) |
 | `README.md` | Features, local setup, import | **needs work**: its AI section is stale |
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
 | `deploy/docker-compose.yml`, `deploy/Dockerfile`, `deploy/.env.example` | Containers and their config; the app joins `zarqa_default` | current |
-| `src/DriveAlt.Api/Ai/{CodexClient,DeepSeekClient,GeminiClient,MaterialAi}.cs` | AI clients; page reading precedence is Codex → DeepSeek → Gemini → offline | modified by PR #5 (open) |
-| `src/DriveAlt.Api/Chat/{ChatService,Guardrails}.cs` | Bot tool loop; text guardrails (`Guardrails.cs:64`) | modified by PR #5 (open) |
+| `src/DriveAlt.Api/Ai/{CodexClient,DeepSeekClient,GeminiClient,MaterialAi}.cs` | AI clients; page reading precedence is Codex → DeepSeek → Gemini → offline; questions only since PR #5 | current |
+| `src/DriveAlt.Api/Chat/{ChatService,Guardrails}.cs` | Bot tool loop; text guardrails | current (PR #5 changed when it refuses) |
 | `src/DriveAlt.Api/Processing/{Jobs,ProcessingService}.cs` | Job queue, pipeline, pause on limits | current |
 | `src/DriveAlt.Api/Import/DriveImporter.cs` | `import-drive` command | current |
-| `src/DriveAlt.Api/Search/ResultCards.cs`, `web/src/ui/ResultCard.tsx` | Result cards | modified by PR #5 (open) |
+| `src/DriveAlt.Api/Search/ResultCards.cs`, `web/src/ui/ResultCard.tsx` | Result cards: no answer links or "Show answer" since PR #5 | current |
 | VPS `~/drivealt/{.env,generated.env,docker-compose.yml}` | Server config. **`generated.env` (DB password, OTP secret) must never be regenerated** | live |
 | VPS `/opt/zarqa/deploy/codex/gateway.mjs` (+ `.bak-before-sol`) | Codex gateway | live, from an unmerged branch |
 | VPS `/opt/zarqa/deploy/Caddyfile` (+ `.bak-before-drivealt`) | Zarqa's Caddy, including the `# >>> drivealt` block | live; the block isn't in git |
@@ -154,8 +156,8 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 
 ## 7. Open threads
 
-1. **PR #5:** awaiting CI and the owner's review. It changes the product (no answer crops), so the owner should confirm that's what they want.
-2. **Full Drive import:** not started. It's waiting on PR #5, per PR #5's description.
+1. **Test file still has old answer boxes:** 22 answer regions from before PR #5. Re-run AI on it (continuation step 1) to check question-only reading on real pages before the import.
+2. **Full Drive import:** not started. Its blocker (PR #5) is resolved; it now waits on step 1 and the owner's go-ahead.
 3. **Usage-limit report:** owed to the owner after the import.
 4. **Zarqa repo:** open a PR for `codex-model-choice`, and add the `drivealt.tryzarqa.com` block to `deploy/Caddyfile` there. Until then, a Zarqa redeploy that rewrites the Caddyfile or the gateway would undo both.
 5. **README:** the AI section needs updating to match section 2.
@@ -167,28 +169,29 @@ DB: 1 files, 7 pages     ~/drivealt/.env has Codex__BaseUrl set (count 1)     45
 
 | # | Step | Owner | Verify |
 |---|---|---|---|
-| 0 | Owner merges **PR #6** (docs only), so every agent's checkout has `AGENTS.md` and this page | **owner** | `git log --oneline -1 origin/main` shows the PR #6 merge |
-| 1 | Get PR #5's CI green, then the owner reviews and merges it. That deploys it. | agent (CI), **owner** (merge) | `gh pr checks 5 -R AbdulazizRashdi06/DriveAlt`; after the merge, the VPS image tag equals the merge SHA |
-| 2 | Re-run AI on the test file under PR #5 (Inspect → "midterm 1 (photos)" → **Re-run AI**) | **owner** clicks; agent checks | SQL in section 9: 7 pages, `offline=f`, only question regions |
+| 0 | Owner merges **PR #7** (docs only) | **owner** | `git log --oneline -1 origin/main` shows the PR #7 merge |
+| 1 | Re-run AI on the test file under PR #5 (Inspect → "midterm 1 (photos)" → **Re-run AI**) | **owner** clicks; agent checks | `select label, count(*) from regions group by label`: no `answer` rows; all 7 pages read by the AI (`read_offline` 0) |
 | 3 | Start the full import (owner's OK): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
 | 4 | Monitor about hourly until every file is `ready` or `failed`. At about 6 pages a minute, expect 10–20 h. | agent | Monitoring SQL and the `AI paused` count (section 9) |
 | 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
 
-**Pending decisions for the owner:** PR #5's behaviour, when to start the import, and pruning the build cache.
+(Step 2 was "get PR #5 merged", which is done.)
+
+**Pending decisions for the owner:** when to start the import, and pruning the build cache.
 
 ## 9. Resume check
 
 Run these. If the output differs, this page is stale: find out why and update it first.
 
 ```bash
-cd C:/Projects/DriveAlt && git fetch -q && git log --oneline -1 origin/main
-# expect: e02ca2d Merge pull request #4 …   (newer = something was merged since)
+cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
+# expect: "main has PR #5", then only commits that section 2 or 3 explains (e.g. the PR #7 merge). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# expect: #5 codex/question-only-crops and #6 docs/agents-handoff (while unmerged)
+# expect: only PRs listed as open in section 2 (now: #7 docs/handoff-after-6 until it's merged)
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
-# expect: DRIVEALT_IMAGE=ghcr.io/abdulazizrashdi06/drivealt:e02ca2d4501985276482cc38dda9029fbcb095fa
+# expect: DRIVEALT_IMAGE=…drivealt:<SHA of origin/main> (git rev-parse origin/main); a docs-only merge also redeploys
 #         {"ok":true}{"signedIn":true}
 #         5da0c724e36f4562
 ```
@@ -200,8 +203,9 @@ D="docker compose --env-file generated.env --env-file .env"
 $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page_count) pages from files group by status" \
   -c "select count(*) filter (where error is null and extracted) read_ok, count(*) filter (where error is not null) read_offline from pages" \
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
-$D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"
-# expect now: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; 0
+$D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
+$D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
+# expect now: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; answer 22, other 5, question 31 (until step 1) ; 0
 ```
 
 **Rollback:**

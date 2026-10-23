@@ -24,6 +24,11 @@ Every commit, PR, merge, deploy, VPS change, secret or variable change, or decis
 
 If your session ends mid-task, say so in the handoff, along with your working hypotheses. Never leave it looking tidier than it is.
 
+**Merges and deploys:**
+- **Write for after the merge:** in your PR, write the handoff for the state *after* your PR merges and deploys, because the merge itself is the owner's step.
+- **Merge-proof checks:** write Resume checks that survive later merges ("`main` contains `<sha>`", "the image tag equals `origin/main`"), not "`main` is exactly `<sha>`".
+- **No direct pushes:** if a merge or deploy still leaves the page stale, fix it in a small docs PR. Never push to `main` directly.
+
 ### How the handoff is written
 Based on the `handover` skill, adapted for a Markdown file kept in the repo:
 - **Reader:** someone with zero context. No "as discussed", no shorthand from your chat, no pronoun whose meaning only existed in your session.
