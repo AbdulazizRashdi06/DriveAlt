@@ -1,5 +1,6 @@
-# Tests every push/PR; on main (or a manual run) builds the image and deploys it to the VPS.
-# All keys come from GitHub Secrets and are written to the server's .env at deploy time; nothing secret is in the repo.
+# Tests every push/PR. On main (or a manual run) it also builds the image in parallel and pushes it to ghcr.io with a
+# layer cache; the VPS then pulls only the layers that changed, so a code change moves a few MB instead of the whole image.
+# All keys come from GitHub Secrets and are written to the server's .env at deploy time; nothing secret is in the repo or image.
 #
 # Secrets (Settings → Secrets and variables → Actions → Secrets):
 #   VPS_HOST, VPS_USER, VPS_SSH_KEY          SSH access to the Zarqa VPS (private key, user must be able to run docker)
@@ -58,11 +59,43 @@ jobs:
         working-directory: web
         run: npm ci && npm test && npx tsc -b && npx vite build --outDir ../.ci-web
 
+  build:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.name.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
-    needs: test
+    needs: [test, build]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.build.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,9 +110,6 @@ jobs:
             [ -z "${!n}" ] && missing="$missing $n"
           done
           if [ -n "$missing" ]; then echo "::error::Missing secrets:$missing"; exit 1; fi
-
-      - name: Build image
-        run: docker build -f deploy/Dockerfile -t drivealt:${{ github.sha }} -t drivealt:latest .
 
       - name: Set up SSH
         env:
@@ -113,7 +143,7 @@ jobs:
         run: |
           umask 077
           {
-            echo "DRIVEALT_IMAGE=drivealt:${{ github.sha }}"
+            echo "DRIVEALT_IMAGE=$IMAGE"
             echo "APP_PORT=${APP_PORT:-8080}"
             echo "App__Name=DriveAlt"
             echo "App__PublicUrl=${PUBLIC_URL:-http://localhost:8080}"
@@ -130,15 +160,18 @@ jobs:
             echo "Google__ApiKey=$GOOGLE_API_KEY"
           } > deploy.env
 
-      - name: Ship image and config
+      - name: Pull image and ship config
         env:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           dir="${DEPLOY_DIR:-drivealt}"
           ssh vps "mkdir -p '$dir' && chmod 700 '$dir'"
           # First deploy only: generate the database password and sign-in secret on the server and keep them.
           ssh vps "cd '$dir' && [ -f generated.env ] || { umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' \"\$(openssl rand -hex 32)\" \"\$(openssl rand -hex 32)\" > generated.env; }"
-          docker save drivealt:${{ github.sha }} | gzip | ssh vps 'gunzip | docker load'
+          # The VPS pulls only the layers it doesn't have yet. The job's token is short-lived; log out right after.
+          printf '%s' "$GHCR_TOKEN" | ssh vps "docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null"
+          ssh vps "docker pull -q '$IMAGE'; s=\$?; docker logout ghcr.io >/dev/null; exit \$s"
           scp deploy/docker-compose.yml "vps:$dir/docker-compose.yml"
           scp deploy.env "vps:$dir/.env"
           ssh vps "chmod 600 '$dir/.env'"
@@ -149,10 +182,13 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
         run: |
           dir="${DEPLOY_DIR:-drivealt}"
-          ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build --remove-orphans && docker image prune -f --filter 'until=168h' >/dev/null"
+          ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build --remove-orphans"
           for i in $(seq 1 30); do
             if ssh vps "curl -fsS http://127.0.0.1:\$(grep '^APP_PORT=' '$dir/.env' | cut -d= -f2)/api/health" >/dev/null 2>&1; then
-              echo "DriveAlt is up"; exit 0
+              echo "DriveAlt is up"
+              # Drop older DriveAlt images (docker refuses to remove the one in use).
+              ssh vps "docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^(ghcr.io/[^/]+/)?drivealt:' | grep -vxF '$IMAGE' | xargs -r docker rmi >/dev/null 2>&1; docker image prune -f >/dev/null"
+              exit 0
             fi
             sleep 4
           done
