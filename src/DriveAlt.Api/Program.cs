@@ -95,6 +95,16 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment())
+{
+    if (cfg["Auth:OtpSecret"] is null or "" or "dev-only-otp-secret")
+        throw new InvalidOperationException("Set Auth__OtpSecret to a long random value before running in production.");
+    if (string.IsNullOrWhiteSpace(cfg["Resend:ApiKey"]))
+        app.Logger.LogWarning("Resend__ApiKey is not set: sign-in codes are only written to this log, not emailed.");
+    if (string.IsNullOrWhiteSpace(cfg["Gemini:ApiKey"]))
+        app.Logger.LogWarning("Gemini__ApiKey is not set: running in offline mode (no AI regions or answer crops, keyword search only).");
+}
+
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDb>();

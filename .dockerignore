@@ -1,0 +1,9 @@
+**/bin
+**/obj
+**/node_modules
+web/dist
+web/e2e/shots
+src/DriveAlt.Api/wwwroot
+src/DriveAlt.Api/storage
+deploy/.env
+.git

@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Security.Cryptography;
 using DriveAlt.Api.Auth;
 using DriveAlt.Api.Data;
@@ -195,19 +194,15 @@ public static class FileEndpoints
             var f = await db.Files.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
             if (f is null) return Results.NotFound();
             if (f.Parts.Length == 1) return ServeFile(storage.Original(f.Id, f.Parts[0]), f.OriginalName, inline: false);
-            return Results.Stream(async stream =>
-            {
-                using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
-                foreach (var p in f.Parts)
-                    await zip.CreateEntryFromFileAsync(storage.Original(f.Id, p), p, CompressionLevel.NoCompression);
-            }, "application/zip", Storage.SafeName(f.Title) + ".zip");
+            var zip = await ZipBuilder.BuildAsync(f.Parts.Select(p => (storage.Original(f.Id, p), p)), ct);
+            return Results.File(zip, "application/zip", Storage.SafeName(f.Title) + ".zip");
         });
 
-        // ---------- media (students only ever get masked pages and crops) ----------
+        // ---------- media ----------
         g.MapGet("/media/pages/{pageId:guid}", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var p = await db.Pages.AsNoTracking().Where(x => x.Id == pageId).Select(x => new { x.FileId, x.Number }).FirstOrDefaultAsync(ct);
-            return p is null ? Results.NotFound() : ServeImage(storage.MaskedPage(p.FileId, p.Number));
+            return p is null ? Results.NotFound() : ServeImage(storage.PageImage(p.FileId, p.Number));
         });
 
         g.MapGet("/media/thumbs/{pageId:guid}", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
@@ -220,18 +215,18 @@ public static class FileEndpoints
 
         g.MapGet("/media/crops/{regionId:guid}", async (Guid regionId, bool? download, AppDb db, Storage storage, CancellationToken ct) =>
         {
-            var r = await db.Regions.AsNoTracking().Where(x => x.Id == regionId && x.Label == RegionLabels.Question)
-                .Select(x => new { x.QuestionNumber, x.Page!.Number, x.Page.File!.Title }).FirstOrDefaultAsync(ct);
+            var r = await db.Regions.AsNoTracking().Where(x => x.Id == regionId && (x.Label == RegionLabels.Question || x.Label == RegionLabels.Answer))
+                .Select(x => new { x.QuestionNumber, x.Label, x.Page!.Number, x.Page.File!.Title }).FirstOrDefaultAsync(ct);
             if (r is null) return Results.NotFound();
             var path = storage.Crop(regionId);
             if (download == true)
                 return File.Exists(path)
-                    ? Results.File(path, "image/jpeg", Storage.SafeName($"{r.Title} p{r.Number}{(r.QuestionNumber is null ? "" : " Q" + r.QuestionNumber)}.jpg"))
+                    ? Results.File(path, "image/jpeg", Storage.SafeName($"{r.Title} p{r.Number}{(r.QuestionNumber is null ? "" : " Q" + r.QuestionNumber)}{(r.Label == RegionLabels.Answer ? " answer" : "")}.jpg"))
                     : Results.NotFound();
             return ServeImage(path);
         });
 
-        // Unmasked render, for the uploader comparison view only.
+        // Same render, kept as its own route for the uploader comparison view.
         up.MapGet("/media/pages/{pageId:guid}/original", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var p = await db.Pages.AsNoTracking().Where(x => x.Id == pageId).Select(x => new { x.FileId, x.Number }).FirstOrDefaultAsync(ct);

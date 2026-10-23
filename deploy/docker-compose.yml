@@ -1,0 +1,55 @@
+# Normally deployed by .github/workflows/deploy.yml, which ships the image and writes .env from GitHub Secrets.
+# Manual alternative on the VPS, from this folder:
+#   cp .env.example .env  (fill it in)
+#   printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
+#   docker compose --env-file generated.env --env-file .env up -d --build
+# The app listens on 127.0.0.1:8080 and joins the Zarqa stack's Docker network, so Zarqa's Caddy reaches it as drivealt:8080.
+name: drivealt
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: drivealt
+      POSTGRES_USER: drivealt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing generated.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivealt -d drivealt"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: ${DRIVEALT_IMAGE:-drivealt:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: [generated.env, .env]
+    environment:
+      ConnectionStrings__Db: Host=db;Database=drivealt;Username=drivealt;Password=${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    volumes:
+      - files:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default:
+      zarqa:
+        aliases:
+          - drivealt
+
+networks:
+  zarqa:
+    external: true
+    # Check with `docker network ls` on the server.
+    name: ${ZARQA_NETWORK:-zarqa_default}
+
+volumes:
+  pgdata:
+  files:

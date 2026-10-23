@@ -9,7 +9,7 @@ using Pgvector;
 namespace DriveAlt.Api.Processing;
 
 /// <summary>
-/// The upload pipeline: split → read (AI extraction) → tag (embeddings) → hide answers (mask + crops) → ready.
+/// The upload pipeline: split → read (AI extraction) → tag (embeddings) → crop questions and answers → ready.
 /// Each stage saves its progress, so a retried job resumes where it stopped.
 /// </summary>
 public sealed class ProcessingService(

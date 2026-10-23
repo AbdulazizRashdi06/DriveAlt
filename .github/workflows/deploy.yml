@@ -1,0 +1,153 @@
+# Tests every push/PR; on main (or a manual run) builds the image and deploys it to the VPS.
+# All keys come from GitHub Secrets and are written to the server's .env at deploy time; nothing secret is in the repo.
+#
+# Secrets (Settings → Secrets and variables → Actions → Secrets):
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY          SSH access to the Zarqa VPS (private key, user must be able to run docker)
+#   VPS_PORT                                 optional, default 22
+#   GEMINI_API_KEY, RESEND_API_KEY           API keys
+# The database password and sign-in secret are generated on the VPS on the first deploy (generated.env) and kept.
+#   GOOGLE_API_KEY                           optional (Drive import)
+# Variables (same page → Variables tab), all optional:
+#   UPLOADERS      comma-separated uni IDs, e.g. 24-0161,24-0200
+#   PUBLIC_URL     e.g. https://drive.tryzarqa.com
+#   APP_PORT       host port on 127.0.0.1, default 8080
+#   DEPLOY_DIR     folder on the VPS, default ~/drivealt
+#   GEMINI_MODEL   default gemini-3.8-flash
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install converters
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+      - name: Backend tests
+        env:
+          DRIVEALT_TEST_PG: Host=localhost;Username=postgres;Password=postgres;Database=postgres
+        run: dotnet test
+      - name: Frontend tests and build
+        working-directory: web
+        run: npm ci && npm test && npx tsc -b && npx vite build --outDir ../.ci-web
+
+  deploy:
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          missing=""
+          for n in VPS_HOST VPS_USER VPS_SSH_KEY; do
+            [ -z "${!n}" ] && missing="$missing $n"
+          done
+          if [ -n "$missing" ]; then echo "::error::Missing secrets:$missing"; exit 1; fi
+
+      - name: Build image
+        run: docker build -f deploy/Dockerfile -t drivealt:${{ github.sha }} -t drivealt:latest .
+
+      - name: Set up SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<EOF
+          Host vps
+            HostName $VPS_HOST
+            Port ${VPS_PORT:-22}
+            User ${{ secrets.VPS_USER }}
+            IdentityFile ~/.ssh/id_deploy
+            ServerAliveInterval 30
+          EOF
+
+      - name: Write .env from secrets
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          UPLOADERS: ${{ vars.UPLOADERS }}
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+          APP_PORT: ${{ vars.APP_PORT }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: |
+          umask 077
+          {
+            echo "DRIVEALT_IMAGE=drivealt:${{ github.sha }}"
+            echo "APP_PORT=${APP_PORT:-8080}"
+            echo "App__Name=DriveAlt"
+            echo "App__PublicUrl=${PUBLIC_URL:-http://localhost:8080}"
+            echo "Auth__EmailTemplate={id}@student.gutech.edu.om"
+            i=0
+            for id in $(echo "${UPLOADERS:-}" | tr ',' ' '); do echo "Auth__Uploaders__${i}=${id}"; i=$((i+1)); done
+            echo "Resend__ApiKey=$RESEND_API_KEY"
+            echo "Resend__From=DriveAlt <noreply@tryzarqa.com>"
+            echo "Gemini__ApiKey=$GEMINI_API_KEY"
+            echo "Gemini__Model=${GEMINI_MODEL:-gemini-3.8-flash}"
+            echo "Gemini__EmbeddingModel=gemini-embedding-001"
+            echo "Google__ApiKey=$GOOGLE_API_KEY"
+          } > deploy.env
+
+      - name: Ship image and config
+        env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+        run: |
+          dir="${DEPLOY_DIR:-drivealt}"
+          ssh vps "mkdir -p '$dir' && chmod 700 '$dir'"
+          # First deploy only: generate the database password and sign-in secret on the server and keep them.
+          ssh vps "cd '$dir' && [ -f generated.env ] || { umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' \"\$(openssl rand -hex 32)\" \"\$(openssl rand -hex 32)\" > generated.env; }"
+          docker save drivealt:${{ github.sha }} | gzip | ssh vps 'gunzip | docker load'
+          scp deploy/docker-compose.yml "vps:$dir/docker-compose.yml"
+          scp deploy.env "vps:$dir/.env"
+          ssh vps "chmod 600 '$dir/.env'"
+          rm -f deploy.env
+
+      - name: Start
+        env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+        run: |
+          dir="${DEPLOY_DIR:-drivealt}"
+          ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build --remove-orphans && docker image prune -f --filter 'until=168h' >/dev/null"
+          for i in $(seq 1 30); do
+            if ssh vps "curl -fsS http://127.0.0.1:\$(grep '^APP_PORT=' '$dir/.env' | cut -d= -f2)/api/health" >/dev/null 2>&1; then
+              echo "DriveAlt is up"; exit 0
+            fi
+            sleep 4
+          done
+          echo "::error::App did not become healthy"; ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env logs --tail 80 app"; exit 1

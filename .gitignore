@@ -487,3 +487,7 @@ src/DriveAlt.Api/wwwroot/
 web/node_modules/
 web/dist/
 .env
+web/e2e/shots/
+web/test-results/
+deploy/.env
+deploy/generated.env

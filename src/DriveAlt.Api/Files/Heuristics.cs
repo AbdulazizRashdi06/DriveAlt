@@ -44,12 +44,22 @@ public static partial class Heuristics
         return best;
     }
 
+    [GeneratedRegex(@"\b(midterms?|finals?|exams?|mid ?& ?finals?|past ?papers?)\b")]
+    private static partial Regex PastPaperWords();
+
+    [GeneratedRegex(@"\b(quiz\w*|tests?)\b|quiz")]
+    private static partial Regex QuizWords();
+
+    [GeneratedRegex(@"\blabs?\b|\blab ?\d")]
+    private static partial Regex LabWords();
+
     public static string? MaterialType(string lower)
     {
+        lower = lower.Replace('_', ' ').Replace('-', ' ').Replace('.', ' ');
         if (Has(lower, "slide", "lecture", "lec ", "lec_", "seance", "chapter")) return MaterialTypes.Slides;
-        if (Has(lower, "past paper", "past_paper", "midterm", "final", "exam", "mid & final", "mid&final")) return MaterialTypes.PastPaper;
-        if (Has(lower, "quiz", "quizzes", "test")) return MaterialTypes.Quiz;
-        if (Has(lower, "lab")) return MaterialTypes.Lab;
+        if (PastPaperWords().IsMatch(lower)) return MaterialTypes.PastPaper;
+        if (QuizWords().IsMatch(lower)) return MaterialTypes.Quiz;
+        if (LabWords().IsMatch(lower)) return MaterialTypes.Lab;
         if (Has(lower, "exercise", "excercise", "excercice", "tutorial", "problems", "practice", "assignment", "worksheet", "sheet")) return MaterialTypes.Exercise;
         if (Has(lower, "notes", "summary", "cheat sheet", "cheat-sheet", "formulas", "book", "handbook")) return MaterialTypes.Notes;
         return null;

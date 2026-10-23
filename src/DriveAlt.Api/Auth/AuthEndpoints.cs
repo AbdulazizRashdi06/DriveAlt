@@ -119,10 +119,11 @@ public static partial class AuthEndpoints
 
         g.MapGet("/me", async (HttpContext http, AppDb db, CancellationToken ct) =>
         {
+            // 204 = signed out (not an error: the SPA asks this on every load).
             var id = http.User.UserId();
-            if (id is null) return Results.Unauthorized();
+            if (id is null) return Results.NoContent();
             var user = await db.Users.FindAsync([id.Value], ct);
-            return user is null ? Results.Unauthorized() : Results.Ok(ToDto(user));
+            return user is null ? Results.NoContent() : Results.Ok(ToDto(user));
         });
 
         if (app.Environment.IsDevelopment())
