@@ -7,10 +7,11 @@ import { Mascot } from '../ui/Mascot'
 
 const ID_PATTERN = /^\d{2}-\d{4}$/
 
-/** "240161" or "24 0161" → "24-0161" while typing. */
-export function formatUniId(raw: string) {
+/** "240161" or "24 0161" → "24-0161" while typing. The dash shows once the year is in, unless the user is deleting it. */
+export function formatUniId(raw: string, deleting = false) {
   const digits = raw.replace(/\D/g, '').slice(0, 6)
-  return digits.length > 2 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : digits
+  if (digits.length > 2 || (digits.length === 2 && !deleting)) return `${digits.slice(0, 2)}-${digits.slice(2)}`
+  return digits
 }
 
 function CodeInput({ value, onChange, onComplete, disabled }: {
@@ -130,7 +131,7 @@ export function Login() {
               <label htmlFor="uni" style={{ font: "800 14px/1 'Nunito', sans-serif", paddingLeft: 8 }}>Uni ID</label>
               <div className="input" style={{ display: 'flex', alignItems: 'center', padding: '0 20px', gap: 0 }}>
                 <input id="uni" inputMode="numeric" autoComplete="username" placeholder="24-0161" value={uniId} autoFocus
-                  onChange={e => setUniId(formatUniId(e.target.value))}
+                  onChange={e => setUniId(formatUniId(e.target.value, (e.nativeEvent as InputEvent).inputType?.startsWith('delete')))}
                   style={{ flex: '0 1 90px', minWidth: 0, border: 0, outline: 0, background: 'transparent', font: "800 16px/1.4 'Nunito', sans-serif", color: '#2A1B0F' }} />
                 <span style={{ font: "700 16px/1.4 'Nunito', sans-serif", color: '#7A5A3A' }} className="ellipsis">{config.emailDomain}</span>
               </div>
