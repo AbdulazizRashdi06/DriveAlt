@@ -33,7 +33,7 @@
 | **#5** | **merged and deployed** | `codex/question-only-crops` (by the Codex agent) | Question crops only, no answer crops or "Show answer"; question searches no longer treated as answer requests |
 | **#6** | **merged** 15:12:09 UTC, deployed 15:14 | `docs/agents-handoff` (by Claude Code) | Adds `AGENTS.md` and `CLAUDE.md`; this page. Docs only. |
 | **#7** | **open** | `codex/handoff-question-only-deployment` (Codex) | This page after PR #5. Docs only. |
-| **#8** | **open**, superseded by this branch's PR | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel. Conflicts with #7. **Close #8 without merging.** |
+| #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
 | **#9** | **open** | `docs/handoff-merge-proof` (Claude Code) | Built on #7's commit. Adds only the items listed under "Purpose" above. Merge **#7 first**, then #9, which is then conflict-free. |
 
 **Other repos:**
@@ -196,7 +196,7 @@ Run these. If the output differs, this page is stale: find out why and update it
 cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
 # expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# expect: only PRs listed as open in section 2 (#7, #8 until closed, #9)
+# expect: only PRs listed as open in section 2 (#7 and #9 until merged)
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<SHA of origin/main> (git rev-parse origin/main; now 6852f1d012beceb6ffcdc875bb01917b3439f157). A docs-only merge redeploys too.
 #         {"ok":true}{"signedIn":true}
