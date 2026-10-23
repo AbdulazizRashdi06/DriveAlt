@@ -55,12 +55,11 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         - academic_year: the 4-digit year the material is from if visible (exam date, "Fall 2024", copyright line), else null.
         - assessment_label: e.g. "Midterm 1", "Final", "Quiz 3", "Exercise 6", "Lab 2" if visible, else null.
         - course_guess: the slug of the matching course from the list below, or null.
-        - regions: boxes on the page, each with label:
+        - regions: question boxes only, each with label:
             * "question": one per question or sub-question block, including its stem, sub-parts, figures, tables, code and answer choices. Do NOT include the answer or solution area.
-            * "answer": any answer, solution, worked example solution, filled-in/handwritten response, circled/ticked choice or marking scheme. Keep them tight: they are cropped and shown on their own when a student asks for the answer.
-            * "other": headers, instructions, logos, page furniture, slide titles/bodies on non-assessment pages.
+          Do not create answer, solution or other boxes. Students can open the original sheet to find any answers themselves.
           box_2d is [ymin, xmin, ymax, xmax] normalized to 0–1000. question_number like "1", "2(b)", "Q3", or null. text is the region's text.
-          Slides normally have no question/answer regions unless they contain an exercise.
+          Return an empty regions array for slides or pages without questions, including answer-only pages.
         """;
 
     private static readonly JsonObject ExtractSchema = (JsonObject)JsonNode.Parse("""
@@ -81,7 +80,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
               "items": {
                 "type": "OBJECT",
                 "properties": {
-                  "label": { "type": "STRING", "enum": ["question", "answer", "other"] },
+                  "label": { "type": "STRING", "enum": ["question"] },
                   "box_2d": { "type": "ARRAY", "items": { "type": "INTEGER" } },
                   "question_number": { "type": "STRING", "nullable": true },
                   "text": { "type": "STRING" }
@@ -144,7 +143,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
             ["type"] = "array",
             ["items"] = Strict(new JsonObject
             {
-                ["label"] = Enum("question", "answer", "other"),
+                ["label"] = Enum("question"),
                 ["bbox"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
                 ["question_number"] = Nullable("string"),
                 ["text"] = new JsonObject { ["type"] = "string" },
@@ -251,6 +250,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         {
             foreach (var r in arr)
             {
+                if (r.Str("label") != RegionLabels.Question) continue;
                 if (r?["box_2d"] is not JsonArray box || box.Count != 4) continue;
                 var b = box.Select(v => Math.Clamp(v?.GetValue<double>() ?? 0, 0, 1000) / 1000.0).ToArray();
                 var (y0, x0, y1, x1) = (Math.Min(b[0], b[2]), Math.Min(b[1], b[3]), Math.Max(b[0], b[2]), Math.Max(b[1], b[3]));

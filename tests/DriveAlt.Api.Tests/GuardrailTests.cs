@@ -66,4 +66,15 @@ public class GuardrailTests
     {
         Assert.Equal(refuse, Guardrails.LooksLikeHelpRequest(message));
     }
+
+    [Theory]
+    [InlineData("any question regarding circular queue deon or end calculation", false)]
+    [InlineData("find questions on calculating queue length", false)]
+    [InlineData("quiz 3 with solutions", false)]
+    [InlineData("what's the answer to Q2", true)]
+    [InlineData("give me a hint for Q3", true)]
+    public void Model_refusal_does_not_turn_a_question_search_into_an_answer_request(string message, bool refuse)
+    {
+        Assert.Equal(refuse, ChatService.ShouldRefuse(message, modelRefused: true));
+    }
 }

@@ -6,8 +6,7 @@ namespace DriveAlt.Api.Search;
 public sealed record Box(float X, float Y, float W, float H);
 
 /// <summary>
-/// What the UI renders for a result: images + source metadata, never text. A question card carries a link to its
-/// answer screenshot when the page has one (answers are shown as screenshots, never typed out).
+/// What the UI renders for a result: question crops or original pages with source metadata, never text.
 /// </summary>
 public sealed record ResultCard(
     string Ref,
@@ -130,13 +129,18 @@ public sealed class ResultCards(AppDb db)
                 if (!regions.TryGetValue(id, out var reg) || !pages.TryGetValue(reg.PageId, out var page)) continue;
                 if (reg.Label == RegionLabels.Question)
                 {
-                    var answer = AnswerFor(reg, page.Regions);
-                    cards.Add(Build(r, "question", page, reg.Id, reg.QuestionNumber, BoxOf(reg), saved.Contains(r), answer));
+                    cards.Add(Build(r, "question", page, reg.Id, reg.QuestionNumber, BoxOf(reg), saved.Contains(r), null));
                 }
                 else if (reg.Label == RegionLabels.Answer)
                 {
-                    var qn = reg.QuestionNumber ?? QuestionFor(reg, page.Regions)?.QuestionNumber;
-                    cards.Add(Build(r, "answer", page, reg.Id, qn, BoxOf(reg), saved.Contains(r), null));
+                    // Older chats/bookmarks can still reference answer regions. Show the question or original page.
+                    var question = QuestionFor(reg, page.Regions);
+                    if (question is not null)
+                        cards.Add(Build(ResultRefs.Region(question.Id), "question", page, question.Id, question.QuestionNumber,
+                            BoxOf(question), saved.Contains(ResultRefs.Region(question.Id)), null));
+                    else
+                        cards.Add(Build(ResultRefs.Page(page.Id), "page", page, null, null, null,
+                            saved.Contains(ResultRefs.Page(page.Id)), null));
                 }
             }
             else if (pages.TryGetValue(id, out var page))
@@ -144,7 +148,7 @@ public sealed class ResultCards(AppDb db)
                 cards.Add(Build(r, page.Kind == PageKinds.Slide ? "slide" : "page", page, null, null, null, saved.Contains(r), null));
             }
         }
-        return cards;
+        return cards.DistinctBy(c => c.Ref).ToList();
     }
 
     private static Box BoxOf(Region r) => new(r.X, r.Y, r.W, r.H);
