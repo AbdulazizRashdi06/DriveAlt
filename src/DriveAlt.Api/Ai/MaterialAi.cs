@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DriveAlt.Api.Data;
+using DriveAlt.Api.Processing;
 
 namespace DriveAlt.Api.Ai;
 
@@ -32,13 +33,13 @@ public interface IMaterialAi
 }
 
 /// <summary>
-/// Page understanding by DeepSeek when its key is set, else Gemini; embeddings always come from Gemini. When no API key is
-/// configured it falls back to an offline mode that uses the PDF text layer and simple heuristics, so the app still works
-/// end-to-end in development and tests.
+/// Page understanding by the Codex gateway when it is configured, else DeepSeek when its key is set, else Gemini;
+/// embeddings always come from Gemini. When no AI is configured it falls back to an offline mode that uses the PDF text
+/// layer and simple heuristics, so the app still works end-to-end in development and tests.
 /// </summary>
-public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deepseek, ILogger<MaterialAi> log) : IMaterialAi
+public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deepseek, CodexClient codex, ILogger<MaterialAi> log) : IMaterialAi
 {
-    public bool Online => gemini.Enabled || deepseek.Enabled;
+    public bool Online => gemini.Enabled || deepseek.Enabled || codex.Enabled;
 
     private const string ExtractInstructions = """
         You read one page of university course material (lecture slides, past exam papers, quizzes, exercise sheets, labs, notes)
@@ -106,6 +107,76 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         }
         """)!;
 
+    // ---------- Codex (GPT): pixel boxes, which GPT models place far better than Gemini's 0–1000 format ----------
+
+    private const string NormalizedBoxLine = "box_2d is [ymin, xmin, ymax, xmax] normalized to 0–1000.";
+    private const string CodexSystem = "You read pages of university course material for a search index.";
+
+    internal static string PixelBoxInstructions(int width, int height) => ExtractInstructions
+        .Replace(NormalizedBoxLine, $"bbox is [x0, y0, x1, y1] in pixels of this image, which is {width}x{height} pixels with the origin at the top-left.")
+        .Replace("box_2d", "bbox");
+
+    private static JsonObject Nullable(string type) => new() { ["type"] = new JsonArray(type, "null") };
+
+    private static JsonObject Strict(JsonObject properties) => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray(properties.Select(p => (JsonNode)p.Key).ToArray()),
+        ["properties"] = properties,
+    };
+
+    private static JsonObject Enum(params string[] values) => new() { ["type"] = "string", ["enum"] = new JsonArray(values.Select(v => (JsonNode)v).ToArray()) };
+
+    private static readonly JsonObject CodexExtractSchema = Strict(new JsonObject
+    {
+        ["page_kind"] = Enum("slide", "assessment", "notes", "other"),
+        ["text"] = new JsonObject { ["type"] = "string" },
+        ["summary"] = new JsonObject { ["type"] = "string" },
+        ["topic"] = new JsonObject { ["type"] = "string" },
+        ["tags"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
+        ["material_type"] = Enum("slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"),
+        ["academic_year"] = Nullable("integer"),
+        ["assessment_label"] = Nullable("string"),
+        ["course_guess"] = Nullable("string"),
+        ["regions"] = new JsonObject
+        {
+            ["type"] = "array",
+            ["items"] = Strict(new JsonObject
+            {
+                ["label"] = Enum("question", "answer", "other"),
+                ["bbox"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
+                ["question_number"] = Nullable("string"),
+                ["text"] = new JsonObject { ["type"] = "string" },
+            }),
+        },
+    });
+
+    private static readonly JsonObject CodexSuggestSchema = Strict(new JsonObject
+    {
+        ["course_guess"] = Nullable("string"),
+        ["material_type"] = Enum("slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"),
+        ["academic_year"] = Nullable("integer"),
+        ["assessment_label"] = Nullable("string"),
+    });
+
+    /// <summary>Rewrites each region's pixel <c>bbox</c> as the app's <c>box_2d</c> ([ymin, xmin, ymax, xmax], 0–1000).</summary>
+    internal static JsonNode PixelBoxesToNormalized(JsonNode j, int width, int height)
+    {
+        if (j["regions"] is not JsonArray regions) return j;
+        foreach (var r in regions.OfType<JsonObject>())
+        {
+            if (r["bbox"] is not JsonArray b || b.Count != 4) continue;
+            var v = b.Select(x => x?.GetValue<double>() ?? 0).ToArray();
+            int Y(double y) => (int)Math.Round(y / height * 1000);
+            int X(double x) => (int)Math.Round(x / width * 1000);
+            // Parsed (not constructed) numbers, so FromJson's GetValue<double>() reads them like any model's output.
+            r["box_2d"] = JsonNode.Parse($"[{Y(v[1])},{X(v[0])},{Y(v[3])},{X(v[2])}]");
+            r.Remove("bbox");
+        }
+        return j;
+    }
+
     private static string CourseList(IReadOnlyList<Course> courses) =>
         string.Join("\n", courses.Select(c => $"- {c.Slug}: {c.Name} (aka {string.Join(", ", c.Aliases)})"));
 
@@ -140,6 +211,14 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
             The uploader filed this as: course "{ctx.CourseName}", type "{ctx.MaterialType}", title "{ctx.Title}"{(ctx.Year is { } y ? $", year {y}" : "")}{(ctx.AssessmentLabel is { } l ? $", label \"{l}\"" : "")}. This is page {ctx.PageNumber} of {ctx.PageCount}.
             {(string.IsNullOrWhiteSpace(embeddedText) ? "" : $"The PDF text layer for this page (may be incomplete or out of order):\n\"\"\"\n{Truncate(embeddedText, 6000)}\n\"\"\"")}
             """;
+        if (codex.Enabled)
+        {
+            var (w, h) = ImageOps.Identify(jpeg);
+            var codexPrompt = prompt.Replace(ExtractInstructions, PixelBoxInstructions(w, h));
+            var answer = await codex.JsonAsync(CodexSystem, codexPrompt, jpeg, CodexExtractSchema, ct);
+            var node = Json.Parse(answer) ?? throw new InvalidOperationException("Codex returned non-JSON extraction: " + Truncate(answer, 200));
+            return FromJson(PixelBoxesToNormalized(node, w, h), answer);
+        }
         if (deepseek.Enabled)
         {
             var text = await DeepSeekJsonAsync(jpeg, prompt, ExtractSchema, ct);
@@ -225,8 +304,8 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         };
         try
         {
-            var j = Json.Parse(deepseek.Enabled
-                ? await DeepSeekJsonAsync(jpeg, prompt, SuggestSchema, ct)
+            var j = Json.Parse(codex.Enabled ? await codex.JsonAsync(CodexSystem, prompt, jpeg, CodexSuggestSchema, ct)
+                : deepseek.Enabled ? await DeepSeekJsonAsync(jpeg, prompt, SuggestSchema, ct)
                 : GeminiClient.CandidateText(await gemini.GenerateAsync(body, ct)));
             if (j is null) return null;
             var year = j.Int("academic_year");

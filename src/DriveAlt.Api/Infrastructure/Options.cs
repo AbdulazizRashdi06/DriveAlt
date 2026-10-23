@@ -55,6 +55,22 @@ public sealed class DeepSeekOptions
     public bool Enabled => !string.IsNullOrWhiteSpace(ApiKey);
 }
 
+/// <summary>
+/// When set, pages are read through the Zarqa stack's private Codex gateway (ChatGPT login, OpenAI-style API) instead of
+/// DeepSeek or Gemini. Chat is unaffected.
+/// </summary>
+public sealed class CodexOptions
+{
+    /// <summary>e.g. http://codex:8090/v1 on the zarqa_default network.</summary>
+    public string BaseUrl { get; set; } = "";
+    public string Model { get; set; } = "gpt-6.1-sol";
+
+    /// <summary>How long a file waits before retrying after the plan's usage limit (or a lost login) stopped it.</summary>
+    public int PauseMinutes { get; set; } = 20;
+
+    public bool Enabled => !string.IsNullOrWhiteSpace(BaseUrl);
+}
+
 public sealed class StorageOptions
 {
     public string Root { get; set; } = "storage";

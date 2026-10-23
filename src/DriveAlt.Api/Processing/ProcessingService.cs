@@ -146,7 +146,8 @@ public sealed class ProcessingService(
                     var jpeg = await File.ReadAllBytesAsync(storage.PageImage(file.Id, page.Number), token);
                     extraction = await ai.ExtractPageAsync(jpeg, ctx, text, courses, token);
                 }
-                catch (Exception e) when (e is not OperationCanceledException)
+                // A usage limit or lost login pauses the whole file (see JobWorker) instead of reading pages offline.
+                catch (Exception e) when (e is not OperationCanceledException && !AiUnavailableException.In(e))
                 {
                     log.LogWarning(e, "AI extraction failed for {File} page {Page}; using offline fallback", file.Id, page.Number);
                     extraction = MaterialAi.Offline(ctx, text);

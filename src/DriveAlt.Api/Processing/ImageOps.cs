@@ -10,6 +10,18 @@ public static class ImageOps
     public static (int Width, int Height) Identify(string path)
     {
         using var codec = SKCodec.Create(path) ?? throw new InvalidOperationException($"Unreadable image: {Path.GetFileName(path)}");
+        return Upright(codec);
+    }
+
+    public static (int Width, int Height) Identify(byte[] bytes)
+    {
+        using var data = SKData.CreateCopy(bytes);
+        using var codec = SKCodec.Create(data) ?? throw new InvalidOperationException("Unreadable image");
+        return Upright(codec);
+    }
+
+    private static (int Width, int Height) Upright(SKCodec codec)
+    {
         var (w, h) = (codec.Info.Width, codec.Info.Height);
         return codec.EncodedOrigin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom
             ? (h, w)

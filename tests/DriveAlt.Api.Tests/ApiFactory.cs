@@ -35,6 +35,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("Auth__Uploaders__0", Uploader);
         Environment.SetEnvironmentVariable("Gemini__ApiKey", "");
         Environment.SetEnvironmentVariable("DeepSeek__ApiKey", "");
+        Environment.SetEnvironmentVariable("Codex__BaseUrl", "");
         Environment.SetEnvironmentVariable("Resend__ApiKey", "");
     }
 
