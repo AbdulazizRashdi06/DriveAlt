@@ -55,10 +55,14 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         - academic_year: the 4-digit year the material is from if visible (exam date, "Fall 2024", copyright line), else null.
         - assessment_label: e.g. "Midterm 1", "Final", "Quiz 3", "Exercise 6", "Lab 2" if visible, else null.
         - course_guess: the slug of the matching course from the list below, or null.
-        - regions: question boxes only, each with label:
-            * "question": one per question or sub-question block, including its stem, sub-parts, figures, tables, code and answer choices. Do NOT include the answer or solution area.
-          Do not create answer, solution or other boxes. Students can open the original sheet to find any answers themselves.
-          box_2d is [ymin, xmin, ymax, xmax] normalized to 0–1000. question_number like "1", "2(b)", "Q3", or null. text is the region's text.
+        - regions: one box per question, each with label:
+            * "question": one per question or sub-question block, covering everything that belongs to it on the paper: its number or title,
+              stem, sub-parts, figures, tables, code, answer choices, and any answer, solution, working or handwriting that goes with it.
+              Crops are shown to students exactly as the paper is, answers included; that is fine. You must never WRITE an answer, though.
+          Be generous: span the text column and leave a small margin. A box that is a bit too big is fine; one that cuts off part of a
+          question or its answer is a failure. Neighbouring boxes may touch but must not overlap. Do not create separate answer or other boxes.
+          box_2d is [ymin, xmin, ymax, xmax] normalized to 0–1000. question_number like "1", "2(b)", "Q3", or null.
+          text is the question's own wording only: never write out, paraphrase or hint at an answer or solution in it.
           Return an empty regions array for slides or pages without questions, including answer-only pages.
         """;
 
@@ -243,6 +247,9 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         return FromJson(j, raw);
     }
 
+    /// <summary>Added on every side of a model's box (fraction of the page), so a tight box never clips a question or its answer.</summary>
+    internal const double BoxPadding = 0.015;
+
     internal static PageExtraction FromJson(JsonNode j, string raw)
     {
         var regions = new List<ExtractedRegion>();
@@ -255,6 +262,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
                 var b = box.Select(v => Math.Clamp(v?.GetValue<double>() ?? 0, 0, 1000) / 1000.0).ToArray();
                 var (y0, x0, y1, x1) = (Math.Min(b[0], b[2]), Math.Min(b[1], b[3]), Math.Max(b[0], b[2]), Math.Max(b[1], b[3]));
                 if (y1 - y0 < 0.01 || x1 - x0 < 0.01) continue;
+                (y0, x0, y1, x1) = (Math.Max(0, y0 - BoxPadding), Math.Max(0, x0 - BoxPadding), Math.Min(1, y1 + BoxPadding), Math.Min(1, x1 + BoxPadding));
                 regions.Add(new ExtractedRegion(
                     RegionLabels.Normalize(r.Str("label")),
                     (float)x0, (float)y0, (float)(x1 - x0), (float)(y1 - y0),

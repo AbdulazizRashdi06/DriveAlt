@@ -8,11 +8,11 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | Updated on `docs/handoff-merge-proof`, which is built **on top of** PR #7 (`codex/handoff-question-only-deployment` at `930905b`, base `main` at `6852f1d`) |
-| Updated | 2026-10-23 15:35 UTC, by Claude Code (Opus 5.5), on top of Codex's 15:19:19 UTC update |
-| Purpose of this update | Codex: record PR #5, its CI mirror fix, deployment verification and the pending question-only test-file re-read. Claude Code: the merge-proof resume check, the leftover answer regions, and the `AGENTS.md` rule for handoffs around merges. |
+| Branch / base | `claude/answers-visible-in-crops`, built **on top of** PR #10 (`codex/drive-import-monitoring` at `3204f28`, from main `5a95318`). **Merge #10 first.** |
+| Updated | 2026-10-24 ~12:15 UTC, by Claude Code (Opus 5.5), on top of Codex's 2026-10-23 19:15 UTC update |
+| Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). |
 
-**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. Next: re-read the test file with question-only crops, then run the already-approved full Drive import (407 files) and report on the ChatGPT plan's usage limits.
+**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. The full Drive import started 2026-10-23 18:58:30 UTC but has been **stuck since about 23:37 UTC**: first the ChatGPT plan's usage limit, then a **lost ChatGPT login** (still `signedIn:false`). 49 files also failed on **Gemini's free embedding quota**. This branch changes question crops to **include answers** as they are on the paper.
 
 ## 2. State of the world
 
@@ -32,9 +32,11 @@
 | #4 | merged, **deployed** | `feat/codex-pages` | Pages read by Codex `gpt-6.1-sol`; pause on usage limits |
 | **#5** | **merged and deployed** | `codex/question-only-crops` (by the Codex agent) | Question crops only, no answer crops or "Show answer"; question searches no longer treated as answer requests |
 | **#6** | **merged** 15:12:09 UTC, deployed 15:14 | `docs/agents-handoff` (by Claude Code) | Adds `AGENTS.md` and `CLAUDE.md`; this page. Docs only. |
-| **#7** | **open** | `codex/handoff-question-only-deployment` (Codex) | This page after PR #5. Docs only. |
+| **#7** | **merged** | `codex/handoff-question-only-deployment` (Codex) | This page after PR #5. Docs only. |
 | #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
-| **#9** | **open** | `docs/handoff-merge-proof` (Claude Code) | Built on #7's commit. Adds only the items listed under "Purpose" above. Merge **#7 first**, then #9, which is then conflict-free. |
+| **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
+| **#10** | **draft, open** | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and usage-limit monitoring. Do not merge without owner approval; use `[skip ci]`. |
+| **#11** | **open** | `claude/answers-visible-in-crops` (Claude Code) | Built on #10. Question crops include answers; 1.5% box padding; bot prompt, `AGENTS.md`, README and this page. **Changes code, so merge normally (it deploys), after #10.** |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -56,21 +58,34 @@ GitHub main run 39976312738 → test success, build success, deploy success
 ```
 The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database configuration was changed by PR #5.
 
-**Data before the post-PR #5 re-read (still pending):** the only file imported is **"midterm 1 (photos)"** (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`, Data Structures past paper, 7 phone photos). Sol re-read it at 14:49 UTC: status `ready`, and all 7 pages were read by the AI (`pages.error` is null on every page). Regions in the DB at 15:19 UTC: `question 31, answer 22, other 5`. **The 22 answer regions are left over from that pre-PR #5 read.** PR #5 no longer creates them and resolves old answer refs to their question; the pending re-run replaces them.
+**Question-only test-file validation passed.** At 18:55:40 UTC, read-only SQL returned `ready | 7 | 7`, every page `extracted=t, offline=f`, and only question regions. The file updated at 15:21:20 UTC after the PR #5 deployment. Per-page question counts: 7, 5, 2, 6, 1, 5, 3 (29 total); answer/other counts are zero. Pages 2 and 6 each have five questions. Visual inspection of crop placement has not been performed by Codex because browser access was declined.
 
-| Page | Questions | Answers |
-|---|---|---|
-| 1 | 8 | 9 |
-| 2 | 5 | 1 |
-| 3 | 2 | 1 |
-| 4 | 6 | 4 |
-| 5 | 1 | 0 |
-| 6 | 5 | 5 |
-| 7 | 4 | 2 |
+**Full import started at 2026-10-23T18:58:30Z (22:58:30 Muscat).** Codex owns it on `codex/drive-import-monitoring`, draft PR #10; do not launch it again. Detached `dotnet DriveAlt.Api.dll import-drive` was confirmed running over a second SSH session. Start marker: `~/drivealt/import.started.utc`; launcher PID: 2284190. Output is in `import.log`; the wrapper writes `import.download-finished.utc` and `import.exit-code` when downloading/queuing ends. File/page processing continues in the app afterwards. HTTP client informational logging is suppressed for this importer invocation to keep API-key URLs out of its log. No source, secrets or service configuration was changed.
 
-**The full Drive import has not started.** `import-drive --dry-run` found **407 files**, with videos and ZIPs skipped. Its log is `~/drivealt/import-dryrun.log`.
+Pre-import baseline was one ready file, seven AI-read pages, zero offline pages, zero paused jobs. `import-drive --dry-run` found **407 files**, with videos and ZIPs skipped. Its log is `~/drivealt/import-dryrun.log`.
 
-**Usage limits:** no `AI paused` log lines in the 3 hours before 15:00 UTC.
+**Monitoring sample, 2026-10-23 19:15:21 UTC:** 343 registered files (330 queued, 7 reading, 5 ready, 1 tagging); 249 pages read successfully, zero offline pages. Download/queuing is still running. Five files paused between 19:07:56 and 19:08:54 UTC because the gateway returned **503 (login check)**, not 429/plan usage limits. A later gateway health check returned signedIn=true, and other pages continue progressing. Leave paused jobs to retry normally. Two importer failures are HTTP/socket connection errors, not HTTP status/quota errors; plan a controlled idempotent retry after the current importer exits, preserving its existing log and exit markers. No actual usage-limit event observed yet. The gateway is CPU-capped at about 100%; **hypothesis:** login-status checks can time out under load. No service/configuration change was made.
+
+**Usage-limit accounting:** observed pause events above are gateway login checks. Do not count them as ChatGPT plan quota delays. Keep the count and duration of true plan-limit intervals separate.
+
+**Import state at 2026-10-24 11:48 UTC** (checked by Claude Code from the VPS; logs `--since 24h`):
+- **Importer:** finished queuing at 19:17 UTC with `Done: 404 queued, 1 skipped, 2 failed` (`~/drivealt/import.log`, exit code 1).
+- **Files:**
+
+  | Status | Files | Pages |
+  |---|---|---|
+  | `reading` | 332 | 8,501 |
+  | `failed` | 51 | 702 |
+  | `ready` | 17 | 426 |
+
+- **Pages:** 1,444 read by the AI and 0 offline; 413 `question` regions.
+- **The real plan limit:** **2,614** `AI paused … (429): Codex usage limit reached`, the first at **2026-10-23 23:37:42 UTC**.
+- **Login lost:** after that, **9,390** `AI paused … (503): Codex needs ChatGPT login`, the last at 2026-10-24 11:48:53 UTC. Gateway `/health` returns `{"signedIn":false}`, and all **332** queued process jobs show `Paused: Codex unavailable (503)`. **Nothing will progress until the owner logs the gateway in again** (command in section 9, Rollback).
+- **Failures:**
+  - **49 files: `Gemini API error 429: You exceeded your current quota`**. The free embedding quota ran out. An embedding error fails the whole file, even after Sol has read its pages (`ProcessingService.EmbedAsync`).
+  - **1 file:** `Network is unreachable (generativelanguage.googleapis.com:443)`. **Hypothesis:** an IPv6 attempt; the VPS has no IPv6 route.
+  - **1 file:** `pdftoppm … Document stream is empty`.
+- **Old boxes:** the 1,444 pages read so far used the PR #5 prompt, which **kept answers out of question boxes**. After this branch deploys, those files need Re-run AI to get crops that include answers.
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
 - The `drivealt.tryzarqa.com` block exists only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo.
@@ -108,13 +123,29 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 
   **A lesson for the process:** two agents updated this page at the same minute. Check `gh pr list` for an open handoff PR before starting another.
 
+- **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
+
+- **2026-10-24, Claude Code** (`claude/answers-visible-in-crops`, built on #10):
+  - **Answers rule fixed.** The owner said, with emphasis: *"answers can be shown just cant be written by the ai"*. So:
+    - **Page-reading prompt** (`src/DriveAlt.Api/Ai/MaterialAi.cs`, `ExtractInstructions`): each question box now covers the question as it is on the paper, answers and working included, with a generous margin. The question's `text` and the page `text` still never contain answers.
+    - **Padding:** `FromJson` pads every box by `BoxPadding` = 1.5% of the page per side, clamped to the page.
+    - **Bot prompt** (`src/DriveAlt.Api/Chat/ChatService.cs` rule 1): showing answers in crops is fine; only typing is forbidden.
+    - **Docs and tests:** `AGENTS.md`, `README.md` and the tests were updated; 35/35 unit tests pass locally.
+  - **Haiku prompt corrected:** the prompt Claude Code had handed the owner for Haiku had the same mistake, and the owner was given a corrected version in chat.
+  - **Import diagnosed:** stuck since 23:37 UTC (section 2).
+
+- **2026-10-23 19:15, Codex:** read-only monitoring confirmed 249 successful page reads with zero offline pages. Diagnosed five paused files as gateway 503 login checks; signed-in health subsequently returned true. Two importer failures were connection errors. Import still runs; retries are deferred until it exits. No restarts or VPS changes were made. Detailed safe observations are stored in the chat workspace `work/import-monitor/observations.jsonl`.
+
 ## 4. User decisions
 
 - **Domain:** `drivealt.tryzarqa.com`. The owner added the Cloudflare record themselves. Using an `*.sslip.io` address was raised and not adopted.
 - **Keys:** the owner made a new Resend key `drivealt` and pasted it into GitHub. They first said to take keys from the other projects, then reversed that: "I will make new ones for this". Later they asked for DeepSeek "from zoors repo for now", so `DEEPSEEK_API_KEY` is Zoor's key.
 - **Repo public:** "make the repo public it is ok", so ghcr.io storage and pulls are free. The history was scanned first and no secrets were found.
 - **Builds:** "build in github", not on the VPS. The VPS already holds about 36 GB of build cache from the apps built there.
-- **Answers:** in the owner's words, *"dont black the answers out … the rule is dont output them as text but leave them in paper"*. PR #5 removes answer crops altogether. **Confirmed by the owner in the Codex chat:** crop only questions; students can find any answers on the original sheet. No original image is changed.
+- **Answers: SHOWN yes, WRITTEN never.** On 2026-10-24 the owner said, with emphasis: *"answers can be shown just cant bew written by the ai ffs i told you million times"*. This **replaces** the earlier "question-only crops; find answers on the original sheet" reading from PR #5. That came from the earlier quote *"dont black the answers out … dont output them as text but leave them in paper"*, which meant: don't hide answers, and don't type them.
+  - **Crops and pages:** they show the paper as it is, answers included. Nothing is blacked out or blurred.
+  - **No AI writes an answer:** not the bot, not summaries, not extracted or region text.
+  - **Never tell a model to keep answers out of a box.**
 - **Page-reading model:**
   - **Gemini 3.8 Flash** on the free tier took 80–136 s a call, so it was dropped.
   - **DeepSeek:** its boxes drift.
@@ -133,6 +164,7 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 - **DeepSeek model:** `deepseek-chat`, the non-thinking mode. Forced tool calls and JSON mode fail in thinking mode (an HTTP 400 seen in testing).
 - **Gateway update:** only the `codex` container is rebuilt, with a backup of the old file. Zarqa's `deploy.sh` would have shipped the owner's unpushed LostraAi commits.
 - **`CLAUDE.md`:** there was no `CLAUDE.md` to rename. `AGENTS.md` holds the rules, and `CLAUDE.md` is one line (`@AGENTS.md`), so Claude Code loads the same rules.
+- **One box per question, answers inside (2026-10-24, Claude Code):** separate answer boxes weren't brought back. Answers sit inside the question box, as they do on the paper, which keeps the model's job simple and the crop faithful to the page. The 1.5% padding in code is a safety net, so a slightly tight box can't clip a line, whatever the model does.
 - **Server details in a public repo:** this page names the VPS IP, user and paths. They're not secrets (DNS already exposes the IP, and SSH takes keys only). The owner was offered to strip them and chose to commit them as they are ("Commit AGENTS.md, CLAUDE.md and HANDOFF.md … and open a PR into main").
 
 ## 6. File inventory
@@ -140,7 +172,8 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 | Path | Role | Status |
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | created (this update) |
-| `HANDOFF.md` | This page | rewritten (this update) |
+| `HANDOFF.md` | This page | import progress tracked in draft PR #10 |
+| VPS `~/drivealt/import.{log,started.utc,launcher.pid,download-finished.utc,exit-code}` | Import output and lifecycle markers; never overwrite or blindly relaunch | started 18:58:30 UTC |
 | `README.md` | Features, local setup, import | **needs work**: its AI section is stale |
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
 | `deploy/docker-compose.yml`, `deploy/Dockerfile`, `deploy/.env.example` | Containers and their config; the app joins `zarqa_default` | current |
@@ -164,9 +197,14 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 
 ## 7. Open threads
 
-1. **Question-only test-file validation:** PR #5 is merged and approved. Codex verified deployment. The owner must click Inspect → midterm 1 (photos) → Re-run AI, then Codex checks seven AI-read pages and question-only regions. Browser access was declined; do not bypass it.
-2. **Full Drive import:** approved but not started; waiting for the post-PR #5 test-file validation. Codex will start and monitor it after validation.
-3. **Usage-limit report:** owed to the owner after the import.
+0. **Blockers found 2026-10-24 (Claude Code):**
+   - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
+   - **(b) Gemini quota:** the free embedding quota fails whole files (49). Options: switch on billing for the key, or make a Gemini 429 pause the file the way Codex limits do (code change, not done).
+   - **(c) Wrong rule in another checkout:** `C:\Users\abdul\DriveAlt` (branch `feat/luna-sol-review`, **another agent's uncommitted work**) has a prompt saying answers are *"never inside a question box"* (`src/DriveAlt.Api/Ai/MaterialAi.cs:147` there). That contradicts the owner's rule and must be fixed before it's committed. Not edited here, because it belongs to another agent.
+   - **(d) Re-run AI:** pages read before this branch have crops without answers, so re-run AI on those files once this branch deploys.
+1. **Question-only test-file validation:** complete by SQL: seven AI-read pages, zero offline pages, 29 questions and no answer/other regions. The owner can still inspect box placement in the UI; Codex has not inspected it visually.
+2. **Full Drive import:** running since 18:58:30 UTC; Codex owns startup and monitoring on `codex/drive-import-monitoring`, draft PR #10. Check markers/processes before attempting any relaunch.
+3. **Usage-limit report:** Codex is tracking this through the app follow-up `monitor-drivealt-import-and-codex-usage-limits`, initially every 15 minutes then hourly once steady. Remain quiet while unchanged. Report ready/failed files, total/offline pages, actual usage-limit pauses and estimated blocking time, and wall clock. Do not add overlapping per-file retries as independent wall-clock delays.
 4. **Zarqa repo:** open a PR for `codex-model-choice`, and add the `drivealt.tryzarqa.com` block to `deploy/Caddyfile` there. Until then, a Zarqa redeploy that rewrites the Caddyfile or the gateway would undo both.
 5. **README:** the AI section needs updating to match section 2.
 6. **Codex's limit wording is unverified:** the gateway matches `usage limit|rate limit|quota|too many requests`. If a limit arrives as a plain 502, pages are read offline instead of pausing. Watch `read_offline` during the import.
@@ -179,14 +217,17 @@ The codex gateway was not rebuilt again. No DNS, Caddy, secrets or database conf
 |---|---|---|---|
 | 0 | **Done:** PR #6 merged; read AGENTS.md and this handoff | all agents | Main contains `7228c22` |
 | 1 | **Done:** PR #5 merged and deployed with owner approval; evidence in section 2 | Codex, `codex/question-only-crops` | VPS image tag must equal `6852f1d012beceb6ffcdc875bb01917b3439f157` |
-| 2 | Re-run AI on the test file under PR #5 (Inspect → "midterm 1 (photos)" → **Re-run AI**) | **owner** clicks; agent checks | SQL in section 9: 7 pages, `offline=f`, only question regions |
-| 3 | Start the full import (already approved, after step 2 passes): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
-| 4 | Monitor about hourly until every file is `ready` or `failed`. At about 6 pages a minute, expect 10–20 h. | agent | Monitoring SQL and the `AI paused` count (section 9) |
+| 2 | **Done:** test file re-read under PR #5 and verified by SQL | Codex | Seven pages, no offline failures, 29 question regions, zero answer/other regions |
+| 3 | **Started 18:58:30 UTC:** full import command (do not launch again): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
+| 4 | **Claimed by Codex, but stalled since 2026-10-23 23:37 UTC** (see section 2). Monitor until every file is `ready` or `failed`; no progress is possible until 4a is done. | agent | Monitoring SQL and the `AI paused` count (section 9) |
+| 4a | **Owner:** log the Codex gateway in again (device auth, section 9 Rollback) | **owner** | gateway `/health` returns `{"signedIn":true}`; paused jobs resume within 20 min |
+| 4b | **Owner decides:** Gemini embeddings. Switch on billing for the key, or approve the code change to pause on Gemini 429. Then retry the 49 Gemini-failed files. | **owner**, then agent | `select count(*) from files where status='failed'` drops |
+| 4c | Merge #10 (`[skip ci]`), then this PR (it changes code, so a normal merge that deploys). Then re-run AI on files read before it, so their crops include answers. | **owner** merges; agent | Image tag = merge SHA; on a re-run page, the crops visibly include its answers |
 | 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
 
-**Required owner action:** re-run the test file after deployment and inspect its question boxes. **Pending approval:** merging this handoff follow-up, future PRs, and pruning build cache.
+**Test re-read is complete.** The owner can inspect its question boxes; no further click is needed for the completed re-read. **Pending approval:** merging this handoff follow-up, future PRs, and pruning build cache.
 
 ## 9. Resume check
 
@@ -196,7 +237,7 @@ Run these. If the output differs, this page is stale: find out why and update it
 cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
 # expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# expect: only PRs listed as open in section 2 (#7 and #9 until merged)
+# PRs #7 and #9 are merged. Open: #10 (Codex, import monitoring) and #11 (Claude Code, answers in crops; built on #10) until merged.
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
 #   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now 6852f1d012beceb6ffcdc875bb01917b3439f157)
@@ -214,7 +255,7 @@ $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
 $D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
 $D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
-# expect now: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; answer 22, other 5, question 31 (no answer rows after the re-run) ; 0
+# pre-import baseline: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; question 29 only. File/page counts will rise during import.
 ```
 
 **Rollback:**
