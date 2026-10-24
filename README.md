@@ -4,8 +4,8 @@ The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot 
 
 - **Chat:** ask in plain words ("past paper questions on queue rear counting in DS", "Quiz 3 from last year", "where did we cover AVL trees?").
   - The bot figures out course, type and year itself. It only asks when something is truly ambiguous.
-  - Results are question crops or full slides, each with its source (course, file, year, page, question number) and tags.
-  - Ask it for an answer, hint or check and it won't type anything: it blames Abdulaziz and sends the answer screenshot from the file instead.
+  - Results are question crops or full slides, each with its source (course, file, year, page, question number) and tags. A question crop shows the question as it is on the paper, including any answer written there.
+  - Ask it for an answer, hint or check and it won't type anything: it blames Abdulaziz and shows the question crop or page from the file instead.
 - **Viewer:** zoom, flip through results with ← / →, open the full page or the original file at that page, save.
 - **Browse:** the Drive's Year 2 tree:
   - Semester 1 is grouped into AI / ALL / CS & CYS, then course → type → folders → files → pages.
@@ -24,10 +24,12 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 
 ## Answers: screenshots yes, typing no
 
-1. Gemini labels every region on a page as **question**, **answer** or **other**. Questions and answers each get their own crop from the original page; pages themselves are shown exactly as they are.
-2. A question card links to its answer (same question number, or the first answer below it on the page). "Show answer" flips the card to the answer screenshot.
-3. When a student asks the bot for an answer, a hint or a check, the bot replies with a rotating "blame Abdulaziz" line and **sends the answer screenshot from the file** (if the file has one). It never types the answer, explains it or checks work.
-4. Answer text is stored but **never indexed, embedded or sent to the model**. The model only sees question/slide snippets plus an `answer_ref` it can attach.
+**The rule: answers can be shown, never written.**
+
+1. The page-reading model boxes each question on a page. The box covers everything that belongs to the question on the paper: stem, sub-parts, figures, code, **and any answer, solution or handwriting with it**. Each box is padded by 1.5% of the page on every side (`MaterialAi.BoxPadding`), so a tight box never clips anything. Pages themselves are shown exactly as they are.
+2. Crops and pages are never edited: nothing is blacked out, blurred or hidden.
+3. When a student asks the bot for an answer, a hint or a check, the bot replies with a rotating "blame Abdulaziz" line and shows the question crop or page, answers included as they appear on the paper. It never types the answer, explains it or checks work.
+4. No AI writes answers anywhere. The page `text` and each question's text leave answers out, so answer text is never indexed, embedded or sent to the chat model.
 5. The bot picks results by reference, and the server renders them from the database. It only accepts references its own searches (or earlier messages) returned.
 6. The bot's one-line comment is filtered on the server:
    - It is capped at 2 sentences.
@@ -41,14 +43,14 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 | API | ASP.NET Core 10, EF Core + Npgsql, background job workers (Postgres `SKIP LOCKED` queue) |
 | DB | PostgreSQL 17 + pgvector: full-text search + vector embeddings, merged with reciprocal-rank fusion |
 | Files | Originals on disk (`/data`, never modified), LibreOffice (Office → PDF), poppler (PDF → page images, text layer), libheif (HEIC), SkiaSharp (crops, thumbnails) |
-| AI | Gemini (`Gemini:Model`, default `gemini-3.8-flash`) for page extraction (structured output, `box_2d` regions) and the tool-calling bot; `gemini-embedding-001` (768-d) for search |
+| AI | Page reading: Codex `gpt-6.1-sol` through the Zarqa gateway (`Codex:BaseUrl`), else DeepSeek, else Gemini. Chat bot: DeepSeek (`deepseek-chat`), else Gemini. Search: `gemini-embedding-001` (768-d). |
 | Email | Resend: `{uniId}@student.gutech.edu.om` gets a 6-digit code |
 | Web | React 19 + Vite + TanStack Query + React Router, pdf.js, react-zoom-pan-pinch; served by the API from `wwwroot` |
 
 **Without a Gemini key the app still runs in offline mode:**
 - text comes from the PDF text layer;
 - each assessment page counts as one question region;
-- there are no separate answer crops, so "give me the answer" just gets the refusal line;
+- "give me the answer" gets the refusal line and the whole page;
 - search is keyword-only;
 - the bot is rule-based.
 

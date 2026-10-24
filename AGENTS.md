@@ -62,7 +62,9 @@ Based on the `handover` skill, adapted for a Markdown file kept in the repo:
 - **Secrets:** never print, log, commit or paste secret values. No `cat .env` and no `echo $KEY`. To check a key is set, count it (`grep -c '^Name=.' .env`). Pipe new keys straight into `gh secret set`. Never open the Codex login (`auth.json` or the `zarqa_codex_auth` volume).
 - **Ask the owner first** before merging, before any VPS change that isn't a read, before deleting anything, before DNS or Caddy changes, and before anything that costs money.
 - **Shared VPS:** the VPS also runs Zarqa, Uni Schedule and Zoor. Rebuild only the container you mean to. **Never run Zarqa's `deploy/deploy.sh`**: it uploads the owner's whole local LostraAi tree.
-- **Answers:** never type out an answer, solution or hint, whether as the bot, in summaries or in crops' text. Answers stay on the original page. Don't black out, blur or hide anything in images.
+- **Answers can be SHOWN, never WRITTEN** (the owner's rule, repeated often; don't get it wrong again):
+  - **Shown:** answers, solutions and handwriting on the paper are fine in page images and in crops. Crops cover the whole question as it is on the paper, answers included. Never tell a model to leave answers out of a box, and never black out, blur or hide anything.
+  - **Never written:** no AI ever types out, paraphrases, hints at, explains, grades or confirms an answer. That covers the bot's replies, summaries, extracted `text` and region text.
 - **Commits:** keep them small, with a message that explains *why*.
 
 ## Commands

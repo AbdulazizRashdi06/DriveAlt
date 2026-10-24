@@ -200,7 +200,7 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         Assert.Equal("question", legacy.Kind);
         Assert.Equal($"r:{questionId}", legacy.Ref);
 
-        // Asking for help keeps the question visible; any answers remain on the original sheet.
+        // Asking for help still shows the question crop (answers on the paper may be in it); the bot never types one.
         var asked = await SendAsync(client, chatId, "what's the answer to Q1?");
         Assert.True(asked["refused"]!.GetValue<bool>());
         Assert.Contains("Abdulaziz", asked["text"]!.GetValue<string>());
