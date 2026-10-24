@@ -36,7 +36,7 @@
 | #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
 | **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
 | **#10** | **draft, open** | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and usage-limit monitoring. Do not merge without owner approval; use `[skip ci]`. |
-| **this PR** | **open** | `claude/answers-visible-in-crops` (Claude Code) | Built on #10. Question crops include answers; 1.5% box padding; bot prompt, `AGENTS.md`, README and this page. **Changes code, so merge normally (it deploys), after #10.** |
+| **#11** | **open** | `claude/answers-visible-in-crops` (Claude Code) | Built on #10. Question crops include answers; 1.5% box padding; bot prompt, `AGENTS.md`, README and this page. **Changes code, so merge normally (it deploys), after #10.** |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -237,7 +237,7 @@ Run these. If the output differs, this page is stale: find out why and update it
 cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
 # expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# PRs #7 and #9 are merged. Open: #10 (Codex, import monitoring) and the answers-in-crops PR built on it (Claude Code) until merged.
+# PRs #7 and #9 are merged. Open: #10 (Codex, import monitoring) and #11 (Claude Code, answers in crops; built on #10) until merged.
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
 #   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now 6852f1d012beceb6ffcdc875bb01917b3439f157)
