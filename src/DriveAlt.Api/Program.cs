@@ -107,7 +107,7 @@ if (!app.Environment.IsDevelopment())
     if (string.IsNullOrWhiteSpace(cfg["Resend:ApiKey"]))
         app.Logger.LogWarning("Resend__ApiKey is not set: sign-in codes are only written to this log, not emailed.");
     if (string.IsNullOrWhiteSpace(cfg["Gemini:ApiKey"]) && string.IsNullOrWhiteSpace(cfg["DeepSeek:ApiKey"]) && string.IsNullOrWhiteSpace(cfg["Codex:BaseUrl"]))
-        app.Logger.LogWarning("Gemini__ApiKey is not set: running in offline mode (no AI regions or answer crops, keyword search only).");
+        app.Logger.LogWarning("Gemini__ApiKey is not set: running in offline mode (no AI question boxes, keyword search only).");
     else if (string.IsNullOrWhiteSpace(cfg["Gemini:ApiKey"]))
         app.Logger.LogWarning("Gemini__ApiKey is not set: DeepSeek reads pages and chats, but search is keyword-only (no embeddings).");
 }

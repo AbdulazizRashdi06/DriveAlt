@@ -70,7 +70,8 @@ public class MappingTests
         Assert.Single(x.Regions);
         var q = x.Regions[0];
         Assert.Equal(RegionLabels.Question, q.Label);
-        Assert.Equal(0.05f, q.X, 3); Assert.Equal(0.1f, q.Y, 3); Assert.Equal(0.9f, q.W, 3); Assert.Equal(0.2f, q.H, 3);
+        // The model's box (x 0.05–0.95, y 0.1–0.3) plus BoxPadding on every side.
+        Assert.Equal(0.035f, q.X, 3); Assert.Equal(0.085f, q.Y, 3); Assert.Equal(0.93f, q.W, 3); Assert.Equal(0.23f, q.H, 3);
         Assert.Equal(["queues", "rear"], x.Tags);
         Assert.Equal(MaterialTypes.Quiz, x.MaterialType);
     }
