@@ -214,14 +214,23 @@ public sealed class ProcessingService(
             return;
         }
 
-        var pageVecs = await ai.EmbedAsync(list.Select(p => IndexText.EmbedPage(file, p)).ToList(), query: false, ct);
-        for (var i = 0; i < list.Count; i++)
-            if (pageVecs[i] is { } v) list[i].Embedding = new Vector(v);
-
         var questions = list.SelectMany(p => p.Regions.Where(r => r.Label == RegionLabels.Question).Select(r => (p, r))).ToList();
-        var regionVecs = await ai.EmbedAsync(questions.Select(x => IndexText.EmbedRegion(file, x.p, x.r)).ToList(), query: false, ct);
-        for (var i = 0; i < questions.Count; i++)
-            if (regionVecs[i] is { } v) questions[i].r.Embedding = new Vector(v);
+        try
+        {
+            var pageVecs = await ai.EmbedAsync(list.Select(p => IndexText.EmbedPage(file, p)).ToList(), query: false, ct);
+            for (var i = 0; i < list.Count; i++)
+                if (pageVecs[i] is { } v) list[i].Embedding = new Vector(v);
+
+            var regionVecs = await ai.EmbedAsync(questions.Select(x => IndexText.EmbedRegion(file, x.p, x.r)).ToList(), query: false, ct);
+            for (var i = 0; i < questions.Count; i++)
+                if (regionVecs[i] is { } v) questions[i].r.Embedding = new Vector(v);
+        }
+        catch (Exception e) when (e is GeminiException { Status: 429 } or HttpRequestException)
+        {
+            // Out of embedding quota (or Gemini unreachable): keep the file with keyword search instead of failing it.
+            // A later Re-run AI or reembed fills the vectors in.
+            log.LogWarning("Embeddings skipped for {File} ({Reason}); keyword search only for now", file.Id, e.Message.Length > 120 ? e.Message[..120] : e.Message);
+        }
 
         foreach (var r in list.SelectMany(p => p.Regions).Where(r => r.Label != RegionLabels.Question))
             r.Embedding = null;

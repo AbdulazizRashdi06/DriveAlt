@@ -19,7 +19,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 var cfg = builder.Configuration;
-var importMode = args.Length > 0 && args[0] == "import-drive";
+var importMode = args.Length > 0 && args[0] is "import-drive" or "import-local";
 
 builder.Services.Configure<AppOptions>(cfg.GetSection("App"));
 builder.Services.Configure<AuthOptions>(cfg.GetSection("Auth"));
@@ -49,6 +49,7 @@ builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<ResultCards>();
 builder.Services.AddScoped<ChatService>();
 builder.Services.AddHttpClient<DriveImporter>(c => c.Timeout = TimeSpan.FromMinutes(10));
+builder.Services.AddScoped<LocalImporter>();
 
 if (string.IsNullOrWhiteSpace(cfg["Resend:ApiKey"]))
     builder.Services.AddSingleton<IEmailSender, DevEmailSender>();
@@ -122,6 +123,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 if (importMode)
 {
     await using var scope = app.Services.CreateAsyncScope();
+    if (args[0] == "import-local")
+        return await scope.ServiceProvider.GetRequiredService<LocalImporter>().RunAsync(args.Skip(1).ToArray(), CancellationToken.None);
     var importer = scope.ServiceProvider.GetRequiredService<DriveImporter>();
     return await importer.RunAsync(args.Skip(1).ToArray(), CancellationToken.None);
 }

@@ -10,7 +10,7 @@
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `claude/answers-visible-in-crops`, built **on top of** PR #10 (`codex/drive-import-monitoring` at `3204f28`, from main `5a95318`). **Merge #10 first.** |
 | Updated | 2026-10-24 ~12:15 UTC, by Claude Code (Opus 5.5), on top of Codex's 2026-10-23 19:15 UTC update |
-| Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). |
+| Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
 **In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. The full Drive import started 2026-10-23 18:58:30 UTC but has been **stuck since about 23:37 UTC**: first the ChatGPT plan's usage limit, then a **lost ChatGPT login** (still `signedIn:false`). 49 files also failed on **Gemini's free embedding quota**. This branch changes question crops to **include answers** as they are on the paper.
 
@@ -36,7 +36,7 @@
 | #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
 | **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
 | **#10** | **draft, open** | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and usage-limit monitoring. Do not merge without owner approval; use `[skip ci]`. |
-| **#11** | **open** | `claude/answers-visible-in-crops` (Claude Code) | Built on #10. Question crops include answers; 1.5% box padding; bot prompt, `AGENTS.md`, README and this page. **Changes code, so merge normally (it deploys), after #10.** |
+| **#11** | **open** | `claude/answers-visible-in-crops` (Claude Code) | Built on #10. Question crops include answers; 1.5% box padding; **`import-local` command**; embeddings fall back to keyword search on a Gemini 429 or network error; bot prompt, `AGENTS.md`, README and this page. **Changes code, so merge normally (it deploys), after #10.** |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -125,6 +125,13 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 - **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
 
+- **2026-10-24, Claude Code: took over the import from Codex** at the owner's order. Added to #11:
+  - **`import-local`** (`src/DriveAlt.Api/Import/LocalImporter.cs`): for files already in the app (matched by Drive ID and page number), it fills unread pages:
+    - **Scanned pages:** the reviewed boxes of the other agent (`crops/*.json`). Its pixel boxes are divided by each page's own render size from `crops/worklist.json`, then clamped and padded.
+    - **Typed PDF pages:** the PDF text, read like the offline fallback. Assessment pages get one whole-page question box until Sol splits them.
+    - **Finishing:** pages already read, or edited in Inspect, are left alone. Files whose pages are all read are queued to embed, crop and become ready.
+  - **Embedding fallback:** `ProcessingService.EmbedAsync` no longer fails a file on a Gemini 429 or network error; it keeps keyword search.
+  - **Tests:** 38/38 unit tests pass locally.
 - **2026-10-24, Claude Code** (`claude/answers-visible-in-crops`, built on #10):
   - **Answers rule fixed.** The owner said, with emphasis: *"answers can be shown just cant be written by the ai"*. So:
     - **Page-reading prompt** (`src/DriveAlt.Api/Ai/MaterialAi.cs`, `ExtractInstructions`): each question box now covers the question as it is on the paper, answers and working included, with a generous margin. The question's `text` and the page `text` still never contain answers.
@@ -142,6 +149,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **Keys:** the owner made a new Resend key `drivealt` and pasted it into GitHub. They first said to take keys from the other projects, then reversed that: "I will make new ones for this". Later they asked for DeepSeek "from zoors repo for now", so `DEEPSEEK_API_KEY` is Zoor's key.
 - **Repo public:** "make the repo public it is ok", so ghcr.io storage and pulls are free. The history was scanned first and no secrets were found.
 - **Builds:** "build in github", not on the VPS. The VPS already holds about 36 GB of build cache from the apps built there.
+- **Import ownership (2026-10-24):** the owner said *"no no override codex for now do whateer it takes to upload everything"*. **Claude Code now owns the import**, which overrides Codex's claim in PR #10. Codex: don't relaunch or requeue it.
+  - **Scope:** files with local results, i.e. Semester 1 PDFs without ITS.
+  - **Everything else** (photos, Office files, Semester 2, ITS, and pages without local text) still waits for Sol, which needs the ChatGPT gateway logged in again.
 - **Answers: SHOWN yes, WRITTEN never.** On 2026-10-24 the owner said, with emphasis: *"answers can be shown just cant bew written by the ai ffs i told you million times"*. This **replaces** the earlier "question-only crops; find answers on the original sheet" reading from PR #5. That came from the earlier quote *"dont black the answers out … dont output them as text but leave them in paper"*, which meant: don't hide answers, and don't type them.
   - **Crops and pages:** they show the paper as it is, answers included. Nothing is blacked out or blurred.
   - **No AI writes an answer:** not the bot, not summaries, not extracted or region text.
@@ -197,6 +207,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
 0. **Blockers found 2026-10-24 (Claude Code):**
    - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
    - **(b) Gemini quota:** the free embedding quota fails whole files (49). Options: switch on billing for the key, or make a Gemini 429 pause the file the way Codex limits do (code change, not done).
@@ -219,7 +230,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | 1 | **Done:** PR #5 merged and deployed with owner approval; evidence in section 2 | Codex, `codex/question-only-crops` | VPS image tag must equal `6852f1d012beceb6ffcdc875bb01917b3439f157` |
 | 2 | **Done:** test file re-read under PR #5 and verified by SQL | Codex | Seven pages, no offline failures, 29 question regions, zero answer/other regions |
 | 3 | **Started 18:58:30 UTC:** full import command (do not launch again): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
-| 4 | **Claimed by Codex, but stalled since 2026-10-23 23:37 UTC** (see section 2). Monitor until every file is `ready` or `failed`; no progress is possible until 4a is done. | agent | Monitoring SQL and the `AI paused` count (section 9) |
+| 4 | **Claude Code (`claude/answers-visible-in-crops`) owns it now; was Codex's.** Stalled since 2026-10-23 23:37 UTC (see section 2). Monitor until every file is `ready` or `failed`; no progress is possible until 4a is done. | agent | Monitoring SQL and the `AI paused` count (section 9) |
 | 4a | **Owner:** log the Codex gateway in again (device auth, section 9 Rollback) | **owner** | gateway `/health` returns `{"signedIn":true}`; paused jobs resume within 20 min |
 | 4b | **Owner decides:** Gemini embeddings. Switch on billing for the key, or approve the code change to pause on Gemini 429. Then retry the 49 Gemini-failed files. | **owner**, then agent | `select count(*) from files where status='failed'` drops |
 | 4c | Merge #10 (`[skip ci]`), then this PR (it changes code, so a normal merge that deploys). Then re-run AI on files read before it, so their crops include answers. | **owner** merges; agent | Image tag = merge SHA; on a re-run page, the crops visibly include its answers |
