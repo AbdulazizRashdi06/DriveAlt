@@ -8,11 +8,11 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/answers-visible-in-crops`, built **on top of** PR #10 (`codex/drive-import-monitoring` at `3204f28`, from main `5a95318`). **Merge #10 first.** |
-| Updated | 2026-10-24 ~12:15 UTC, by Claude Code (Opus 5.5), on top of Codex's 2026-10-23 19:15 UTC update |
+| Branch / base | `claude/handoff-local-import`, from main `5c7641a` (merge of #11) |
+| Updated | 2026-10-24 ~19:50 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**In one line:** the app is deployed and works. Chat runs on DeepSeek, and pages are read by Codex `gpt-6.1-sol`. The full Drive import started 2026-10-23 18:58:30 UTC but has been **stuck since about 23:37 UTC**: first the ChatGPT plan's usage limit, then a **lost ChatGPT login** (still `signedIn:false`). 49 files also failed on **Gemini's free embedding quota**. This branch changes question crops to **include answers** as they are on the paper.
+**In one line:** the app is live (image `5c7641a`). Chat runs on DeepSeek; pages are read by Codex `gpt-6.1-sol` when the gateway is logged in. **The local import ran 2026-10-24:** 176 files are `ready` (up from 17), including **all of Data Structures and Organisation & HR**. **223 files still wait for Sol** (photos, Office files, Semester 2, some ITS), which needs the owner to log the ChatGPT gateway in again. Question crops include answers as they are on the paper; no AI writes them.
 
 ## 2. State of the world
 
@@ -35,8 +35,9 @@
 | **#7** | **merged** | `codex/handoff-question-only-deployment` (Codex) | This page after PR #5. Docs only. |
 | #8 | **closed** unmerged (superseded by #9) | `docs/handoff-after-6` (Claude Code) | Same facts as #7, written in parallel; conflicted with #7. |
 | **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
-| **#10** | **draft, open** | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and usage-limit monitoring. Do not merge without owner approval; use `[skip ci]`. |
-| **#11** | **open** | `claude/answers-visible-in-crops` (Claude Code) | Built on #10. Question crops include answers; 1.5% box padding; **`import-local` command**; embeddings fall back to keyword search on a Gemini 429 or network error; bot prompt, `AGENTS.md`, README and this page. **Changes code, so merge normally (it deploys), after #10.** |
+| #10 | merged `6b7a6fe` with `[skip ci]` (by Claude Code, owner's order) | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and monitoring notes. Docs only. |
+| #11 | merged `5c7641a`, **deployed 2026-10-24 19:17–19:21 UTC** | `claude/answers-visible-in-crops` (Claude Code) | Crops include answers; 1.5% box padding; `import-local`; keyword-only fallback on Gemini 429 or network error. |
+| **#12** | **open** | `claude/handoff-local-import` (Claude Code) | This page after the local import. Docs only; merge with `[skip ci]`. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -87,6 +88,24 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **1 file:** `pdftoppm … Document stream is empty`.
 - **Old boxes:** the 1,444 pages read so far used the PR #5 prompt, which **kept answers out of question boxes**. After this branch deploys, those files need Re-run AI to get crops that include answers.
 
+**Import state at 2026-10-24 19:42 UTC, after `import-local`** (Claude Code):
+- **The run:** `import-local /data/import-local --only "semester 1/" --skip "semester 1/ai/its"` at 2026-10-24 ~19:23 UTC, exit 0. It filled **3,310 pages from PDF text** and **357 scanned pages from reviewed boxes** (24 question boxes) in 126 files. 109 files were fully read and queued to finish; 17 still have pages for Sol; 1 wasn't split. Log: `~/drivealt/import-local.log`. Data: `/data/import-local` inside the app's `files` volume (23 MB: `manifest.json`, `results/`, `crops/`).
+- **Requeued:** 50 files that had failed on `Gemini API error 429` (49) or `Network is unreachable` (1), with all pages already read. Their failed `process` jobs were reset to queued in one SQL transaction.
+- **Then:** the queue emptied by 19:42 UTC with **0 job errors**. Files: `ready 176, reading 223, failed 1` (`pdftoppm … Document stream is empty`). **105 files finished without embeddings** (`Embeddings skipped` log lines: the Gemini quota is still used up), so they have keyword search only.
+- **Semester 1 per course:**
+
+  | Course | Files ready | Pages read |
+  |---|---|---|
+  | Data Structures | 44/44 | 1,280/1,280 |
+  | Organisation & HR | 10/10 | 123/123 |
+  | Representation & Problem Solving | 13/15 | 838/843 |
+  | Probability & Statistics | 26/39 | 1,367/1,415 |
+  | Database Systems | 44/57 | 498/551 |
+  | Accounting & Controlling | 12/25 | 91/337 (mostly photos) |
+
+  ITS: 21/31 ready, from the earlier Sol run. Semester 2: 6/179 ready.
+- **Checked visually:** crops made from the reviewed boxes (*Accounting final exam* p3 Q2, *cpp4 solutions* p2 Q2) are complete, with stem, requirements and answer space or solution code.
+
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
 - The `drivealt.tryzarqa.com` block exists only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo.
 - The VPS gateway runs an unmerged branch.
@@ -126,6 +145,13 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
 
 - **2026-10-24, Claude Code: took over the import from Codex** at the owner's order. Added to #11:
+- **2026-10-24 19:10–19:50, Claude Code:**
+  - merged #10 (`[skip ci]`) and #11 (deployed `5c7641a`);
+  - uploaded the DriveAlt-local results and crops to `/data/import-local`;
+  - ran `import-local` (dry run first: same totals);
+  - requeued 50 Gemini- or network-failed files, and checked crops visually.
+  
+  Result: 176 files ready. Details in section 2.
   - **`import-local`** (`src/DriveAlt.Api/Import/LocalImporter.cs`): for files already in the app (matched by Drive ID and page number), it fills unread pages:
     - **Scanned pages:** the reviewed boxes of the other agent (`crops/*.json`). Its pixel boxes are divided by each page's own render size from `crops/worklist.json`, then clamped and padded.
     - **Typed PDF pages:** the PDF text, read like the offline fallback. Assessment pages get one whole-page question box until Sol splits them.
@@ -230,10 +256,10 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | 1 | **Done:** PR #5 merged and deployed with owner approval; evidence in section 2 | Codex, `codex/question-only-crops` | VPS image tag must equal `6852f1d012beceb6ffcdc875bb01917b3439f157` |
 | 2 | **Done:** test file re-read under PR #5 and verified by SQL | Codex | Seven pages, no offline failures, 29 question regions, zero answer/other regions |
 | 3 | **Started 18:58:30 UTC:** full import command (do not launch again): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
-| 4 | **Claude Code (`claude/answers-visible-in-crops`) owns it now; was Codex's.** Stalled since 2026-10-23 23:37 UTC (see section 2). Monitor until every file is `ready` or `failed`; no progress is possible until 4a is done. | agent | Monitoring SQL and the `AI paused` count (section 9) |
-| 4a | **Owner:** log the Codex gateway in again (device auth, section 9 Rollback) | **owner** | gateway `/health` returns `{"signedIn":true}`; paused jobs resume within 20 min |
-| 4b | **Owner decides:** Gemini embeddings. Switch on billing for the key, or approve the code change to pause on Gemini 429. Then retry the 49 Gemini-failed files. | **owner**, then agent | `select count(*) from files where status='failed'` drops |
-| 4c | Merge #10 (`[skip ci]`), then this PR (it changes code, so a normal merge that deploys). Then re-run AI on files read before it, so their crops include answers. | **owner** merges; agent | Image tag = merge SHA; on a re-run page, the crops visibly include its answers |
+| 4 | **Claude Code owns the import.** Semester 1 local data is done (section 2). The 223 files left need Sol: photos, Office files, pages with too little text, Semester 2 and some ITS. | agent | `select status, count(*) from files group by status` |
+| 4a | **Owner:** log the Codex gateway in again (device auth, section 9 Rollback). Paused jobs then resume by themselves. | **owner** | gateway `/health` returns `{"signedIn":true}`; `reading` count falls |
+| 4b | **Owner decides:** Gemini billing, so the 105 keyword-only files get embeddings (queue `reembed` jobs for them afterwards). | **owner**, then agent | pages with `embedding is not null` rise |
+| 4c | Re-run AI on files read by Sol **before #11**, so their crops include answers. Also re-run typed exam pages that have one whole-page box (`raw_extraction->>'localImport'='pdf-text'` on assessment pages), to split them into questions. Needs 4a. | agent | Their crops are split per question and include answers |
 | 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
@@ -251,7 +277,7 @@ gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName 
 # PRs #7 and #9 are merged. Open: #10 (Codex, import monitoring) and #11 (Claude Code, answers in crops; built on #10) until merged.
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
-#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now 6852f1d012beceb6ffcdc875bb01917b3439f157)
+#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now 5c7641a2ce4ba4ff2a53d3e294c90b0f623118e3)
 #   Docs-only PRs (#7, #9) are merged with [skip ci], so they don't build or deploy and the image stays put.
 #         {"ok":true}{"signedIn":true}
 #         5da0c724e36f4562
@@ -266,7 +292,8 @@ $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
 $D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
 $D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
-# pre-import baseline: ready | 1 | 7 ; read_ok 7, read_offline 0 ; paused_now 0 ; question 29 only. File/page counts will rise during import.
+# expect at 2026-10-24 19:42 UTC: files ready 176, reading 223, failed 1. paused_now high while the gateway is logged out.
+# The reading count only falls after the owner logs the gateway in (step 4a). Higher ready / lower reading = progress since.
 ```
 
 **Rollback:**
