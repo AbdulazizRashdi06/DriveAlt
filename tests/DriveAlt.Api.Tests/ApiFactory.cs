@@ -14,6 +14,8 @@ namespace DriveAlt.Api.Tests;
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string Uploader = "24-0161";
+    public const string FixedCodeId = "25-4321";
+    public const string FixedCode = "9876";
     private static readonly string Admin = Environment.GetEnvironmentVariable("DRIVEALT_TEST_PG")
         ?? "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
@@ -33,6 +35,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("Storage__Root", StorageRoot);
         Environment.SetEnvironmentVariable("Processing__Workers", "0");
         Environment.SetEnvironmentVariable("Auth__Uploaders__0", Uploader);
+        Environment.SetEnvironmentVariable("Auth__FixedCodes__0", $"{FixedCodeId}:{FixedCode}");
         Environment.SetEnvironmentVariable("Gemini__ApiKey", "");
         Environment.SetEnvironmentVariable("DeepSeek__ApiKey", "");
         Environment.SetEnvironmentVariable("Codex__BaseUrl", "");

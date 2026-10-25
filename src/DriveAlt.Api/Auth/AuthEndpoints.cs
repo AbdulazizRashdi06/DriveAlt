@@ -59,7 +59,9 @@ public static partial class AuthEndpoints
             if (recent.Count >= 6)
                 return Results.Json(new { error = "Too many codes this hour. Try again later." }, statusCode: 429);
 
-            var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+            // A fixed-code account gets a code row like everyone else (so the limits apply), but nothing is emailed.
+            var fixedCode = o.FixedCodeFor(uniId);
+            var code = fixedCode ?? RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
             db.OtpCodes.Add(new OtpCode
             {
                 UniId = uniId,
@@ -68,7 +70,7 @@ public static partial class AuthEndpoints
             });
             await db.SaveChangesAsync(ct);
             var to = EmailFor(o, uniId);
-            await email.SendOtpAsync(to, code, ct);
+            if (fixedCode is null) await email.SendOtpAsync(to, code, ct);
             return Results.Ok(new { email = to });
         }).RequireRateLimiting("otp");
 

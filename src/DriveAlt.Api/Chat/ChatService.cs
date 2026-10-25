@@ -103,7 +103,7 @@ public sealed partial class ChatService(
         // Chips are answered by the app itself: no model call, so the answer is instant.
         if (option is { } i && lastBot is not null && ChatOption.Read(lastBot.Options) is { } chips && i >= 0 && i < chips.Count)
         {
-            await PickAsync(convo, userId, lastBot, i, null, turn, stream, ct);
+            await PickAsync(convo, userId, chips[i], turn, stream, ct);
             return;
         }
         if (more && lastBot is not null)
@@ -130,9 +130,10 @@ public sealed partial class ChatService(
             await AskAsync(convo, userId, ask, turn, stream, ct);
             return;
         }
-        if (reply.Option is { } picked && lastBot is not null && picked >= 0 && picked < ChatOption.Read(lastBot.Options).Count)
+        if (reply.Option is { } picked && lastBot is not null && ChatOption.Read(lastBot.Options) is { } offered && picked >= 0 && picked < offered.Count)
         {
-            await PickAsync(convo, userId, lastBot, picked, reply.Commentary, turn, stream, ct);
+            var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
+            await PickAsync(convo, userId, TypedPick(text, offered[picked], courses), turn, stream, ct);
             return;
         }
         if (reply.ShowMore && lastBot is { More.Length: > 0 })
@@ -216,9 +217,25 @@ public sealed partial class ChatService(
         }
     }
 
-    private async Task PickAsync(Conversation convo, Guid userId, Message lastBot, int index, string? commentary, Turn turn, ChatStream stream, CancellationToken ct)
+    /// <summary>
+    /// What a typed answer to a clarifying question really picks. When the student names a course that isn't the option
+    /// the model chose ("data structures" while the options were Database Systems and Probability), that course is
+    /// searched with the same request instead, so the results never contradict what the student said.
+    /// </summary>
+    internal static ChatOption TypedPick(string text, ChatOption chosen, IReadOnlyList<Course> courses)
     {
-        var o = ChatOption.Read(lastBot.Options)[index];
+        var named = Heuristics.MatchCourse(text.ToLowerInvariant(), courses);
+        if (named is null || named.Slug == ResolveCourse(chosen.Course, courses)?.Slug) return chosen;
+        return new ChatOption
+        {
+            Label = named.Name, Query = chosen.Query, Course = named.Slug, Type = chosen.Type, Year = chosen.Year,
+            AssessmentLabel = chosen.AssessmentLabel,
+        };
+    }
+
+    /// <summary>Shows a picked option's results with the app's own line, so the line always names what is shown.</summary>
+    private async Task PickAsync(Conversation convo, Guid userId, ChatOption o, Turn turn, ChatStream stream, CancellationToken ct)
+    {
         if (!o.Done)
         {
             var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
@@ -230,15 +247,9 @@ public sealed partial class ChatService(
         var shown = refs.Take(FirstBatch).ToList();
         var held = refs.Skip(FirstBatch).ToList();
 
-        var fallback = refs.Count == 0
+        var line = refs.Count == 0
             ? $"Nothing in {o.Label} yet. Want me to try other words?"
             : $"{o.Label} it is! {Plural(refs.Count, "result")} coming up.";
-        var line = fallback;
-        if (commentary is not null && refs.Count > 0)
-        {
-            var protectedTexts = await ProtectedTextsAsync(refs, turn.PagesSeen, ct);
-            line = Guardrails.Clean(commentary, protectedTexts, true, refs.Count, fallback);
-        }
         await SaveBotAsync(convo, userId, WithMoreNote(line, held.Count), shown, held, false, null, stream, ct);
     }
 
@@ -345,7 +356,8 @@ public sealed partial class ChatService(
                years and they asked for one specific year ("Quiz 3 from last year" is resolvable: today is {{today:yyyy-MM-dd}}, so last
                year is {{today.Year - 1}}). Don't ask about year or semester when the course alone is enough.
             7. When your last message asked with options and the student answers with one of them, call `reply` with option=<its number>
-               and no new search. When they ask for more of the last results, call `reply` with show_more=true.
+               and no new search. If they name something that is NOT one of the options (another course), don't pick an option:
+               search what they named. When they ask for more of the last results, call `reply` with show_more=true.
             8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
 
             Courses (slug: name, semester, aliases):

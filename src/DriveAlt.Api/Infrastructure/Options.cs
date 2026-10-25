@@ -20,6 +20,15 @@ public sealed class AuthOptions
     /// <summary>Secret mixed into OTP hashes. Must be set in production.</summary>
     public string OtpSecret { get; set; } = "dev-only-otp-secret";
 
+    /// <summary>
+    /// Accounts that sign in with a fixed code instead of an emailed one, as "uniId:code" (e.g. the owner's student view).
+    /// Set from a secret, never in the repo. The usual cooldown, hourly cap and per-code attempt limit still apply.
+    /// </summary>
+    public List<string> FixedCodes { get; set; } = [];
+
+    public string? FixedCodeFor(string uniId) =>
+        FixedCodes.Select(e => e.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim() == uniId)?[1].Trim();
+
     public int OtpMinutes { get; set; } = 10;
     public int OtpMaxAttempts { get; set; } = 5;
 }

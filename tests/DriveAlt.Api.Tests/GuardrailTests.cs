@@ -105,4 +105,26 @@ public class GuardrailTests
     {
         Assert.Equal(expected, ChatService.WithMoreNote(line, held));
     }
+
+    private static readonly List<DriveAlt.Api.Data.Course> PickCourses =
+    [
+        new() { Id = 1, Slug = "data-structures", Name = "Data Structures", Aliases = ["DS", "data structures"] },
+        new() { Id = 2, Slug = "database-systems", Name = "Database Systems", Aliases = ["DB", "database", "SQL"] },
+        new() { Id = 3, Slug = "probability-statistics", Name = "Probability and Statistics", Aliases = ["probability", "stats"] },
+    ];
+
+    [Theory]
+    [InlineData("data structures", "data-structures", "Data Structures")]
+    [InlineData("the ds one", "data-structures", "Data Structures")]
+    [InlineData("database please", "database-systems", "DB quiz")]
+    [InlineData("the first one", "database-systems", "DB quiz")]
+    public void A_typed_pick_follows_the_course_the_student_names(string text, string course, string label)
+    {
+        var chosen = new DriveAlt.Api.Chat.ChatOption { Label = "DB quiz", Query = "quiz 3", Course = "database-systems", Type = "quiz", Refs = ["r:x"], Done = true };
+        var pick = ChatService.TypedPick(text, chosen, PickCourses);
+        Assert.Equal(course, pick.Course);
+        Assert.Equal(label, pick.Label);
+        Assert.Equal("quiz 3", pick.Query);
+        Assert.Equal(pick.Course == chosen.Course, pick.Done);
+    }
 }

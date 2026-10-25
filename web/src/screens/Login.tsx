@@ -116,7 +116,6 @@ export function Login() {
         <span className="sticker" style={{ background: '#2BC48A', transform: 'rotate(-3deg)' }} data-s="3">quizzes</span>
         <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 600 }}>
           <h1 className="disp login-h1">Ask for any page. Get the real thing.</h1>
-          <p className="login-sub">Your batch's slides, past papers and quizzes, found by a bot that sends screenshots of the real pages and never types out answers.</p>
         </div>
       </section>
 
@@ -143,7 +142,7 @@ export function Login() {
             </p>
           </form>
         ) : (
-          <form onSubmit={e => { e.preventDefault(); if (code.length === 6) void verify(code) }}
+          <form onSubmit={e => { e.preventDefault(); if (code.replace(/\s/g, '').length >= 4) void verify(code) }}
             style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 22 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div className="lbl">Check your inbox</div>
@@ -152,7 +151,7 @@ export function Login() {
             </div>
             <CodeInput value={code} onChange={setCode} onComplete={v => void verify(v)} disabled={busy} />
             {error && <div className="err" role="alert">{error}</div>}
-            <button className="candy lg" type="submit" disabled={busy || code.replace(/\s/g, '').length < 6}>{busy ? 'Checking…' : "Let's go"}</button>
+            <button className="candy lg" type="submit" disabled={busy || code.replace(/\s/g, '').length < 4}>{busy ? 'Checking…' : "Let's go"}</button>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button className="candy c-white sm" type="button" onClick={() => { setStage('id'); setError(null) }}>Change ID</button>
               <button className="candy c-cream sm" type="button" disabled={cooldown > 0 || busy} onClick={() => void requestCode()}>
