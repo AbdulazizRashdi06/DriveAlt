@@ -77,4 +77,32 @@ public class GuardrailTests
     {
         Assert.Equal(refuse, ChatService.ShouldRefuse(message, modelRefused: true));
     }
+
+    [Theory]
+    [InlineData("Data Structures", "Data Structures")]
+    [InlineData("  Efficient Algorithms ", "Efficient Algorithms")]
+    [InlineData("", "Fallback")]
+    [InlineData("The answer is 5 elements", "Fallback")]
+    [InlineData("A label that is far too long to fit on one small chip", "Fallback")]
+    [InlineData("circular queue of size 8 has front", "Fallback")]
+    public void Option_labels_are_short_and_leak_nothing(string label, string expected)
+    {
+        Assert.Equal(expected, Guardrails.CleanLabel(label, PageTexts, "Fallback"));
+    }
+
+    [Fact]
+    public void A_bad_question_falls_back_to_the_given_line()
+    {
+        Assert.Equal(ChatService.AskFallback, Guardrails.Clean("The answer is 5.", PageTexts, false, 0, ChatService.AskFallback));
+        Assert.Equal("Which course, DS or algorithms?", Guardrails.Clean("Which course, DS or algorithms?", PageTexts, false, 0, ChatService.AskFallback));
+    }
+
+    [Theory]
+    [InlineData("Ta-da!", 0, "Ta-da!")]
+    [InlineData("Ta-da!", 9, "Ta-da! I've got 9 more when you want them.")]
+    [InlineData("Best 3 here, plenty more where that came from.", 9, "Best 3 here, plenty more where that came from.")]
+    public void Held_back_results_are_always_mentioned(string line, int held, string expected)
+    {
+        Assert.Equal(expected, ChatService.WithMoreNote(line, held));
+    }
 }

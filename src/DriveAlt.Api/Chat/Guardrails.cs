@@ -61,9 +61,9 @@ public static partial class Guardrails
     /// Returns safe commentary: the model's line if it passes, else a stock line.
     /// <paramref name="protectedTexts"/> holds every text the bot must not echo (question, slide and answer text of the pages involved).
     /// </summary>
-    public static string Clean(string? commentary, IEnumerable<string> protectedTexts, bool hasResults, int seed)
+    public static string Clean(string? commentary, IEnumerable<string> protectedTexts, bool hasResults, int seed, string? fallback = null)
     {
-        var fallback = hasResults ? FoundLines[Math.Abs(seed) % FoundLines.Length] : NothingLine;
+        fallback ??= hasResults ? FoundLines[Math.Abs(seed) % FoundLines.Length] : NothingLine;
         var c = (commentary ?? "").Replace("```", "").Replace("**", "").Replace("`", "").Trim();
         if (c.Length == 0) return fallback;
         if (c.Contains('\n')) c = c.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0].Trim();
@@ -74,6 +74,17 @@ public static partial class Guardrails
         if (LeakPhrases().IsMatch(c)) return fallback;
         if (Overlaps(c, protectedTexts)) return fallback;
         return c;
+    }
+
+    public const int MaxLabel = 40;
+
+    /// <summary>Chip text of a clarifying question's option: one short line that leaks nothing, else <paramref name="fallback"/>.</summary>
+    public static string CleanLabel(string? label, IEnumerable<string> protectedTexts, string fallback)
+    {
+        var l = (label ?? "").Replace("```", "").Replace("**", "").Replace("`", "").ReplaceLineEndings(" ").Trim();
+        if (l.Length == 0 || l.Length > MaxLabel) return fallback;
+        if (LeakPhrases().IsMatch(l) || Overlaps(l, protectedTexts)) return fallback;
+        return l;
     }
 
     public static bool Overlaps(string text, IEnumerable<string> protectedTexts)

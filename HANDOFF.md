@@ -8,11 +8,13 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/handoff-after-18` (PR #19), from main `dfb1877` (merge of #18) |
-| Updated | 2026-10-25, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/conversational-bot` (PR #20), from main `6e212e0` (merge of #19) |
+| Updated | 2026-10-25 ~11:30 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**In one line:** the app is live (image `dfb1877`). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
+**PR #20 (open, needs the owner's OK):** the conversational bot (section 3, 2026-10-25 entry). Written for after it merges: image = its merge commit, `messages` has the `more` and `options` columns.
+
+**In one line:** the app is live (image `dfb1877`; PR #20 pending). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
 
 ## 2. State of the world
 
@@ -44,7 +46,8 @@
 | #16 | merged `2673a3d`, **deployed 2026-10-25 04:24–04:28 UTC** | `claude/searchable-while-rereading` (Claude Code) | Searchable while re-read; image fallbacks; questions for question requests; `import-drive --from-local`. |
 | #17 | merged with `[skip ci]` | `claude/handoff-missing-files` (Claude Code) | Handoff after #16. Docs only. |
 | #18 | merged `dfb1877`, **deployed**; the owner confirmed chat works | `claude/show-sent-message` (Claude Code) | Chat: the sent message shows at once in a new chat. |
-| **#19** | **open** | `claude/handoff-after-18` (Claude Code) | This page after #18. Docs only; merge with `[skip ci]`. |
+| #19 | merged `6e212e0` with `[skip ci]` | `claude/handoff-after-18` (Claude Code) | This page after #18. Docs only. |
+| **#20** | **open** | `claude/conversational-bot` (Claude Code) | Bot asks instead of substituting; clarifying question with options searched while the student answers; 3 results first, the rest behind "Show more". **Code + DB migration: merge normally (CI and deploy), not `[skip ci]`.** |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -219,7 +222,18 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
 
 - **2026-10-24, Claude Code: took over the import from Codex** at the owner's order. Added to #11:
-- **2026-10-24 19:10–19:50, Claude Code:**
+- **2026-10-25, Claude Code: conversational bot (PR #20, `claude/conversational-bot`)**, on the owner's wishes (section 4):
+- **Ask while searching:** a new model tool `ask` (`src/DriveAlt.Api/Chat/ChatService.cs`, `AskAsync`). The question is saved and streamed at once; then each option (2–4, each a search) is searched in turn and its count is streamed as an SSE `options` event. Option labels pass `Guardrails.CleanLabel` (≤40 chars, no leak phrases, no overlap with page text).
+- **Picking:** a chip sends `{ text, option }` and the server answers without the model (`PickAsync`); an option whose search hadn't finished is searched on the spot. A typed pick goes to the model, which calls `reply` with `option`.
+- **A few results first:** replies show `FirstBatch` = 3 results; the rest (`MaxResults` now 12) wait in `Message.More` behind a "Show more" chip (`ShowMoreAsync`, no model). The app appends "I've got N more…" when the model's line doesn't mention it (`WithMoreNote`).
+- **No more substituting:** a plain-text model answer or a turn that runs out of steps shows no results (before: the last search). A year/label search that had to widen is marked `broadened`, and the prompt says to ask before showing those. Prompt rules 4–8 rewritten: stay on the asked course/topic, ask instead of guessing or mixing.
+- **Frontend** (`web/src/screens/Chat.tsx`): option chips with a searching / "N found" / "none yet" state; the composer unlocks when the bot's message arrives, so the student can answer while options search; overlapping sends keep their own state (`latestSend`).
+- **DB:** migration `20261025065440_AddMessageOptions` adds `messages.more` (text[], default empty) and `messages.options` (jsonb, nullable). Applied on start by `MigrateAsync`.
+- **Tests:** unit 45/45 passed locally (`dotnet test --filter …GuardrailTests…`: `Passed! - Failed: 0, Passed: 45`). Frontend: `tsc -b`, 8/8 vitest, build passed. **API tests not run locally** (no Postgres/Docker on this PC); the new `Option_chips_and_show_more_are_answered_without_the_model` runs in CI. **Not tested:** the model actually choosing `ask` (no DeepSeek key locally, no fake handler in `ApiFactory`).
+- **Browser check:** `npm run dev` against a stand-in API (scratchpad node script, not in the repo). Question showed at once with both chips searching, then "6 found" / "none yet"; a chip showed 3 results + "Show more"; "Show more" showed the last 3; a reply typed while the question was up kept both messages in order. Fixed on the way: the student's own message was drawn below the bot's question in a new chat.
+- **After deploy:** the owner should try *"algorithm analysis questions"*. Expected: a question with Data Structures / Efficient Algorithms chips (Efficient Algorithms is Semester 2, mostly held, so likely "none yet").
+
+**2026-10-24 19:10–19:50, Claude Code:**
   - merged #10 (`[skip ci]`) and #11 (deployed `5c7641a`);
   - uploaded the DriveAlt-local results and crops to `/data/import-local`;
   - ran `import-local` (dry run first: same totals);
@@ -264,9 +278,10 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **Codex on the ChatGPT plan:** the owner said "chat gpt cost nothing", and added "zarqa isnt live", so sharing Zarqa's gateway is fine.
   - **Final choice: `gpt-6.1-sol`.** The owner said the first test harness was bad; it was rerun fairly. Then: "use sol then let me know if limits had limited".
 - **Owner's standing request:** report whether the ChatGPT plan's usage limits slowed the import, and by how much.
-- **Bot behaviour wishes (2026-10-25), NOT implemented yet** (the owner then said "nvm", so it's parked):
+- **Bot behaviour wishes (2026-10-25), implemented in PR #20** (the owner raised them again after first saying "nvm"):
   - *"if he doesnt find what he want he take liberity to send other studff, instead he could ask and be conversational"*: when nothing matches, ask a question instead of sending other material.
   - *"he can ask question while fethcing is happening … i asked about algo analysis i wanted only ds, he searched also for efficient algos … search for both while i reply and decide then what to abandon, but let the user know that the search is started"*: for an ambiguous course, say the search has started, ask which course, search both in parallel, and keep only what the student picks.
+  - *"even when not spcified "gimme every thing about ..." ask the bot to ouput a couple of the right answer and tell the user that he have more so it does not get overwhelming"*: show a couple of the right results (crops, never typed answers) and say more are ready.
 - **Merges:** PR #5 was explicitly approved with “Merge and deploy after CI passes.” The owner also approved the original full import; it remains gated on successful question-only test-file validation. New PR merges still need the owner's OK.
 
 ## 5. Judgment calls (made without asking)
@@ -313,7 +328,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
 0. **Blockers found 2026-10-24 (Claude Code):**
-   - **(g) Conversational bot (owner's wish, 2026-10-25, unclaimed):** clarify instead of substituting other material; ask a clarifying question while searching ambiguous courses in parallel, and say the search started. Touches `src/DriveAlt.Api/Chat/ChatService.cs` (prompt and tool loop) and `web/src/screens/Chat.tsx`, which needs a way to show a question while the search runs.
+   - **(g) Conversational bot:** done in **PR #20** (Claude Code, `claude/conversational-bot`), waiting for the owner's merge. After deploy, confirm with the owner's test query (section 3).
    - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
    - **(f) Caddyfile drift (2026-10-25):** the VPS Caddyfile has two things the Zarqa repo lacks: the Cloudflare global block (trusted proxies) and the `drivealt` site block. A Zarqa redeploy that rewrites the Caddyfile would drop both. DriveAlt would then fail on HTTPS, or the app would see Cloudflare's IP for every visitor.
    - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
@@ -344,6 +359,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
+| 8 | **PR #20:** owner merges (normal merge, deploys a migration); owner tries *"algorithm analysis questions"* | **owner**, Claude Code | `messages` has columns `more`, `options`; chips appear |
 
 **Test re-read is complete.** The owner can inspect its question boxes; no further click is needed for the completed re-read. **Pending approval:** merging this handoff follow-up, future PRs, and pruning build cache.
 
@@ -355,10 +371,11 @@ Run these. If the output differs, this page is stale: find out why and update it
 cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
 # expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# PRs #7 and #9 are merged. Open: #10 (Codex, import monitoring) and #11 (Claude Code, answers in crops; built on #10) until merged.
+# Open: #20 claude/conversational-bot until the owner merges it. Nothing else.
+# After #20 deploys: $D exec -T db psql -U drivealt -d drivealt -c "\d messages" lists columns more and options.
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
-#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now dfb1877738a032e943378cf3649351738836e6e9)
+#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (dfb1877… until PR #20 merges; then #20's merge commit)
 #   Docs-only PRs (#7, #9) are merged with [skip ci], so they don't build or deploy and the image stays put.
 #         {"ok":true}{"signedIn":true}
 #         5da0c724e36f4562

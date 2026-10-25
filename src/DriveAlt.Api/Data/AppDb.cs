@@ -84,7 +84,11 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             e.HasMany(x => x.Messages).WithOne().HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        b.Entity<Message>(e => e.HasIndex(x => new { x.ConversationId, x.CreatedAt }));
+        b.Entity<Message>(e =>
+        {
+            e.HasIndex(x => new { x.ConversationId, x.CreatedAt });
+            e.Property(x => x.Options).HasColumnType("jsonb");
+        });
 
         b.Entity<Bookmark>(e =>
         {

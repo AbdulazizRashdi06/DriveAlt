@@ -9,7 +9,9 @@ namespace DriveAlt.Api.Chat;
 public static class ChatEndpoints
 {
     public sealed record ConversationDto(Guid Id, string Title, DateTime UpdatedAt);
-    public sealed record SendBody(string Text);
+    /// <param name="Option">A chip clicked on the last clarifying question.</param>
+    /// <param name="More">"Show more" clicked on the last results.</param>
+    public sealed record SendBody(string Text, int? Option = null, bool More = false);
 
     public static void Map(WebApplication app)
     {
@@ -43,7 +45,7 @@ public static class ChatEndpoints
             {
                 conversation = new ConversationDto(c.Id, c.Title, c.UpdatedAt),
                 messages = messages.Select(m => new MessageDto(m.Id, m.Role, m.Text, m.Refused, m.CreatedAt,
-                    m.Results.Where(byRef.ContainsKey).Select(r => byRef[r]).ToList())),
+                    m.Results.Where(byRef.ContainsKey).Select(r => byRef[r]).ToList(), m.More.Length, ChatOption.Dtos(m.Options))),
             });
         });
 
@@ -54,7 +56,8 @@ public static class ChatEndpoints
             return n == 0 ? Results.NotFound() : Results.NoContent();
         });
 
-        // Streams Server-Sent Events: "status" while searching, then "message" with the bot reply.
+        // Streams Server-Sent Events: "status" while searching, then "message" with the bot reply, then for a clarifying
+        // question one "options" event per option search that finishes.
         g.MapPost("/{id:guid}/messages", async (Guid id, SendBody body, HttpContext http, AppDb db, ChatService chat, CancellationToken ct) =>
         {
             var uid = http.User.RequiredUserId();
@@ -73,8 +76,10 @@ public static class ChatEndpoints
             }
 
             await Send("status", new ChatStatus("Sniffing around…"));
-            var reply = await chat.SendAsync(convo, uid, body.Text, s => Send("status", s), ct);
-            await Send("message", new { conversation = new ConversationDto(convo.Id, convo.Title, convo.UpdatedAt), message = reply });
+            await chat.SendAsync(convo, uid, body.Text, body.Option, body.More, new ChatStream(
+                s => Send("status", s),
+                m => Send("message", new { conversation = new ConversationDto(convo.Id, convo.Title, convo.UpdatedAt), message = m }),
+                (messageId, options) => Send("options", new { messageId, options })), ct);
             await Send("done", new { });
         });
     }

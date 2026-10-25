@@ -344,6 +344,15 @@ namespace DriveAlt.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.PrimitiveCollection<string[]>("More")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("more");
+
+                    b.Property<string>("Options")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("options");
+
                     b.Property<bool>("Refused")
                         .HasColumnType("boolean")
                         .HasColumnName("refused");
