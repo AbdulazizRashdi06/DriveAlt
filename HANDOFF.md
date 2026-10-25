@@ -8,11 +8,11 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/handoff-reread`, from main `d73edeb` |
-| Updated | 2026-10-25 ~00:05 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/hold-sem2`, from main `406db5a` |
+| Updated | 2026-10-25 ~04:00 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**In one line:** the app is live (image `5c7641a`). Chat runs on DeepSeek, and Sol reads pages through the Codex gateway, which is **logged in again**. 457 pages are queued to be re-read so their crops include answers and typed exams get per-question boxes. **The ChatGPT plan's usage limit hit again at 2026-10-24 23:36 UTC**, so files are paused until it resets. **Semester 1 without ITS goes first; Semester 2 and ITS start at 2026-10-25 08:00 UTC.**
+**In one line:** the app is live (image `5c7641a`). **Scope is Semester 1 without ITS only:** Semester 2 and ITS jobs are **held**. 489 Semester 1 pages are left (435 of them re-reads, for crops with answers and per-question boxes), waiting for the ChatGPT plan's usage limit to reset (limited since 2026-10-24 23:36 UTC).
 
 ## 2. State of the world
 
@@ -38,7 +38,8 @@
 | #10 | merged `6b7a6fe` with `[skip ci]` (by Claude Code, owner's order) | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and monitoring notes. Docs only. |
 | #11 | merged `5c7641a`, **deployed 2026-10-24 19:17–19:21 UTC** | `claude/answers-visible-in-crops` (Claude Code) | Crops include answers; 1.5% box padding; `import-local`; keyword-only fallback on Gemini 429 or network error. |
 | #12 | merged `d73edeb` with `[skip ci]` | `claude/handoff-local-import` (Claude Code) | This page after the local import. Docs only. |
-| **#13** | **open** | `claude/handoff-reread` (Claude Code) | This page after the gateway fix and the re-read. Docs only; merge with `[skip ci]`. |
+| #13 | merged `406db5a` with `[skip ci]` | `claude/handoff-reread` (Claude Code) | Gateway fix, re-read queued, usage limit. Docs only. |
+| **#14** | **open** | `claude/hold-sem2` (Claude Code) | Records that Semester 2 and ITS are held. Docs only; merge with `[skip ci]`. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -114,8 +115,15 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **The re-read**, in one SQL transaction: **457 pages** (152 older Sol pages read before #11, whose boxes leave answers out, and 305 typed exam pages with one whole-page box) set to `extracted = false`. 81 `process` jobs inserted, 5 woken, 86 files `queued`. Pages edited in Inspect: 0, so none were affected.
 - **Then:** Sol made **478 successful calls** in 30 minutes (about 19 s each, all HTTP 200, 0 offline, 0 job errors). Then **`429 Codex usage limit reached` from 23:36 UTC**; 161 pauses by 00:00.
 - **At 00:00 UTC:** files `ready 120, reading 279, failed 1`; pages read 5,132, unread 4,497, of which 435 are re-reads not reached yet. Ready dropped from 176 because the re-read files are back in the queue.
-- **Queue order:** jobs run by `id` (`JobQueue.ClaimAsync`). The **88 Semester 1 jobs** (paused files, then re-reads) are due now and retry every 20 min. The **189 Semester 2 and ITS jobs** have `run_after` = 2026-10-25 08:00 UTC, so the next limit windows go to Semester 1. Undo with `update jobs set run_after = now() where state = 'queued'`.
+- **Queue order:** jobs run by `id` (`JobQueue.ClaimAsync`). Semester 1 jobs retry every 20 min. **Semester 2 and ITS are held** (see below); the 08:00 UTC start set earlier is replaced.
 - **Not verified yet:** whether re-read crops include answers. No re-read file had finished before the limit. Check page 6 of "midterm 1 (photos)" (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`) once its job, `461`, is `done`.
+
+**Semester 2 and ITS held, 2026-10-25 03:55 UTC** (Claude Code). The owner asked, unhappy: *"why are you processing sem 2 files?"*. The Codex agent's import had taken in the whole Drive, and its queue was carried over without trimming it to the owner's scope.
+- **What was set:** `run_after` = `2100-01-01` and `error` = `Held: owner wants Semester 1 without ITS only` on **190 queued jobs**: 177 Semester 2, 13 ITS, plus any file without a course.
+- **What wasn't touched:** files, pages and earlier results; no job was mid-run.
+- **Still queued:** 89 Semester 1 jobs without ITS.
+- **Undo:** only on the owner's request: `update jobs set run_after = now(), error = null where error like 'Held:%'`.
+- **Unread pages at 03:51 UTC:** Semester 1 without ITS 489; Semester 2 and ITS 4,008 (held).
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
 - The `drivealt.tryzarqa.com` block exists only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo.
@@ -187,6 +195,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **Repo public:** "make the repo public it is ok", so ghcr.io storage and pulls are free. The history was scanned first and no secrets were found.
 - **Builds:** "build in github", not on the VPS. The VPS already holds about 36 GB of build cache from the apps built there.
 - **Import ownership (2026-10-24):** the owner said *"no no override codex for now do whateer it takes to upload everything"*. **Claude Code now owns the import**, which overrides Codex's claim in PR #10. Codex: don't relaunch or requeue it.
+- **Scope (2026-10-25):** process **Semester 1 without ITS only**. *"why are you processing sem 2 files?"* came after Semester 2 jobs were found queued. **Do not run Semester 2 or ITS** unless the owner asks.
   - **Scope:** files with local results, i.e. Semester 1 PDFs without ITS.
   - **Everything else** (photos, Office files, Semester 2, ITS, and pages without local text) still waits for Sol, which needs the ChatGPT gateway logged in again.
 - **Answers: SHOWN yes, WRITTEN never.** On 2026-10-24 the owner said, with emphasis: *"answers can be shown just cant bew written by the ai ffs i told you million times"*. This **replaces** the earlier "question-only crops; find answers on the original sheet" reading from PR #5. That came from the earlier quote *"dont black the answers out … dont output them as text but leave them in paper"*, which meant: don't hide answers, and don't type them.
@@ -304,7 +313,7 @@ $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
 $D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
 $D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
-# expect at 2026-10-25 00:00 UTC: files ready 120, reading 279, failed 1; pages read 5,132, unread 4,497. Paused jobs (429) are expected until the plan resets.
+# expect (2026-10-25 03:51 UTC): files ready 120, reading 279, failed 1; Semester 1 without ITS has 489 unread pages; Semester 2 and ITS jobs held (run_after 2100-01-01).
 # The reading count only falls after the owner logs the gateway in (step 4a). Higher ready / lower reading = progress since.
 ```
 
