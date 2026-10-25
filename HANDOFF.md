@@ -8,11 +8,11 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/searchable-while-rereading` (PR #16), from main `8622d26` |
-| Updated | 2026-10-25, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/handoff-missing-files`, from main `2673a3d` (merge of #16) |
+| Updated | 2026-10-25 ~04:35 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**In one line:** the app is live (image `5c7641a`). **Scope is Semester 1 without ITS only:** Semester 2 and ITS jobs are **held**. 489 Semester 1 pages are left (435 of them re-reads, for crops with answers and per-question boxes), waiting for the ChatGPT plan's usage limit to reset (limited since 2026-10-24 23:36 UTC).
+**In one line:** the app is live (image `2673a3d`). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
 
 ## 2. State of the world
 
@@ -41,7 +41,8 @@
 | #13 | merged `406db5a` with `[skip ci]` | `claude/handoff-reread` (Claude Code) | Gateway fix, re-read queued, usage limit. Docs only. |
 | #14 | merged with `[skip ci]` | `claude/hold-sem2` (Claude Code) | Semester 2 and ITS held. Docs only. |
 | #15 | merged with `[skip ci]` | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only. |
-| **#16** | **open** | `claude/searchable-while-rereading` (Claude Code) | Files being re-read stay searchable; image fallbacks; the bot shows questions for question requests; `import-drive --from-local`. **Code, so a normal merge (deploys).** |
+| #16 | merged `2673a3d`, **deployed 2026-10-25 04:24–04:28 UTC** | `claude/searchable-while-rereading` (Claude Code) | Searchable while re-read; image fallbacks; questions for question requests; `import-drive --from-local`. |
+| **#17** | **open** | `claude/handoff-missing-files` (Claude Code) | This page after #16 and the missing-file import. Docs only; merge with `[skip ci]`. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -154,6 +155,20 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **Bot prompt:** for question requests, search past_paper, quiz and exercise and show question crops; never present slides as questions. Never claim material isn't in the drive; say it couldn't be found yet.
   - **Test:** a search while the file is `reading` still finds it (`ApiTests`).
 - **Queue (SQL):** Semester 1 exam files go first: 72 jobs with 399 unread pages are due now. Semester 1 slides and notes (15 jobs, 67 pages) were moved 4 h later.
+- **After deploying #16 (SQL check at 04:29 UTC):**
+
+  | Semester 1 type | Visible before | Visible now | Total |
+  |---|---|---|---|
+  | Past papers | 13 | **21** | 22 |
+  | Exercises | 26 | 57 | 62 |
+  | Quizzes | 6 | 8 | 11 |
+
+  The rest have never been read.
+- **Missing-file import (2026-10-25 ~04:30 UTC):** `import-drive --from-local /data/import-local --only "semester 1/" --skip "semester 1/ai/its"`, with the 38 originals uploaded to `/data/import-local/originals` (5.2 MB) and the log in `~/drivealt/import-missing.log`.
+  - **Imported, 3 new files:** "quiz 3 past papers (photos)" (27 photos), "Quiz 5 past papers (photos)" (`q51`–`q54`) and "acc notes 4,5,6,7".
+  - **Skipped as duplicates** (`Already have … (same content)`), already in the app under another Drive ID: Accounting "mid & final (photos)", "Animators act 1.", "ExoSQLanimators-sol", "SQL Quiz ANSWERS" and "cdmNursery-1".
+  - The 3 new files are queued for Sol.
+- **Not verified end to end:** a chat reply to a question request after #16. The agent can't sign in (sign-in codes go to the owner's email); the owner should retry *"any question regarding maps for data structures"*.
 - **38 Semester 1 files (ITS left out) never reached the app** (Drive manifest vs `files.source_ref`):
   - 27 photos in "quiz 3 past papers" plus 2 PDFs in "SQL Q & ANS": whole folders the Drive import never listed. **Hypothesis:** the 2 connection errors Codex logged during that import.
   - 7 files with no extension in their Drive names (`q51`–`q54` and `Photo f`/`Photo fro` are JPEGs; `acc notes 4,5,6,7` is an Office zip): skipped by `DriveImporter.cs`, which decides the type by extension.
@@ -350,7 +365,7 @@ $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
 $D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
 $D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
-# expect (2026-10-25 03:51 UTC): files ready 120, reading 279, failed 1; Semester 1 without ITS has 489 unread pages; Semester 2 and ITS jobs held (run_after 2100-01-01).
+# expect (2026-10-25 04:29 UTC): files ready 145, reading 253, queued 3, tagging 1, failed 1; Semester 1 without ITS: 381 unread pages plus 3 new files; Semester 2 and ITS jobs held.
 # The reading count only falls after the owner logs the gateway in (step 4a). Higher ready / lower reading = progress since.
 ```
 
