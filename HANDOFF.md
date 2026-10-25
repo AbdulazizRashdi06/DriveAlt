@@ -8,7 +8,7 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/pick-fix-and-owner-login` (**uncommitted**, the owner asked to hold commits until more changes are in), from main `a920112` (merge of #20) |
+| Branch / base | `claude/pick-fix-and-owner-login` (PR #21, open), from main `a920112` (merge of #20) |
 | Updated | 2026-10-25 ~11:30 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
@@ -45,6 +45,7 @@
 | #17 | merged with `[skip ci]` | `claude/handoff-missing-files` (Claude Code) | Handoff after #16. Docs only. |
 | #18 | merged `dfb1877`, **deployed**; the owner confirmed chat works | `claude/show-sent-message` (Claude Code) | Chat: the sent message shows at once in a new chat. |
 | #19 | merged `6e212e0` with `[skip ci]` | `claude/handoff-after-18` (Claude Code) | This page after #18. Docs only. |
+| **#21** | **open** | `claude/pick-fix-and-owner-login` (Claude Code) | Typed picks follow the course named; owner's fixed-code student login (`FIXED_CODES` secret); login subtitle removed. **Code: merge normally**, not `[skip ci]`. |
 | #20 | merged `a920112` by the owner, **deployed** | `claude/conversational-bot` (Claude Code) | Bot asks instead of substituting; clarifying question with options searched while the student answers; 3 results first, the rest behind "Show more". **Code + DB migration: merge normally (CI and deploy), not `[skip ci]`.** |
 
 **Other repos:**
@@ -220,7 +221,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-23, Codex:** resumed after the uploader re-read. SQL sampled at 18:55:40 UTC verified all seven pages extracted without errors and only question crops (29 total). Confirmed no importer was running and only the test file existed. Started the already-approved import once at 18:58:30 UTC, confirmed its detached process running, and set follow-up monitoring. Preflight found no other open handoff PR or importer. Draft PR #10 records this claim and progress.
 
 - **2026-10-24, Claude Code: took over the import from Codex** at the owner's order. Added to #11:
-- **2026-10-25 ~07:40 UTC, Claude Code, uncommitted on `claude/pick-fix-and-owner-login`:**
+- **2026-10-25 ~07:40 UTC, Claude Code, PR #21 (`claude/pick-fix-and-owner-login`, open, needs the owner's merge):**
 - **Bug seen live by the owner:** the bot asked "Which course is that Quiz 3 from?" with Database Systems / Probability chips; the owner typed "data structures"; the model called `reply` with option 0 and a line saying "Data Structures Quiz 3", so Database Systems results were shown under a Data Structures line. **Fix:** a typed pick that names a course not in the chosen option searches that course with the same request (`ChatService.TypedPick`), and a picked option's line is always the app's own ("<label> it is! N results…"), never the model's. Prompt rule 7: if the student names something that isn't an option, search it. Unit tests: `GuardrailTests.A_typed_pick_follows_the_course_the_student_names`.
 - **Owner's student account:** `Auth:FixedCodes` (`Infrastructure/Options.cs`) holds `uniId:code` pairs that sign in with a fixed code instead of an emailed one; the request still creates a code row, so the 45 s cooldown, 6 per hour and 5 tries per code apply; nothing is emailed. The deploy writes them from the GitHub **secret `FIXED_CODES`** (set 2026-10-25 by Claude Code on the owner's request; holds the owner's student-view uni ID and code; value not written here). The code form now accepts 4+ digits (`Login.tsx`). API test `A_fixed_code_account_signs_in_without_an_email` (CI only). **Takes effect only after this branch is merged and deployed.**
 - **Login page:** the subtitle under "Ask for any page. Get the real thing." removed, with its CSS (owner's request).
@@ -333,7 +334,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
 0. **Blockers found 2026-10-24 (Claude Code):**
-   - **(g) Conversational bot:** deployed (PR #20). The typed-pick bug the owner found is fixed on `claude/pick-fix-and-owner-login`, uncommitted (Claude Code).
+   - **(g) Conversational bot:** deployed (PR #20). The typed-pick bug the owner found is fixed in PR #21 (Claude Code), waiting for the owner's merge.
    - **(h) Sign-in or not (owner, 2026-10-25):** the owner is unsure about asking people to log in. Undecided; see section 3.
    - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
    - **(f) Caddyfile drift (2026-10-25):** the VPS Caddyfile has two things the Zarqa repo lacks: the Cloudflare global block (trusted proxies) and the `drivealt` site block. A Zarqa redeploy that rewrites the Caddyfile would drop both. DriveAlt would then fail on HTTPS, or the app would see Cloudflare's IP for every visitor.
@@ -366,7 +367,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
 | 8 | **Done:** PR #20 merged and deployed by the owner | owner | `messages` has columns `more`, `options` |
-| 9 | `claude/pick-fix-and-owner-login`: commit and open a PR when the owner says the batch of changes is complete; merge needs the owner's OK | Claude Code | the owner's student-view account signs in; a typed course name picks that course |
+| 9 | **PR #21:** owner merges (normal merge, deploys) | Claude Code | the owner's student-view account signs in; a typed course name picks that course |
 
 **Test re-read is complete.** The owner can inspect its question boxes; no further click is needed for the completed re-read. **Pending approval:** merging this handoff follow-up, future PRs, and pruning build cache.
 
@@ -378,7 +379,7 @@ Run these. If the output differs, this page is stale: find out why and update it
 cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
 # expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# Open: none (claude/pick-fix-and-owner-login is local and uncommitted until the owner says to commit).
+# Open: #21 claude/pick-fix-and-owner-login until the owner merges it. Nothing else.
 # After #20 deploys: $D exec -T db psql -U drivealt -d drivealt -c "\d messages" lists columns more and options.
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
