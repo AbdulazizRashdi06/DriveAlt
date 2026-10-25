@@ -41,7 +41,7 @@
 | #13 | merged `406db5a` with `[skip ci]` | `claude/handoff-reread` (Claude Code) | Gateway fix, re-read queued, usage limit. Docs only. |
 | #14 | merged with `[skip ci]` | `claude/hold-sem2` (Claude Code) | Semester 2 and ITS held. Docs only. |
 | #15 | merged with `[skip ci]` | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only. |
-| **#16** | **open** | `claude/searchable-while-rereading` (Claude Code) | Files being re-read stay searchable; image fallbacks; the bot shows questions for question requests. **Code, so a normal merge (deploys).** |
+| **#16** | **open** | `claude/searchable-while-rereading` (Claude Code) | Files being re-read stay searchable; image fallbacks; the bot shows questions for question requests; `import-drive --from-local`. **Code, so a normal merge (deploys).** |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -154,6 +154,11 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **Bot prompt:** for question requests, search past_paper, quiz and exercise and show question crops; never present slides as questions. Never claim material isn't in the drive; say it couldn't be found yet.
   - **Test:** a search while the file is `reading` still finds it (`ApiTests`).
 - **Queue (SQL):** Semester 1 exam files go first: 72 jobs with 399 unread pages are due now. Semester 1 slides and notes (15 jobs, 67 pages) were moved 4 h later.
+- **38 Semester 1 files (ITS left out) never reached the app** (Drive manifest vs `files.source_ref`):
+  - 27 photos in "quiz 3 past papers" plus 2 PDFs in "SQL Q & ANS": whole folders the Drive import never listed. **Hypothesis:** the 2 connection errors Codex logged during that import.
+  - 7 files with no extension in their Drive names (`q51`–`q54` and `Photo f`/`Photo fro` are JPEGs; `acc notes 4,5,6,7` is an Office zip): skipped by `DriveImporter.cs`, which decides the type by extension.
+  - 2 single PDFs in large folders.
+- **Fix (also PR #16):** `import-drive --from-local <dir> [--skip <prefix>]` plans from DriveAlt-local's `manifest.json` and `originals/`, taking only Drive IDs not in the app yet. Names without an extension get one from the content (`DriveImporter.SniffExtension`: JPEG, PNG, PDF, HEIC, docx and pptx; `SniffTests`). Files are copied instead of downloaded; grouping, course mapping and the duplicate check are unchanged.
 - **Unread pages at 03:51 UTC:** Semester 1 without ITS 489; Semester 2 and ITS 4,008 (held).
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):

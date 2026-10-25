@@ -16,7 +16,8 @@ namespace DriveAlt.Api.Import;
 /// year / subfolder, groups loose photos in a folder into one multi-page file, skips videos and archives, and queues
 /// everything through the normal pipeline. Idempotent: files already imported (by Drive id or content hash) are skipped.
 ///
-/// Usage: dotnet DriveAlt.Api.dll import-drive [folderId] [--only "semester 1/ALL/data structures"] [--limit N] [--dry-run] [--uploader 24-0161]
+/// Usage: dotnet DriveAlt.Api.dll import-drive [folderId] [--only "semester 1/ALL/data structures"] [--skip "semester 1/AI/ITS"]... [--limit N] [--dry-run] [--uploader 24-0161]
+///        [--from-local /data/import-local]   (plan from a local copy: manifest.json + originals/, only Drive files the app doesn't have)
 /// </summary>
 public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage storage, IOptions<GoogleOptions> google,
     IOptions<AuthOptions> auth, ILogger<DriveImporter> log)
@@ -26,18 +27,22 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
     private static readonly string[] GroupFolders = ["ai", "all", "cs and cys", "cs & cys", "cys", "cs"];
     private static readonly string[] SkipExtensions = [".mp4", ".mov", ".m4a", ".mp3", ".zip", ".rar", ".7z", ".goodnotes", ".pb", ".exe"];
 
-    public sealed record DriveItem(string Id, string Name, string Kind, string? GoogleType);
+    /// <param name="LocalPath">Set when the file comes from a local copy of the Drive (--from-local) instead of a download.</param>
+    public sealed record DriveItem(string Id, string Name, string Kind, string? GoogleType, string? LocalPath = null);
 
     private sealed record Planned(List<(DriveItem Item, string Path)> Items, string[] Segments, string Title);
 
     public async Task<int> RunAsync(string[] args, CancellationToken ct)
     {
-        var valued = new[] { "--only", "--limit", "--uploader" };
+        var valued = new[] { "--only", "--limit", "--uploader", "--from-local", "--skip" };
         var folderId = args.Where((a, i) => !a.StartsWith("--") && (i == 0 || !valued.Contains(args[i - 1]))).FirstOrDefault() ?? Year2FolderId;
         var only = Arg(args, "--only")?.ToLowerInvariant().Trim('/');
         var limit = int.TryParse(Arg(args, "--limit"), out var l) ? l : int.MaxValue;
         var dryRun = args.Contains("--dry-run");
         var uploaderId = Arg(args, "--uploader") ?? auth.Value.Uploaders.FirstOrDefault() ?? "00-0000";
+        var fromLocal = Arg(args, "--from-local");
+        var skip = args.Select((a, i) => (a, i)).Where(x => x.a == "--skip" && x.i + 1 < args.Length)
+            .Select(x => args[x.i + 1].ToLowerInvariant().Trim('/')).ToList();
 
         var uploader = await db.Users.FirstOrDefaultAsync(u => u.UniId == uploaderId, ct);
         if (uploader is null)
@@ -48,10 +53,21 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
         }
         var courses = await db.Courses.AsNoTracking().ToListAsync(ct);
 
-        log.LogInformation("Listing Drive folder {Folder}…", folderId);
         var plan = new List<Planned>();
-        await WalkAsync(folderId, [], plan, only, ct);
+        if (fromLocal is not null)
+        {
+            log.LogInformation("Planning from the local copy in {Dir} (only Drive files the app doesn't have yet)…", fromLocal);
+            var have = (await db.Files.Where(f => f.SourceRef != null && f.SourceRef.StartsWith("gdrive:")).Select(f => f.SourceRef!).ToListAsync(ct))
+                .SelectMany(r => r[7..].Split('+')).ToHashSet();
+            plan = LocalPlan(fromLocal, have);
+        }
+        else
+        {
+            log.LogInformation("Listing Drive folder {Folder}…", folderId);
+            await WalkAsync(folderId, [], plan, only, ct);
+        }
         if (only is not null) plan = plan.Where(p => string.Join('/', p.Segments).ToLowerInvariant().StartsWith(only)).ToList();
+        if (skip.Count > 0) plan = plan.Where(p => !skip.Any(string.Join('/', p.Segments).ToLowerInvariant().StartsWith)).ToList();
 
         int queued = 0, skipped = 0, failed = 0;
         foreach (var p in plan.Take(limit))
@@ -169,6 +185,67 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
             plan.Add(new Planned(photos, segments, segments.Length > 0 ? $"{segments[^1]} (photos)" : "Photos"));
     }
 
+    // ---------- local copy (--from-local) ----------
+
+    /// <summary>
+    /// Plans files from a local copy of the Drive (DriveAlt-local: manifest.json + originals/), for Drive files the app is missing,
+    /// e.g. folders whose listing failed or names without an extension. Grouping follows WalkAsync: loose photos in one folder
+    /// become one file.
+    /// </summary>
+    private List<Planned> LocalPlan(string dir, HashSet<string> have)
+    {
+        var plan = new List<Planned>();
+        var files = JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "manifest.json")))!["files"]!.AsArray()
+            .Select(f => (Id: f!["id"]!.GetValue<string>(), Path: f["path"]!.GetValue<string>(), Status: f["status"]?.GetValue<string>()))
+            .Where(f => f.Status == "complete" && !have.Contains(f.Id));
+        foreach (var folder in files.GroupBy(f => f.Path.Contains('/') ? f.Path[..f.Path.LastIndexOf('/')] : ""))
+        {
+            var segments = folder.Key.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var photos = new List<(DriveItem, string)>();
+            foreach (var f in folder.OrderBy(f => f.Path, StringComparer.Ordinal))
+            {
+                var local = Path.Combine([dir, "originals", .. f.Path.Split('/')]);
+                if (!File.Exists(local)) continue;
+                var name = f.Path[(f.Path.LastIndexOf('/') + 1)..];
+                if (!DocumentConverter.IsSupported(name) && SniffExtension(local) is { } ext) name += ext;
+                if (SkipExtensions.Contains(Path.GetExtension(name).ToLowerInvariant()) || !DocumentConverter.IsSupported(name))
+                {
+                    log.LogInformation("Skipping {Path}", f.Path);
+                    continue;
+                }
+                var item = new DriveItem(f.Id, name, "file", null, local);
+                if (DocumentConverter.IsImage(name)) photos.Add((item, name));
+                else plan.Add(new Planned([(item, name)], segments, Heuristics.TitleFromName(name)));
+            }
+            if (photos.Count == 1) plan.Add(new Planned(photos, segments, Heuristics.TitleFromName(photos[0].Item2)));
+            else if (photos.Count > 1) plan.Add(new Planned(photos, segments, segments.Length > 0 ? $"{segments[^1]} (photos)" : "Photos"));
+        }
+        return plan;
+    }
+
+    /// <summary>The extension a file's content implies, for Drive names without one (e.g. "q51" is a JPEG).</summary>
+    internal static string? SniffExtension(string path)
+    {
+        var head = new byte[12];
+        using (var fs = File.OpenRead(path)) if (fs.Read(head, 0, head.Length) < 4) return null;
+        if (head[0] == 0xFF && head[1] == 0xD8 && head[2] == 0xFF) return ".jpg";
+        if (head[0] == 0x89 && head[1] == (byte)'P' && head[2] == (byte)'N' && head[3] == (byte)'G') return ".png";
+        if (head[0] == (byte)'%' && head[1] == (byte)'P' && head[2] == (byte)'D' && head[3] == (byte)'F') return ".pdf";
+        var brand = System.Text.Encoding.ASCII.GetString(head, 4, 8);
+        if (brand is "ftypheic" or "ftypheix" or "ftypmif1") return ".heic";
+        if (head[0] == (byte)'P' && head[1] == (byte)'K')
+        {
+            try
+            {
+                using var zip = System.IO.Compression.ZipFile.OpenRead(path);
+                if (zip.Entries.Any(e => e.FullName.StartsWith("word/"))) return ".docx";
+                if (zip.Entries.Any(e => e.FullName.StartsWith("ppt/"))) return ".pptx";
+            }
+            catch (InvalidDataException) { }
+        }
+        return null;
+    }
+
     // ---------- listing ----------
 
     private async Task<List<DriveItem>> ListAsync(string folderId, CancellationToken ct) =>
@@ -263,6 +340,9 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
                 i++;
                 var part = p.Items.Count > 1 ? $"{i:D3}_{Storage.SafeName(name)}" : Storage.SafeName(name);
                 var path = Path.Combine(dir, part);
+                if (item.LocalPath is not null)
+                    File.Copy(item.LocalPath, path, overwrite: true);
+                else
                 using (var res = await http.GetAsync(DownloadUrl(item), HttpCompletionOption.ResponseHeadersRead, ct))
                 {
                     res.EnsureSuccessStatusCode();
