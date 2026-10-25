@@ -73,6 +73,9 @@ export function Chat() {
   const qc = useQueryClient()
   const { toast } = useApp()
   const [pending, setPending] = useState<string | null>(null)
+  // The message being sent, shown until the server's copy is in the list. Opening a new chat refetches it, and that
+  // refetch can land before the server has saved the message, which used to wipe the optimistic copy until the reply.
+  const [sent, setSent] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -89,6 +92,7 @@ export function Chat() {
 
   const send = async (text: string) => {
     let cid = id
+    setSent(text)
     try {
       if (!cid) {
         const c = await api.post<Conversation>('/api/chats')
@@ -111,12 +115,16 @@ export function Chat() {
       toast((e as Error).message)
     } finally {
       setPending(null)
+      if (cid) await qc.invalidateQueries({ queryKey: ['chat', cid] })
+      setSent(null)
       void qc.invalidateQueries({ queryKey: ['chats'] })
     }
   }
 
   const title = convo.data?.conversation.title ?? 'New chat'
-  const empty = !id || (messages.length === 0 && !pending && !convo.isLoading)
+  const empty = !id || (messages.length === 0 && !pending && !sent && !convo.isLoading)
+  const lastUser = [...messages].reverse().find(m => m.role === 'user')
+  const showSent = !!sent && lastUser?.text !== sent
 
   return (
     <div className="body">
@@ -166,7 +174,7 @@ export function Chat() {
               <h1 className="disp ellipsis" style={{ margin: 0, fontSize: 34, lineHeight: 1.05 }} title={title}>{title}</h1>
             </div>
             <div className="thread" aria-live="polite">
-              {convo.isLoading && <div className="skeleton" style={{ height: 120 }} />}
+              {convo.isLoading && !sent && <div className="skeleton" style={{ height: 120 }} />}
               {messages.map(m => m.role === 'user' ? (
                 <div key={m.id} className="bubble-user enter">{m.text}</div>
               ) : (
@@ -179,6 +187,7 @@ export function Chat() {
                   )}
                 </BotSays>
               ))}
+              {showSent && <div className="bubble-user enter">{sent}</div>}
               {pending && (
                 <BotSays>
                   <div className="bubble-bot" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
