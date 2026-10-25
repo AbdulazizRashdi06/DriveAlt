@@ -8,11 +8,11 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/show-sent-message` (PR #18), from main |
-| Updated | 2026-10-25 ~04:35 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/handoff-after-18` (PR #19), from main `dfb1877` (merge of #18) |
+| Updated | 2026-10-25, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**In one line:** the app is live (image `2673a3d`). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
+**In one line:** the app is live (image `dfb1877`). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
 
 ## 2. State of the world
 
@@ -43,7 +43,8 @@
 | #15 | merged with `[skip ci]` | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only. |
 | #16 | merged `2673a3d`, **deployed 2026-10-25 04:24–04:28 UTC** | `claude/searchable-while-rereading` (Claude Code) | Searchable while re-read; image fallbacks; questions for question requests; `import-drive --from-local`. |
 | #17 | merged with `[skip ci]` | `claude/handoff-missing-files` (Claude Code) | Handoff after #16. Docs only. |
-| **#18** | **open** | `claude/show-sent-message` (Claude Code) | Chat: the sent message shows at once in a new chat. Code, so a normal merge. |
+| #18 | merged `dfb1877`, **deployed**; the owner confirmed chat works | `claude/show-sent-message` (Claude Code) | Chat: the sent message shows at once in a new chat. |
+| **#19** | **open** | `claude/handoff-after-18` (Claude Code) | This page after #18. Docs only; merge with `[skip ci]`. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -171,6 +172,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - The 3 new files are queued for Sol.
 - **Not verified end to end:** a chat reply to a question request after #16. The agent can't sign in (sign-in codes go to the owner's email); the owner should retry *"any question regarding maps for data structures"*.
 - **Chat bug (owner, 2026-10-25):** *"when i send a message its hide up until he reply"*. In a new chat, `web/src/screens/Chat.tsx` creates the chat, navigates, and adds the message optimistically. Navigating refetches `['chat', id]`, which can come back before the server has saved the message and replaces the list. PR #18 keeps the text in `sent` state and shows it until the server's copy is in the list, then refetches the chat after the reply. Checked with `tsc`, the 8 vitest tests and the build; **not checked in a browser** (the agent can't sign in).
+  - **After #18 deployed:** the owner first wrote "now i can even start a chat", then *"nvm everything is working"*. In between, Claude Code ran the deployed frontend (`npm run dev`) against a stand-in API (a temporary node script in its scratchpad, not in the repo; it saves the message after 300 ms and replies after 3 s) in the in-app browser. A new chat, a second message, and "New chat" from an open chat all showed the message at once and the reply about 3 s later.
 - **38 Semester 1 files (ITS left out) never reached the app** (Drive manifest vs `files.source_ref`):
   - 27 photos in "quiz 3 past papers" plus 2 PDFs in "SQL Q & ANS": whole folders the Drive import never listed. **Hypothesis:** the 2 connection errors Codex logged during that import.
   - 7 files with no extension in their Drive names (`q51`–`q54` and `Photo f`/`Photo fro` are JPEGs; `acc notes 4,5,6,7` is an Office zip): skipped by `DriveImporter.cs`, which decides the type by extension.
@@ -262,6 +264,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **Codex on the ChatGPT plan:** the owner said "chat gpt cost nothing", and added "zarqa isnt live", so sharing Zarqa's gateway is fine.
   - **Final choice: `gpt-6.1-sol`.** The owner said the first test harness was bad; it was rerun fairly. Then: "use sol then let me know if limits had limited".
 - **Owner's standing request:** report whether the ChatGPT plan's usage limits slowed the import, and by how much.
+- **Bot behaviour wishes (2026-10-25), NOT implemented yet** (the owner then said "nvm", so it's parked):
+  - *"if he doesnt find what he want he take liberity to send other studff, instead he could ask and be conversational"*: when nothing matches, ask a question instead of sending other material.
+  - *"he can ask question while fethcing is happening … i asked about algo analysis i wanted only ds, he searched also for efficient algos … search for both while i reply and decide then what to abandon, but let the user know that the search is started"*: for an ambiguous course, say the search has started, ask which course, search both in parallel, and keep only what the student picks.
 - **Merges:** PR #5 was explicitly approved with “Merge and deploy after CI passes.” The owner also approved the original full import; it remains gated on successful question-only test-file validation. New PR merges still need the owner's OK.
 
 ## 5. Judgment calls (made without asking)
@@ -308,6 +313,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
 0. **Blockers found 2026-10-24 (Claude Code):**
+   - **(g) Conversational bot (owner's wish, 2026-10-25, unclaimed):** clarify instead of substituting other material; ask a clarifying question while searching ambiguous courses in parallel, and say the search started. Touches `src/DriveAlt.Api/Chat/ChatService.cs` (prompt and tool loop) and `web/src/screens/Chat.tsx`, which needs a way to show a question while the search runs.
    - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
    - **(f) Caddyfile drift (2026-10-25):** the VPS Caddyfile has two things the Zarqa repo lacks: the Cloudflare global block (trusted proxies) and the `drivealt` site block. A Zarqa redeploy that rewrites the Caddyfile would drop both. DriveAlt would then fail on HTTPS, or the app would see Cloudflare's IP for every visitor.
    - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
@@ -352,7 +358,7 @@ gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName 
 # PRs #7 and #9 are merged. Open: #10 (Codex, import monitoring) and #11 (Claude Code, answers in crops; built on #10) until merged.
 ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
 # expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
-#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now 5c7641a2ce4ba4ff2a53d3e294c90b0f623118e3)
+#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (now dfb1877738a032e943378cf3649351738836e6e9)
 #   Docs-only PRs (#7, #9) are merged with [skip ci], so they don't build or deploy and the image stays put.
 #         {"ok":true}{"signedIn":true}
 #         5da0c724e36f4562
