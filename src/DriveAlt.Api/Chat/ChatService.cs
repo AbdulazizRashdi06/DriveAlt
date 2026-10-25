@@ -133,13 +133,17 @@ public sealed partial class ChatService(
             3. Commentary is at most 2 short sentences, playful and friendly. No lists, no markdown, no formulas, no code.
             4. Always call search_material before showing results, and only use refs it returned in this conversation.
                For questions/past papers/quizzes prefer question crops (r: refs); for slides prefer slide pages (p: refs).
+               When the student asks for questions, exercises, past papers or quizzes ("any question on maps"), search with
+               material_type past_paper, then quiz and exercise, and show only question crops or exam pages. Never present slides
+               as questions; if no questions match, say so and offer the lecture slides instead of showing them unasked.
                Show up to {{MaxResults}} results, best first. Use several searches with different words if the first one is thin.
             5. Work out course, material type, year and labels from the message yourself (the student has no filters).
                Only ask a short clarifying question (reply with no refs) when you truly cannot tell which course they mean, or when the
                same course has that material for several years and they asked for one specific year ("Quiz 3 from last year" is
                resolvable: today is {{today:yyyy-MM-dd}}, so last year is {{today.Year - 1}}). Don't ask about year or semester when the
                course alone is enough.
-            6. If nothing matches, say so playfully and suggest other words or the Browse tab.
+            6. If nothing matches, say so playfully and suggest other words or the Browse tab. Never claim something doesn't exist
+               in the drive: say you couldn't find it yet (some files are still being processed).
 
             Courses (slug: name, semester, aliases):
             {{string.Join("\n", courses.Select(c => $"- {c.Slug}: {c.Name}, semester {c.Semester}{(c.Group.Length > 0 ? $" ({c.Group})" : "")}, aka {string.Join(", ", c.Aliases)}"))}}
@@ -402,7 +406,7 @@ public sealed partial class ChatService(
 
     private async Task<JsonObject> ToolListCoursesAsync(IReadOnlyList<Course> courses, CancellationToken ct)
     {
-        var stats = await db.Files.AsNoTracking().Where(f => f.Status == FileStatuses.Ready)
+        var stats = await db.Files.AsNoTracking().Where(f => (f.Status == FileStatuses.Ready || (FileStatuses.Visible.Contains(f.Status) && f.Pages.Any(p => p.Text != "" || p.Regions.Any()))))
             .GroupBy(f => new { f.CourseId, f.MaterialType, f.AcademicYear })
             .Select(g => new { g.Key.CourseId, g.Key.MaterialType, g.Key.AcademicYear, Count = g.Count() })
             .ToListAsync(ct);

@@ -54,6 +54,12 @@ public static class FileStatuses
 
     public static bool InProgress(string s) => s is Queued or Splitting or Reading or Tagging or Cropping;
 
+    /// <summary>
+    /// Statuses students can find. A file being (re)read keeps its earlier pages and question boxes searchable until the new
+    /// ones replace them; pages and files without content never match anyway. Unconfirmed uploads, splitting and failed files stay hidden.
+    /// </summary>
+    public static readonly string[] Visible = [Ready, Queued, Reading, Tagging, Cropping];
+
     /// <summary>1-based step for the 5-segment pipeline bar in the UI.</summary>
     public static int Step(string s) => s switch
     {

@@ -27,7 +27,7 @@ public static class FileEndpoints
 
     public static FileDto ToDto(DocFile f)
     {
-        var thumb = f.Status == FileStatuses.Ready && f.PageCount > 0
+        var thumb = FileStatuses.Visible.Contains(f.Status) && f.PageCount > 0
             ? $"/api/media/files/{f.Id}/thumb?v={f.UpdatedAt.Ticks:x}"
             : null;
         return new FileDto(f.Id, f.Title, f.OriginalName, f.SourceKind, f.SizeBytes, f.PageCount, f.Status, FileStatuses.Step(f.Status),
@@ -160,7 +160,7 @@ public static class FileEndpoints
             var pages = await db.Pages.AsNoTracking().Where(p => p.FileId == id).OrderBy(p => p.Number)
                 .Select(p => new { p.Id, p.Number, p.Kind, p.Tags, p.Width, p.Height, p.EditedAt, Questions = p.Regions.Count(r => r.Label == RegionLabels.Question) })
                 .ToListAsync(ct);
-            var ready = f.Status == FileStatuses.Ready;
+            var ready = FileStatuses.Visible.Contains(f.Status) && pages.Count > 0;
             return Results.Ok(new
             {
                 file = ToDto(f),
@@ -208,22 +208,23 @@ public static class FileEndpoints
         g.MapGet("/media/thumbs/{pageId:guid}", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var p = await db.Pages.AsNoTracking().Where(x => x.Id == pageId).Select(x => new { x.FileId, x.Number }).FirstOrDefaultAsync(ct);
-            return p is null ? Results.NotFound() : ServeImage(storage.Thumb(p.FileId, p.Number));
+            return p is null ? Results.NotFound() : ServeImage(storage.Thumb(p.FileId, p.Number), storage.PageImage(p.FileId, p.Number));
         });
 
-        g.MapGet("/media/files/{fileId:guid}/thumb", (Guid fileId, Storage storage) => ServeImage(storage.Thumb(fileId, 1)));
+        g.MapGet("/media/files/{fileId:guid}/thumb", (Guid fileId, Storage storage) => ServeImage(storage.Thumb(fileId, 1), storage.PageImage(fileId, 1)));
 
         g.MapGet("/media/crops/{regionId:guid}", async (Guid regionId, bool? download, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var r = await db.Regions.AsNoTracking().Where(x => x.Id == regionId && (x.Label == RegionLabels.Question || x.Label == RegionLabels.Answer))
-                .Select(x => new { x.QuestionNumber, x.Label, x.Page!.Number, x.Page.File!.Title }).FirstOrDefaultAsync(ct);
+                .Select(x => new { x.QuestionNumber, x.Label, x.Page!.Number, x.Page.FileId, x.Page.File!.Title }).FirstOrDefaultAsync(ct);
             if (r is null) return Results.NotFound();
             var path = storage.Crop(regionId);
             if (download == true)
                 return File.Exists(path)
                     ? Results.File(path, "image/jpeg", Storage.SafeName($"{r.Title} p{r.Number}{(r.QuestionNumber is null ? "" : " Q" + r.QuestionNumber)}{(r.Label == RegionLabels.Answer ? " answer" : "")}.jpg"))
                     : Results.NotFound();
-            return ServeImage(path);
+            // A box from a re-read that isn't cropped yet: show its whole page meanwhile.
+            return ServeImage(path, storage.PageImage(r.FileId, r.Number));
         });
 
         // Same render, kept as its own route for the uploader comparison view.
@@ -234,8 +235,9 @@ public static class FileEndpoints
         });
     }
 
-    private static IResult ServeImage(string path)
+    private static IResult ServeImage(string path, string? fallback = null)
     {
+        if (!File.Exists(path) && fallback is not null) path = fallback;
         if (!File.Exists(path)) return Results.NotFound();
         return Results.File(path, "image/jpeg", enableRangeProcessing: false,
             lastModified: File.GetLastWriteTimeUtc(path));
