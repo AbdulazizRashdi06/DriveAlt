@@ -8,7 +8,7 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/handoff-missing-files`, from main `2673a3d` (merge of #16) |
+| Branch / base | `claude/show-sent-message` (PR #18), from main |
 | Updated | 2026-10-25 ~04:35 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
@@ -42,7 +42,8 @@
 | #14 | merged with `[skip ci]` | `claude/hold-sem2` (Claude Code) | Semester 2 and ITS held. Docs only. |
 | #15 | merged with `[skip ci]` | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only. |
 | #16 | merged `2673a3d`, **deployed 2026-10-25 04:24–04:28 UTC** | `claude/searchable-while-rereading` (Claude Code) | Searchable while re-read; image fallbacks; questions for question requests; `import-drive --from-local`. |
-| **#17** | **open** | `claude/handoff-missing-files` (Claude Code) | This page after #16 and the missing-file import. Docs only; merge with `[skip ci]`. |
+| #17 | merged with `[skip ci]` | `claude/handoff-missing-files` (Claude Code) | Handoff after #16. Docs only. |
+| **#18** | **open** | `claude/show-sent-message` (Claude Code) | Chat: the sent message shows at once in a new chat. Code, so a normal merge. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -169,6 +170,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **Skipped as duplicates** (`Already have … (same content)`), already in the app under another Drive ID: Accounting "mid & final (photos)", "Animators act 1.", "ExoSQLanimators-sol", "SQL Quiz ANSWERS" and "cdmNursery-1".
   - The 3 new files are queued for Sol.
 - **Not verified end to end:** a chat reply to a question request after #16. The agent can't sign in (sign-in codes go to the owner's email); the owner should retry *"any question regarding maps for data structures"*.
+- **Chat bug (owner, 2026-10-25):** *"when i send a message its hide up until he reply"*. In a new chat, `web/src/screens/Chat.tsx` creates the chat, navigates, and adds the message optimistically. Navigating refetches `['chat', id]`, which can come back before the server has saved the message and replaces the list. PR #18 keeps the text in `sent` state and shows it until the server's copy is in the list, then refetches the chat after the reply. Checked with `tsc`, the 8 vitest tests and the build; **not checked in a browser** (the agent can't sign in).
 - **38 Semester 1 files (ITS left out) never reached the app** (Drive manifest vs `files.source_ref`):
   - 27 photos in "quiz 3 past papers" plus 2 PDFs in "SQL Q & ANS": whole folders the Drive import never listed. **Hypothesis:** the 2 connection errors Codex logged during that import.
   - 7 files with no extension in their Drive names (`q51`–`q54` and `Photo f`/`Photo fro` are JPEGs; `acc notes 4,5,6,7` is an Office zip): skipped by `DriveImporter.cs`, which decides the type by extension.
