@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/hold-sem2`, from main `406db5a` |
-| Updated | 2026-10-25 ~04:00 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/cloudflare-proxy`, from main `7e1f053` |
+| Updated | 2026-10-25 ~04:45 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
 **In one line:** the app is live (image `5c7641a`). **Scope is Semester 1 without ITS only:** Semester 2 and ITS jobs are **held**. 489 Semester 1 pages are left (435 of them re-reads, for crops with answers and per-question boxes), waiting for the ChatGPT plan's usage limit to reset (limited since 2026-10-24 23:36 UTC).
@@ -39,7 +39,8 @@
 | #11 | merged `5c7641a`, **deployed 2026-10-24 19:17–19:21 UTC** | `claude/answers-visible-in-crops` (Claude Code) | Crops include answers; 1.5% box padding; `import-local`; keyword-only fallback on Gemini 429 or network error. |
 | #12 | merged `d73edeb` with `[skip ci]` | `claude/handoff-local-import` (Claude Code) | This page after the local import. Docs only. |
 | #13 | merged `406db5a` with `[skip ci]` | `claude/handoff-reread` (Claude Code) | Gateway fix, re-read queued, usage limit. Docs only. |
-| **#14** | **open** | `claude/hold-sem2` (Claude Code) | Records that Semester 2 and ITS are held. Docs only; merge with `[skip ci]`. |
+| #14 | merged with `[skip ci]` | `claude/hold-sem2` (Claude Code) | Semester 2 and ITS held. Docs only. |
+| **#15** | **open** | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only; merge with `[skip ci]`. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -123,6 +124,23 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **What wasn't touched:** files, pages and earlier results; no job was mid-run.
 - **Still queued:** 89 Semester 1 jobs without ITS.
 - **Undo:** only on the owner's request: `update jobs set run_after = now(), error = null where error like 'Held:%'`.
+
+**DriveAlt behind the Cloudflare proxy, 2026-10-25 ~04:40 UTC** (Claude Code; the owner made the Cloudflare switches):
+- **Why:** pages and photos loaded slowly. The images are small (photo page average 78 KB, PDF page 254 KB), but the owner's PC got only **17–58 KB/s** from the server, with a 320 ms ping, while the same PC got 2.6 MB/s from cdnjs, and the server served itself at 7.3 MB/s.
+- **Cloudflare** (owner): SSL/TLS mode **Full (strict)**; DNS record `drivealt` set to **Proxied**. **Only `drivealt` is proxied.** `tryzarqa.com`, `www` and `schedule` stay DNS only and still resolve to `173.249.40.122`.
+- **Caddy** (`/opt/zarqa/deploy/Caddyfile`, backup `Caddyfile.bak-before-cloudflare`):
+  - a new **global block** with `servers { trusted_proxies static <Cloudflare IPv4 and IPv6 ranges> ; client_ip_headers CF-Connecting-IP }`, from cloudflare.com/ips-v4 and /ips-v6;
+  - in the `drivealt` block, `header_up X-Forwarded-For {client_ip}`. The app takes the last `X-Forwarded-For` entry for `RemoteIpAddress`, which keys the sign-in rate limit (`Program.cs`).
+- **Verified:**
+  - **Real IP:** the app sees the owner's real IP (`37.41.53.68`), not Cloudflare's.
+  - **No spoofing:** a fake `CF-Connecting-IP` sent from outside Cloudflare's ranges is ignored.
+  - **HTTPS:** `http://` redirects once to `https://` with no loop; HSTS is kept; tryzarqa, schedule and drivealt return 200.
+  - **Speed:** the 468 KB app script went from 8–28 s (17–58 KB/s) to **0.7 s (590–690 KB/s)**, and first byte from 0.69 s to 0.36 s.
+  - **Cleanup:** the temporary `X-DriveAlt-Client-IP` test header was removed.
+- **Limits and drift:**
+  - **Upload limit:** Cloudflare's free plan caps request bodies at **100 MB**, though the app allows 1 GB. For bigger uploads, switch the record to DNS only for the upload.
+  - **Not cached:** `/api/media` responses show `cf-cache-status: DYNAMIC`; they're fast via Cloudflare's network but not cached at its edge.
+  - **Live only:** **the global Cloudflare block and the `drivealt` block exist only on the VPS**, not in the Zarqa repo's `deploy/Caddyfile`. Copy them there before any Zarqa redeploy.
 - **Unread pages at 03:51 UTC:** Semester 1 without ITS 489; Semester 2 and ITS 4,008 (held).
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
@@ -256,6 +274,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
 0. **Blockers found 2026-10-24 (Claude Code):**
    - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
+   - **(f) Caddyfile drift (2026-10-25):** the VPS Caddyfile has two things the Zarqa repo lacks: the Cloudflare global block (trusted proxies) and the `drivealt` site block. A Zarqa redeploy that rewrites the Caddyfile would drop both. DriveAlt would then fail on HTTPS, or the app would see Cloudflare's IP for every visitor.
    - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
    - **(b) Gemini quota:** the free embedding quota fails whole files (49). Options: switch on billing for the key, or make a Gemini 429 pause the file the way Codex limits do (code change, not done).
    - **(c) Wrong rule in another checkout:** `C:\Users\abdul\DriveAlt` (branch `feat/luna-sol-review`, **another agent's uncommitted work**) has a prompt saying answers are *"never inside a question box"* (`src/DriveAlt.Api/Ai/MaterialAi.cs:147` there). That contradicts the owner's rule and must be fixed before it's committed. Not edited here, because it belongs to another agent.
