@@ -95,7 +95,13 @@ export interface ChatMessage {
   refused: boolean
   createdAt: string
   results: ResultCard[]
+  /** Results held back behind "show more". */
+  moreCount?: number
+  /** Choices of a clarifying question; count is null while that option's search is still running. */
+  options?: ChatOption[] | null
 }
+
+export interface ChatOption { label: string; count: number | null }
 
 export interface PageThumb {
   id: string
@@ -191,15 +197,22 @@ export const api = {
 export interface StreamHandlers {
   onStatus?: (text: string) => void
   onMessage: (data: { conversation: Conversation; message: ChatMessage }) => void
+  onOptions?: (data: { messageId: string; options: ChatOption[] }) => void
 }
 
-/** POSTs a chat message and reads the Server-Sent Events stream (status lines, then the bot message). */
-export async function sendChat(conversationId: string, text: string, h: StreamHandlers, signal?: AbortSignal) {
+/** What a send is: typed text, a chip of the last clarifying question, or "show more" on the last results. */
+export interface SendExtra { option?: number; more?: boolean }
+
+/**
+ * POSTs a chat message and reads the Server-Sent Events stream: status lines, then the bot message, then (after a
+ * clarifying question) option search updates.
+ */
+export async function sendChat(conversationId: string, text: string, h: StreamHandlers, extra: SendExtra = {}, signal?: AbortSignal) {
   const res = await fetch(`/api/chats/${conversationId}/messages`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, ...extra }),
     signal,
   })
   if (!res.ok || !res.body) throw new ApiError(res.status, 'The bot tripped over something. Try again?')
@@ -220,6 +233,7 @@ export async function sendChat(conversationId: string, text: string, h: StreamHa
       const parsed = JSON.parse(data)
       if (event === 'status') h.onStatus?.(parsed.text)
       else if (event === 'message') h.onMessage(parsed)
+      else if (event === 'options') h.onOptions?.(parsed)
     }
   }
 }

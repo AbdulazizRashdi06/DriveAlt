@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, count, sendChat, type ChatMessage, type Conversation } from '../lib/api'
+import { api, count, sendChat, type ChatMessage, type ChatOption, type Conversation, type SendExtra } from '../lib/api'
 import { useApp } from '../lib/app'
 import { IconClose, IconMenu, IconPlus, IconSend } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
@@ -78,6 +78,9 @@ export function Chat() {
   const [sent, setSent] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  // The composer unlocks as soon as the bot's message lands, while a clarifying question's searches keep streaming,
+  // so sends can overlap: only the latest one may clear the shared state when it ends.
+  const latestSend = useRef(0)
 
   const convo = useQuery({
     queryKey: ['chat', id],
@@ -90,8 +93,9 @@ export function Chat() {
     endRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'end' })
   }, [messages.length, pending])
 
-  const send = async (text: string) => {
+  const send = async (text: string, extra: SendExtra = {}) => {
     let cid = id
+    const seq = ++latestSend.current
     setSent(text)
     try {
       if (!cid) {
@@ -105,18 +109,30 @@ export function Chat() {
       qc.setQueryData<ConvoData>(key, old => old && { ...old, messages: [...old.messages, optimistic] })
       setPending('Sniffing around…')
       await sendChat(cid, text, {
-        onStatus: s => setPending(s),
-        onMessage: d => qc.setQueryData<ConvoData>(key, old => ({
-          conversation: d.conversation,
-          messages: [...(old?.messages ?? []), d.message],
-        })),
-      })
+        onStatus: s => { if (seq === latestSend.current) setPending(s) },
+        onMessage: d => {
+          qc.setQueryData<ConvoData>(key, old => {
+            const list = old?.messages ?? []
+            // A refetch may have dropped the optimistic copy; put it back before the reply, which can now stay on screen
+            // for a while (a clarifying question keeps streaming), so the order must be right.
+            const mine = [...list].reverse().find(m => m.role === 'user')?.text === text
+            return { conversation: d.conversation, messages: [...list, ...(mine ? [] : [optimistic]), d.message] }
+          })
+          if (seq === latestSend.current) setPending(null)
+        },
+        onOptions: d => qc.setQueryData<ConvoData>(key, old => old && {
+          ...old,
+          messages: old.messages.map(m => m.id === d.messageId ? { ...m, options: d.options } : m),
+        }),
+      }, extra)
     } catch (e) {
       toast((e as Error).message)
     } finally {
-      setPending(null)
-      if (cid) await qc.invalidateQueries({ queryKey: ['chat', cid] })
-      setSent(null)
+      if (seq === latestSend.current) {
+        setPending(null)
+        if (cid) await qc.invalidateQueries({ queryKey: ['chat', cid] })
+        setSent(s => s === text ? null : s)
+      }
       void qc.invalidateQueries({ queryKey: ['chats'] })
     }
   }
@@ -175,14 +191,25 @@ export function Chat() {
             </div>
             <div className="thread" aria-live="polite">
               {convo.isLoading && !sent && <div className="skeleton" style={{ height: 120 }} />}
-              {messages.map(m => m.role === 'user' ? (
+              {messages.map((m, mi) => m.role === 'user' ? (
                 <div key={m.id} className="bubble-user enter">{m.text}</div>
               ) : (
                 <BotSays key={m.id}>
                   <div className="bubble-bot">{m.text}{m.results.length > 1 && !m.refused && <ResultCount n={m.results.length} />}</div>
+                  {m.options && m.options.length > 0 && (
+                    <Options options={m.options} live={mi === messages.length - 1 && !showSent} busy={!!pending}
+                      onPick={(o, i) => void send(o.label, { option: i })} />
+                  )}
                   {m.results.length > 0 && (
                     <div className="results">
                       {m.results.map((r, i) => <ResultCard key={r.ref} card={r} index={i} all={m.results} />)}
+                    </div>
+                  )}
+                  {!!m.moreCount && mi === messages.length - 1 && !showSent && (
+                    <div className="chips">
+                      <button className="candy sm c-white" type="button" disabled={!!pending} onClick={() => void send('Show more', { more: true })}>
+                        Show more <span className="chip-n">{m.moreCount} waiting</span>
+                      </button>
                     </div>
                   )}
                 </BotSays>
@@ -204,6 +231,22 @@ export function Chat() {
           </>
         )}
       </main>
+    </div>
+  )
+}
+
+/** The choices of a clarifying question, each with its search's state; only the latest question's chips can be picked. */
+function Options({ options, live, busy, onPick }: { options: ChatOption[]; live: boolean; busy: boolean; onPick: (o: ChatOption, i: number) => void }) {
+  return (
+    <div className="chips" role="group" aria-label="Pick one">
+      {options.map((o, i) => (
+        <button key={i} className="candy sm c-white" type="button" disabled={!live || busy} onClick={() => onPick(o, i)}>
+          {o.label}
+          {o.count === null
+            ? <span className="typing chip-n" aria-label="still searching"><i /><i /><i /></span>
+            : <span className="chip-n">{o.count === 0 ? 'none yet' : `${o.count} found`}</span>}
+        </button>
+      ))}
     </div>
   )
 }

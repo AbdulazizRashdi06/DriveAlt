@@ -225,12 +225,78 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         Assert.Equal("image/jpeg", (await client.GetAsync(shown["imageUrl"]!.GetValue<string>())).Content.Headers.ContentType!.MediaType);
     }
 
-    private static async Task<JsonObject> SendAsync(HttpClient client, string chatId, string text)
+    [Fact]
+    public async Task Option_chips_and_show_more_are_answered_without_the_model()
     {
-        var res = await client.PostAsJsonAsync($"/api/chats/{chatId}/messages", new { text });
+        var client = await app.SignInAsync("25-7777");
+        var chatId = (await (await client.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+
+        // A clarifying question as the model's ask leaves it: one option already searched, one still searching.
+        var refs = Enumerable.Range(0, 5).Select(_ => $"r:{Guid.NewGuid()}").ToArray();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            db.Messages.Add(new Message
+            {
+                ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Already digging in both! Which one did you mean?",
+                Options = DriveAlt.Api.Chat.ChatOption.Write([
+                    new() { Label = "Data Structures", Query = "algorithm analysis", Course = "data-structures", Refs = refs, Done = true },
+                    new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms" },
+                ]),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var history = await client.GetFromJsonAsync<JsonObject>($"/api/chats/{chatId}");
+        var options = history!["messages"]![0]!["options"]!.AsArray();
+        Assert.Equal(5, options[0]!["count"]!.GetValue<int>());
+        Assert.Null(options[1]!["count"]);
+
+        // A chip shows the first few of that option's results and holds the rest back.
+        var picked = await SendAsync(client, chatId, "Data Structures", new { option = 0 });
+        Assert.Equal(2, picked["moreCount"]!.GetValue<int>());
+        Assert.StartsWith("Data Structures it is!", picked["text"]!.GetValue<string>());
+        Assert.Contains("2 more", picked["text"]!.GetValue<string>());
+
+        var more = await SendAsync(client, chatId, "Show more", new { more = true });
+        Assert.Equal(0, more["moreCount"]!.GetValue<int>());
+        Assert.Contains("That's all of them", more["text"]!.GetValue<string>());
+        var none = await SendAsync(client, chatId, "Show more", new { more = true });
+        Assert.StartsWith("That's everything I found", none["text"]!.GetValue<string>());
+
+        // A chip whose search hadn't finished searches on the spot.
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            db.Messages.Add(new Message
+            {
+                ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Which one?", CreatedAt = DateTime.UtcNow.AddSeconds(1),
+                Options = DriveAlt.Api.Chat.ChatOption.Write([
+                    new() { Label = "Data Structures", Query = "zzqx nothing", Course = "data-structures" },
+                    new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms" },
+                ]),
+            });
+            await db.SaveChangesAsync();
+        }
+        var pending = await SendAsync(client, chatId, "Efficient Algorithms", new { option = 1 });
+        Assert.Equal("Nothing in Efficient Algorithms yet. Want me to try other words?", pending["text"]!.GetValue<string>());
+        Assert.Empty(pending["results"]!.AsArray());
+    }
+
+    private static async Task<JsonObject> SendAsync(HttpClient client, string chatId, string text, object? extra = null)
+    {
+        var res = await client.PostAsJsonAsync($"/api/chats/{chatId}/messages",
+            extra is null ? new JsonObject { ["text"] = text } : Merge(text, extra));
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var body = await res.Content.ReadAsStringAsync();
         var data = body.Split("\n\n").First(c => c.StartsWith("event: message")).Split('\n')[1]["data: ".Length..];
         return JsonNode.Parse(data)!["message"]!.AsObject();
+    }
+
+    private static JsonObject Merge(string text, object extra)
+    {
+        var body = JsonSerializer.SerializeToNode(extra)!.AsObject();
+        body["text"] = text;
+        return body;
     }
 }

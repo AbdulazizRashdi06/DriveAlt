@@ -186,6 +186,12 @@ a, button, input, textarea, select, label {
 .ex:active { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) { .ex:hover { transform: translateY(-2px); } }
 
+/* ---------- chips under a bot message: options of a clarifying question, "show more" ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chips .candy { white-space: normal; text-align: left; }
+.chip-n { font: 800 12px/1 var(--font-body); color: #7A5A3A; }
+.chip-n.typing i { width: 6px; height: 6px; }
+
 /* ---------- result cards ---------- */
 .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 18px; align-items: start; }
 .card { border-radius: 28px; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 7px solid rgba(0, 0, 0, .18); min-width: 0; }

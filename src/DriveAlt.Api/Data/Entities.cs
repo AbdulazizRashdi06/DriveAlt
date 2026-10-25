@@ -275,6 +275,10 @@ public sealed class Message
 
     /// <summary>Result refs shown with a bot message, e.g. ["r:{regionId}", "p:{pageId}"].</summary>
     public string[] Results { get; set; } = [];
+    /// <summary>Further result refs held back so a reply isn't overwhelming; "show more" pages through them.</summary>
+    public string[] More { get; set; } = [];
+    /// <summary>JSON list of <c>ChatOption</c>: the choices of a clarifying question, each searched while the student answers.</summary>
+    public string? Options { get; set; }
     public bool Refused { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
