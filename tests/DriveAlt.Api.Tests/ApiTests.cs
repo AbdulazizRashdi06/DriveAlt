@@ -226,6 +226,20 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task A_fixed_code_account_signs_in_without_an_email()
+    {
+        var client = app.NewClient();
+        var email = $"{ApiFactory.FixedCodeId}@student.gutech.edu.om";
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/auth/request", new { uniId = ApiFactory.FixedCodeId })).StatusCode);
+        Assert.False(DevEmailSender.LastCodes.ContainsKey(email));
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/auth/verify", new { uniId = ApiFactory.FixedCodeId, code = "0000" })).StatusCode);
+        var ok = await client.PostAsJsonAsync("/api/auth/verify", new { uniId = ApiFactory.FixedCodeId, code = ApiFactory.FixedCode });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Equal("student", (await ok.Content.ReadFromJsonAsync<JsonObject>())!["role"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Option_chips_and_show_more_are_answered_without_the_model()
     {
         var client = await app.SignInAsync("25-7777");

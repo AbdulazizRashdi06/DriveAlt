@@ -9,6 +9,7 @@
 #   DEEPSEEK_API_KEY                         optional: when set, DeepSeek runs the chat bot and reads pages
 # The database password and sign-in secret are generated on the VPS on the first deploy (generated.env) and kept.
 #   GOOGLE_API_KEY                           optional (Drive import)
+#   FIXED_CODES                              optional: comma-separated uniId:code pairs that sign in without an emailed code
 # Variables (same page → Variables tab), all optional:
 #   UPLOADERS      comma-separated uni IDs, e.g. 24-0161,24-0200
 #   PUBLIC_URL     e.g. https://drive.tryzarqa.com
@@ -146,6 +147,7 @@ jobs:
           CODEX_BASE_URL: ${{ vars.CODEX_BASE_URL }}
           CODEX_MODEL: ${{ vars.CODEX_MODEL }}
           UPLOADERS: ${{ vars.UPLOADERS }}
+          FIXED_CODES: ${{ secrets.FIXED_CODES }}
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
           APP_PORT: ${{ vars.APP_PORT }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
@@ -159,6 +161,8 @@ jobs:
             echo "Auth__EmailTemplate={id}@student.gutech.edu.om"
             i=0
             for id in $(echo "${UPLOADERS:-}" | tr ',' ' '); do echo "Auth__Uploaders__${i}=${id}"; i=$((i+1)); done
+            i=0
+            for pair in $(echo "${FIXED_CODES:-}" | tr ',' ' '); do echo "Auth__FixedCodes__${i}=${pair}"; i=$((i+1)); done
             echo "Resend__ApiKey=$RESEND_API_KEY"
             echo "Resend__From=DriveAlt <noreply@tryzarqa.com>"
             echo "Gemini__ApiKey=$GEMINI_API_KEY"

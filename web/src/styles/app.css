@@ -445,7 +445,6 @@ a, button, input, textarea, select, label {
 .sticker[data-s="2"] { right: 60px; top: 380px; animation-delay: 200ms; }
 .sticker[data-s="3"] { right: 330px; top: 330px; animation-delay: 280ms; }
 .login-h1 { margin: 0; font-size: 84px; line-height: .95; }
-.login-sub { margin: 0; font: 800 20px/1.45 var(--font-body); max-width: 460px; }
 .login-panel { flex: 1 1 420px; display: flex; align-items: center; justify-content: center; border-radius: 40px; background: var(--paper); padding: 48px 40px; }
 @media (max-width: 760px) {
   .login { padding: 0; gap: 0; flex-direction: column; flex-wrap: nowrap; }
@@ -456,7 +455,6 @@ a, button, input, textarea, select, label {
   .sticker[data-s="2"] { right: auto; left: 70px; top: 152px; }
   .sticker[data-s="3"] { display: none; }
   .login-h1 { font-size: 46px; line-height: .98; }
-  .login-sub { font-size: 16px; }
   .login-panel { flex: 0 0 auto; border-radius: 0; background: transparent; padding: 24px 20px 28px; }
 }
 @media (max-width: 760px) { .viewer [data-phone-dots] { display: flex !important; } }
