@@ -17,7 +17,7 @@ public static class BrowseEndpoints
         // The Year 2 tree: semester → group → course, like the batch Drive.
         g.MapGet("/courses", async (AppDb db, CancellationToken ct) =>
         {
-            var counts = await db.Files.AsNoTracking().Where(f => f.Status == FileStatuses.Ready && f.CourseId != null)
+            var counts = await db.Files.AsNoTracking().Where(f => f.CourseId != null && (f.Status == FileStatuses.Ready || (FileStatuses.Visible.Contains(f.Status) && f.Pages.Any(p => p.Text != "" || p.Regions.Any()))))
                 .GroupBy(f => f.CourseId!.Value).Select(x => new { x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, ct);
             var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
             return courses.Select(c => new CourseDto(c.Id, c.Slug, c.Name, c.Semester, c.Group, c.Color, c.Aliases, counts.GetValueOrDefault(c.Id)));
@@ -30,7 +30,7 @@ public static class BrowseEndpoints
             if (course is null) return Results.NotFound();
 
             var all = await db.Files.AsNoTracking().Include(f => f.Course)
-                .Where(f => f.CourseId == course.Id && f.Status == FileStatuses.Ready)
+                .Where(f => f.CourseId == course.Id && (f.Status == FileStatuses.Ready || (FileStatuses.Visible.Contains(f.Status) && f.Pages.Any(p => p.Text != "" || p.Regions.Any()))))
                 .OrderByDescending(f => f.AcademicYear).ThenBy(f => f.Folder).ThenBy(f => f.Title)
                 .ToListAsync(ct);
 

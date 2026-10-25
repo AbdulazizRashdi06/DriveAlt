@@ -84,6 +84,21 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         var image = await client.GetAsync(hits![0]!["imageUrl"]!.GetValue<string>());
         Assert.Equal("image/jpeg", image.Content.Headers.ContentType!.MediaType);
 
+        // While a file is being re-read (e.g. paused on the AI's usage limit), its earlier results stay findable.
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var fileId = Guid.Parse(id);
+            var f = await db.Files.FindAsync(fileId);
+            f!.Status = FileStatuses.Reading;
+            await db.SaveChangesAsync();
+            var during = await client.GetFromJsonAsync<JsonArray>("/api/search?q=circular+queue&course=data-structures");
+            Assert.NotEmpty(during!);
+            Assert.Equal("image/jpeg", (await client.GetAsync(during![0]!["imageUrl"]!.GetValue<string>())).Content.Headers.ContentType!.MediaType);
+            f.Status = FileStatuses.Ready;
+            await db.SaveChangesAsync();
+        }
+
         // Chat: results are image cards, the text never repeats the page.
         var chatId = (await (await client.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
         var found = await SendAsync(client, chatId, "past paper questions on circular queue in DS");

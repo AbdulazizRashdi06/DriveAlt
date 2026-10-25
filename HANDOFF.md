@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/cloudflare-proxy`, from main `7e1f053` |
-| Updated | 2026-10-25 ~04:45 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/searchable-while-rereading` (PR #16), from main `8622d26` |
+| Updated | 2026-10-25, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
 **In one line:** the app is live (image `5c7641a`). **Scope is Semester 1 without ITS only:** Semester 2 and ITS jobs are **held**. 489 Semester 1 pages are left (435 of them re-reads, for crops with answers and per-question boxes), waiting for the ChatGPT plan's usage limit to reset (limited since 2026-10-24 23:36 UTC).
@@ -40,7 +40,8 @@
 | #12 | merged `d73edeb` with `[skip ci]` | `claude/handoff-local-import` (Claude Code) | This page after the local import. Docs only. |
 | #13 | merged `406db5a` with `[skip ci]` | `claude/handoff-reread` (Claude Code) | Gateway fix, re-read queued, usage limit. Docs only. |
 | #14 | merged with `[skip ci]` | `claude/hold-sem2` (Claude Code) | Semester 2 and ITS held. Docs only. |
-| **#15** | **open** | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only; merge with `[skip ci]`. |
+| #15 | merged with `[skip ci]` | `claude/cloudflare-proxy` (Claude Code) | DriveAlt behind the Cloudflare proxy. Docs only. |
+| **#16** | **open** | `claude/searchable-while-rereading` (Claude Code) | Files being re-read stay searchable; image fallbacks; the bot shows questions for question requests; `import-drive --from-local`. **Code, so a normal merge (deploys).** |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -141,6 +142,23 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - **Upload limit:** Cloudflare's free plan caps request bodies at **100 MB**, though the app allows 1 GB. For bigger uploads, switch the record to DNS only for the upload.
   - **Not cached:** `/api/media` responses show `cf-cache-status: DYNAMIC`; they're fast via Cloudflare's network but not cached at its edge.
   - **Live only:** **the global Cloudflare block and the `drivealt` block exist only on the VPS**, not in the Zarqa repo's `deploy/Caddyfile`. Copy them there before any Zarqa redeploy.
+
+**Past papers were invisible, 2026-10-25** (Claude Code; the owner: *"this guy is giving me slides when i asked for questions"*, *"the past papers aren uploaded at all"*):
+- **Cause:**
+  - search (`SearchService.cs`), the bot's `list_courses` (`ChatService.cs`), Browse and the file view only counted **`ready`** files;
+  - the 2026-10-24 re-read put 86 files back in the queue, and pausing on the usage limit leaves them at `reading`;
+  - so **74 of 95 Semester 1 exam files were hidden**, including all 3 Data Structures past papers (midterm 1: 29 boxes, midterm 2: 30), and the bot said there were no past papers.
+- **Fix (PR #16):**
+  - **Visibility:** `FileStatuses.Visible` = ready, queued, reading, tagging, cropping. Search uses it. Browse and `list_courses` show those files when they have content (page text or boxes), and the file view lists their pages. So a file keeps its earlier results while it's re-read.
+  - **Image fallbacks:** a crop or thumbnail that isn't rendered yet falls back to the whole page image.
+  - **Bot prompt:** for question requests, search past_paper, quiz and exercise and show question crops; never present slides as questions. Never claim material isn't in the drive; say it couldn't be found yet.
+  - **Test:** a search while the file is `reading` still finds it (`ApiTests`).
+- **Queue (SQL):** Semester 1 exam files go first: 72 jobs with 399 unread pages are due now. Semester 1 slides and notes (15 jobs, 67 pages) were moved 4 h later.
+- **38 Semester 1 files (ITS left out) never reached the app** (Drive manifest vs `files.source_ref`):
+  - 27 photos in "quiz 3 past papers" plus 2 PDFs in "SQL Q & ANS": whole folders the Drive import never listed. **Hypothesis:** the 2 connection errors Codex logged during that import.
+  - 7 files with no extension in their Drive names (`q51`–`q54` and `Photo f`/`Photo fro` are JPEGs; `acc notes 4,5,6,7` is an Office zip): skipped by `DriveImporter.cs`, which decides the type by extension.
+  - 2 single PDFs in large folders.
+- **Fix (also PR #16):** `import-drive --from-local <dir> [--skip <prefix>]` plans from DriveAlt-local's `manifest.json` and `originals/`, taking only Drive IDs not in the app yet. Names without an extension get one from the content (`DriveImporter.SniffExtension`: JPEG, PNG, PDF, HEIC, docx and pptx; `SniffTests`). Files are copied instead of downloaded; grouping, course mapping and the duplicate check are unchanged.
 - **Unread pages at 03:51 UTC:** Semester 1 without ITS 489; Semester 2 and ITS 4,008 (held).
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):

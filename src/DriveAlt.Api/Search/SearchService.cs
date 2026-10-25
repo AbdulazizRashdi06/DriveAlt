@@ -148,7 +148,7 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
 
     private static IQueryable<Page> FilterPages(IQueryable<Page> pages, SearchQuery q)
     {
-        pages = pages.Where(p => p.File!.Status == FileStatuses.Ready);
+        pages = pages.Where(p => FileStatuses.Visible.Contains(p.File!.Status));
         if (q.FileId is { } fid) pages = pages.Where(p => p.FileId == fid);
         if (q.CourseIds is { Count: > 0 } cs) pages = pages.Where(p => cs.Contains(p.File!.CourseId!.Value));
         if (q.Types is { Count: > 0 } ts) pages = pages.Where(p => ts.Contains(p.File!.MaterialType));
@@ -161,7 +161,7 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
 
     private static IQueryable<Region> FilterRegions(IQueryable<Region> regions, SearchQuery q)
     {
-        regions = regions.Where(r => r.Label == RegionLabels.Question && r.Page!.File!.Status == FileStatuses.Ready);
+        regions = regions.Where(r => r.Label == RegionLabels.Question && FileStatuses.Visible.Contains(r.Page!.File!.Status));
         if (q.FileId is { } fid) regions = regions.Where(r => r.Page!.FileId == fid);
         if (q.CourseIds is { Count: > 0 } cs) regions = regions.Where(r => cs.Contains(r.Page!.File!.CourseId!.Value));
         if (q.Types is { Count: > 0 } ts) regions = regions.Where(r => ts.Contains(r.Page!.File!.MaterialType));
