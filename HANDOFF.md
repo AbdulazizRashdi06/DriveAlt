@@ -8,11 +8,11 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/handoff-local-import`, from main `5c7641a` (merge of #11) |
-| Updated | 2026-10-24 ~19:50 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/handoff-reread`, from main `d73edeb` |
+| Updated | 2026-10-25 ~00:05 UTC, by Claude Code (Opus 5.5) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**In one line:** the app is live (image `5c7641a`). Chat runs on DeepSeek; pages are read by Codex `gpt-6.1-sol` when the gateway is logged in. **The local import ran 2026-10-24:** 176 files are `ready` (up from 17), including **all of Data Structures and Organisation & HR**. **223 files still wait for Sol** (photos, Office files, Semester 2, some ITS), which needs the owner to log the ChatGPT gateway in again. Question crops include answers as they are on the paper; no AI writes them.
+**In one line:** the app is live (image `5c7641a`). Chat runs on DeepSeek, and Sol reads pages through the Codex gateway, which is **logged in again**. 457 pages are queued to be re-read so their crops include answers and typed exams get per-question boxes. **The ChatGPT plan's usage limit hit again at 2026-10-24 23:36 UTC**, so files are paused until it resets. **Semester 1 without ITS goes first; Semester 2 and ITS start at 2026-10-25 08:00 UTC.**
 
 ## 2. State of the world
 
@@ -37,7 +37,8 @@
 | **#9** | **merged** | `docs/handoff-merge-proof` (Claude Code) | Built on #7 and merged as `5a95318` with `[skip ci]`; live image remains `6852f1d`. |
 | #10 | merged `6b7a6fe` with `[skip ci]` (by Claude Code, owner's order) | `codex/drive-import-monitoring` (Codex) | Test-file validation, import launch and monitoring notes. Docs only. |
 | #11 | merged `5c7641a`, **deployed 2026-10-24 19:17–19:21 UTC** | `claude/answers-visible-in-crops` (Claude Code) | Crops include answers; 1.5% box padding; `import-local`; keyword-only fallback on Gemini 429 or network error. |
-| **#12** | **open** | `claude/handoff-local-import` (Claude Code) | This page after the local import. Docs only; merge with `[skip ci]`. |
+| #12 | merged `d73edeb` with `[skip ci]` | `claude/handoff-local-import` (Claude Code) | This page after the local import. Docs only. |
+| **#13** | **open** | `claude/handoff-reread` (Claude Code) | This page after the gateway fix and the re-read. Docs only; merge with `[skip ci]`. |
 
 **Other repos:**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
@@ -105,6 +106,16 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
   ITS: 21/31 ready, from the earlier Sol run. Semester 2: 6/179 ready.
 - **Checked visually:** crops made from the reviewed boxes (*Accounting final exam* p3 Q2, *cpp4 solutions* p2 Q2) are complete, with stem, requirements and answer space or solution code.
+
+**Gateway fix and re-read, 2026-10-24 23:00 – 2026-10-25 00:00 UTC** (Claude Code):
+- **The "not logged in" cause:** the owner had logged in, but `/health` still said `{"signedIn":false}`. The `zarqa-codex-1` container was at **249 of 256 processes**, holding **45 `codex` processes stuck for 23–25 h**. When the gateway kills a run, only the wrapper dies and the native `codex` child keeps running. So `codex login status` couldn't start, and the gateway reported a lost login. Seen with `docker top zarqa-codex-1` and `docker stats`.
+- **The restart:** `docker restart zarqa-codex-1` (that container only) gave `Logged in using ChatGPT` and `{"signedIn":true}`, with 8 processes. The login lives in the `zarqa_codex_auth` volume and survived.
+- **The cap:** each Codex run uses about 45 threads, so 4 parallel runs use about 200 of 256. Raised live with `docker update --pids-limit 1024 zarqa-codex-1`, at 245 processes. **Not persistent:** `/opt/zarqa/deploy/docker-compose.yml:63` still says `pids_limit: 256`, so a recreate brings back the cap.
+- **The re-read**, in one SQL transaction: **457 pages** (152 older Sol pages read before #11, whose boxes leave answers out, and 305 typed exam pages with one whole-page box) set to `extracted = false`. 81 `process` jobs inserted, 5 woken, 86 files `queued`. Pages edited in Inspect: 0, so none were affected.
+- **Then:** Sol made **478 successful calls** in 30 minutes (about 19 s each, all HTTP 200, 0 offline, 0 job errors). Then **`429 Codex usage limit reached` from 23:36 UTC**; 161 pauses by 00:00.
+- **At 00:00 UTC:** files `ready 120, reading 279, failed 1`; pages read 5,132, unread 4,497, of which 435 are re-reads not reached yet. Ready dropped from 176 because the re-read files are back in the queue.
+- **Queue order:** jobs run by `id` (`JobQueue.ClaimAsync`). The **88 Semester 1 jobs** (paused files, then re-reads) are due now and retry every 20 min. The **189 Semester 2 and ITS jobs** have `run_after` = 2026-10-25 08:00 UTC, so the next limit windows go to Semester 1. Undo with `update jobs set run_after = now() where state = 'queued'`.
+- **Not verified yet:** whether re-read crops include answers. No re-read file had finished before the limit. Check page 6 of "midterm 1 (photos)" (`6a3b9e40-0912-4c5b-b927-29b8f0a6d43e`) once its job, `461`, is `done`.
 
 **Broken on purpose:** nothing known. **Drift** (live, but not in git):
 - The `drivealt.tryzarqa.com` block exists only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo.
@@ -235,6 +246,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
 0. **Blockers found 2026-10-24 (Claude Code):**
+   - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
    - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
    - **(b) Gemini quota:** the free embedding quota fails whole files (49). Options: switch on billing for the key, or make a Gemini 429 pause the file the way Codex limits do (code change, not done).
    - **(c) Wrong rule in another checkout:** `C:\Users\abdul\DriveAlt` (branch `feat/luna-sol-review`, **another agent's uncommitted work**) has a prompt saying answers are *"never inside a question box"* (`src/DriveAlt.Api/Ai/MaterialAi.cs:147` there). That contradicts the owner's rule and must be fixed before it's committed. Not edited here, because it belongs to another agent.
@@ -257,9 +269,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | 2 | **Done:** test file re-read under PR #5 and verified by SQL | Codex | Seven pages, no offline failures, 29 question regions, zero answer/other regions |
 | 3 | **Started 18:58:30 UTC:** full import command (do not launch again): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
 | 4 | **Claude Code owns the import.** Semester 1 local data is done (section 2). The 223 files left need Sol: photos, Office files, pages with too little text, Semester 2 and some ITS. | agent | `select status, count(*) from files group by status` |
-| 4a | **Owner:** log the Codex gateway in again (device auth, section 9 Rollback). Paused jobs then resume by themselves. | **owner** | gateway `/health` returns `{"signedIn":true}`; `reading` count falls |
+| 4a | **Done 2026-10-24:** owner logged in, plus a container restart and the cap raised to 1024 (section 2) | owner, Claude Code | `/health` returns `{"signedIn":true}` |
 | 4b | **Owner decides:** Gemini billing, so the 105 keyword-only files get embeddings (queue `reembed` jobs for them afterwards). | **owner**, then agent | pages with `embedding is not null` rise |
-| 4c | Re-run AI on files read by Sol **before #11**, so their crops include answers. Also re-run typed exam pages that have one whole-page box (`raw_extraction->>'localImport'='pdf-text'` on assessment pages), to split them into questions. Needs 4a. | agent | Their crops are split per question and include answers |
+| 4c | **Queued 2026-10-24 23:07 UTC:** 457 pages to re-read (older Sol pages and typed exam pages). They run as usage limits allow; Semester 1 first. | Claude Code | Page 6 of `6a3b9e40…`: crops include its answers; typed exam pages have more than one box |
 | 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
 | 6 | Zarqa repo: PR `codex-model-choice` and add the Caddy block (open thread 4) | agent; **owner** merges | Diff of the repo against the VPS files is empty |
 | 7 | Update the README's AI section | agent | PR |
@@ -292,7 +304,7 @@ $D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page
   -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
 $D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
 $D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
-# expect at 2026-10-24 19:42 UTC: files ready 176, reading 223, failed 1. paused_now high while the gateway is logged out.
+# expect at 2026-10-25 00:00 UTC: files ready 120, reading 279, failed 1; pages read 5,132, unread 4,497. Paused jobs (429) are expected until the plan resets.
 # The reading count only falls after the owner logs the gateway in (step 4a). Higher ready / lower reading = progress since.
 ```
 
