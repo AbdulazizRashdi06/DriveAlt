@@ -1,7 +1,7 @@
 # Normally deployed by .github/workflows/deploy.yml, which pulls the image from ghcr.io and writes .env from GitHub Secrets.
 # Manual alternative on the VPS, from this folder:
 #   cp .env.example .env  (fill it in)
-#   printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
+#   [ -f generated.env ] || (umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env)  # once: Postgres keeps its first password
 #   docker compose --env-file generated.env --env-file .env up -d --build
 # The app listens on 127.0.0.1:8080 and joins the Zarqa stack's Docker network, so Zarqa's Caddy reaches it as drivealt:8080.
 name: drivealt

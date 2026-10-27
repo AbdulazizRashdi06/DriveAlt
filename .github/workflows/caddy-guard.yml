@@ -1,0 +1,49 @@
+# Keeps drivealt.tryzarqa.com routed. Zarqa's deploys upload Zarqa's own deploy/Caddyfile over the shared
+# /opt/zarqa/deploy/Caddyfile, which dropped DriveAlt's site on 2026-10-26 (Cloudflare 525 until fixed).
+# Every 15 minutes this runs deploy/ensure-caddy.sh on the VPS: it does nothing when the site is there, and otherwise
+# restores DriveAlt's blocks, validates, reloads Caddy gracefully and rolls back on failure.
+# Remove this workflow once Zarqa's repo carries DriveAlt's blocks itself.
+name: Caddy guard
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+jobs:
+  guard:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: drivealt-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/ensure-caddy.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Set up SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then echo "::error::VPS secrets missing"; exit 1; fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          printf 'Host vps\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  ServerAliveInterval 30\n' \
+            "$VPS_HOST" "${VPS_PORT:-22}" "$VPS_USER" >> ~/.ssh/config
+
+      - name: Make sure Caddy routes DriveAlt
+        run: ssh vps 'bash -s' < deploy/ensure-caddy.sh
