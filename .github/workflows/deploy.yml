@@ -5,6 +5,8 @@
 # Secrets (Settings → Secrets and variables → Actions → Secrets):
 #   VPS_HOST, VPS_USER, VPS_SSH_KEY          SSH access to the Zarqa VPS (private key, user must be able to run docker)
 #   VPS_PORT                                 optional, default 22
+#   VPS_KNOWN_HOSTS                          optional but recommended: the VPS's host key line(s) (ssh-keyscan output
+#                                            checked once by hand); without it the key is trusted on first use each run
 #   GEMINI_API_KEY, RESEND_API_KEY           API keys (Gemini does embeddings, and everything else when DeepSeek is unset)
 #   DEEPSEEK_API_KEY                         optional: when set, DeepSeek runs the chat bot and reads pages
 # The database password and sign-in secret are generated on the VPS on the first deploy (generated.env) and kept.
@@ -13,11 +15,13 @@
 #   UPLOADERS      comma-separated uni IDs, e.g. 24-0161,24-0200
 #   PUBLIC_URL     e.g. https://drive.tryzarqa.com
 #   APP_PORT       host port on 127.0.0.1, default 8080
-#   DEPLOY_DIR     folder on the VPS, default ~/drivealt
+#   DEPLOY_DIR     folder on the VPS relative to the SSH user's home (a leading ~/ is fine), default drivealt
 #   GEMINI_MODEL   default gemini-3.8-flash
 #   DEEPSEEK_MODEL default deepseek-chat
 #   CODEX_BASE_URL e.g. http://codex:8090/v1: read pages through the Zarqa stack's Codex gateway (ChatGPT login)
 #   CODEX_MODEL    default gpt-6.1-sol
+# Every deploy also runs deploy/ensure-caddy.sh on the VPS: Zarqa's deploys replace the shared Caddyfile and have
+# dropped DriveAlt's site before (Cloudflare 525). caddy-guard.yml runs the same check every 15 minutes.
 name: Test and deploy
 
 on:
@@ -67,7 +71,8 @@ jobs:
         run: npm ci && npm test && npx tsc -b && npx vite build --outDir ../.ci-web
 
   build:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Only main ships, also for a manual run (Run workflow on another branch only runs the tests).
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,9 +100,13 @@ jobs:
 
   deploy:
     needs: [test, build]
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
+    # One deploy at a time across triggers (shared with caddy-guard.yml); a queued run waits instead of cancelling.
+    concurrency:
+      group: drivealt-production
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: read
@@ -111,22 +120,33 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           missing=""
           for n in VPS_HOST VPS_USER VPS_SSH_KEY; do
             [ -z "${!n}" ] && missing="$missing $n"
           done
           if [ -n "$missing" ]; then echo "::error::Missing secrets:$missing"; exit 1; fi
+          # Not fatal (the app starts without them), but say so instead of shipping a silently broken feature.
+          [ -n "$RESEND_API_KEY" ] || echo "::warning::RESEND_API_KEY is not set: sign-in codes only reach the app log, not email."
+          [ -n "$GEMINI_API_KEY" ] || echo "::warning::GEMINI_API_KEY is not set: no embeddings (keyword search only)."
 
       - name: Set up SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+          else
+            echo "::warning::VPS_KNOWN_HOSTS is not set: the VPS host key is trusted on first use (set the secret to pin it)."
+            ssh-keyscan -p "${VPS_PORT:-22}" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
           cat >> ~/.ssh/config <<EOF
           Host vps
             HostName $VPS_HOST
@@ -155,7 +175,7 @@ jobs:
             echo "DRIVEALT_IMAGE=$IMAGE"
             echo "APP_PORT=${APP_PORT:-8080}"
             echo "App__Name=DriveAlt"
-            echo "App__PublicUrl=${PUBLIC_URL:-http://localhost:8080}"
+            echo "App__PublicUrl=${PUBLIC_URL:-http://localhost:${APP_PORT:-8080}}"
             echo "Auth__EmailTemplate={id}@student.gutech.edu.om"
             i=0
             for id in $(echo "${UPLOADERS:-}" | tr ',' ' '); do echo "Auth__Uploaders__${i}=${id}"; i=$((i+1)); done
@@ -176,10 +196,22 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          dir="${DEPLOY_DIR:-drivealt}"
+          dir="${DEPLOY_DIR:-drivealt}"; dir="${dir#\~/}"   # relative to the SSH user's home, for ssh and scp alike
           ssh vps "mkdir -p '$dir' && chmod 700 '$dir'"
           # First deploy only: generate the database password and sign-in secret on the server and keep them.
-          ssh vps "cd '$dir' && [ -f generated.env ] || { umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' \"\$(openssl rand -hex 32)\" \"\$(openssl rand -hex 32)\" > generated.env; }"
+          # Never write empty values and never regenerate: Postgres keeps the password it was first created with.
+          ssh vps "cd '$dir' && bash -s" <<'EOF'
+          set -e
+          if [ ! -f generated.env ]; then
+            p=$(openssl rand -hex 32); o=$(openssl rand -hex 32)
+            if [ ${#p} -ne 64 ] || [ ${#o} -ne 64 ]; then echo "::error::openssl rand failed on the VPS; generated.env not written."; exit 1; fi
+            (umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$p" "$o" > generated.env.tmp)
+            mv generated.env.tmp generated.env
+          fi
+          if ! grep -q '^POSTGRES_PASSWORD=.' generated.env || ! grep -q '^Auth__OtpSecret=.' generated.env; then
+            echo "::error::generated.env has an empty value; fix it by hand (the database keeps its first password)."; exit 1
+          fi
+          EOF
           # The VPS pulls only the layers it doesn't have yet. The job's token is short-lived; log out right after.
           printf '%s' "$GHCR_TOKEN" | ssh vps "docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null"
           ssh vps "docker pull -q '$IMAGE'; s=\$?; docker logout ghcr.io >/dev/null; exit \$s"
@@ -192,7 +224,7 @@ jobs:
         env:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
         run: |
-          dir="${DEPLOY_DIR:-drivealt}"
+          dir="${DEPLOY_DIR:-drivealt}"; dir="${dir#\~/}"
           ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build --remove-orphans"
           for i in $(seq 1 30); do
             if ssh vps "curl -fsS http://127.0.0.1:\$(grep '^APP_PORT=' '$dir/.env' | cut -d= -f2)/api/health" >/dev/null 2>&1; then
@@ -204,3 +236,18 @@ jobs:
             sleep 4
           done
           echo "::error::App did not become healthy"; ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env logs --tail 80 app"; exit 1
+
+      - name: Make sure Caddy routes DriveAlt
+        run: ssh vps 'bash -s' < deploy/ensure-caddy.sh
+
+      - name: Check the public address
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          url="${PUBLIC_URL:-https://drivealt.tryzarqa.com}"
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url/api/health" || true)
+            if [ "$code" = 200 ]; then echo "$url is up"; exit 0; fi
+            sleep 6
+          done
+          echo "::error::$url/api/health answered $code (525 = Cloudflare can't reach Caddy over TLS for this host)"; exit 1

@@ -108,7 +108,7 @@ The database password and the sign-in secret are not secrets you set: the first 
 ```bash
 cd deploy
 cp .env.example .env        # set Resend__ApiKey, Gemini__ApiKey, uploaders
-printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env
+[ -f generated.env ] || (umask 077; printf 'POSTGRES_PASSWORD=%s\nAuth__OtpSecret=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > generated.env)  # once: Postgres keeps its first password
 docker compose --env-file generated.env --env-file .env up -d --build
 ```
 

@@ -8,11 +8,13 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/conversational-bot` (PR #20), from main `6e212e0` (merge of #19) |
-| Updated | 2026-10-25 ~11:30 UTC, by Claude Code (Opus 5.5) |
+| Branch / base | `claude/deploy-fixes-caddy`, from main `a920112` (merge of #20) |
+| Updated | 2026-10-27, by Claude Code (Opus 5.5, cloud session: no VPS access) |
 | Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
 
-**PR #20 (open, needs the owner's OK):** the conversational bot (section 3, 2026-10-25 entry). Written for after it merges: image = its merge commit, `messages` has the `more` and `options` columns.
+**2026-10-26/27 outage, fixed by this branch once it merges:** https://drivealt.tryzarqa.com returned **Cloudflare 525** from 2026-10-26 (seen 15:38 UTC and still at 2026-10-27 ~21:45 UTC). Zarqa's deploys upload Zarqa's own `deploy/Caddyfile` over the shared `/opt/zarqa/deploy/Caddyfile`, and that copy has no `drivealt` block (open thread (f) predicted this). Every deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27.
+
+**PR #20 (merged as `a920112`):** the conversational bot (section 3, 2026-10-25 entry). Written for after it merges: image = its merge commit, `messages` has the `more` and `options` columns.
 
 **In one line:** the app is live (image `dfb1877`; PR #20 pending). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
 
@@ -190,6 +192,32 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-27, Claude Code** (cloud session, no SSH to the VPS; branch `claude/deploy-fixes-caddy`):
+- **Outage:** `curl -s -o /dev/null -w "%{http_code}" https://drivealt.tryzarqa.com/api/health` → `525` on 2026-10-26 and 2026-10-27.
+- **Cause, from the Zarqa repo** (`AbdulazizRashdi06/zarqa`):
+  - `deploy/deploy.sh:20-23` tars `deploy/` (Caddyfile included) into `/opt/zarqa`, and `:28-31` recreates Caddy when the file changed.
+  - Zarqa `main` merged PRs #1 (2026-10-26 11:13 UTC), #4 and #5. Its `deploy/Caddyfile` has no `drivealt.tryzarqa.com` and no `trusted_proxies`.
+  - **Hypothesis (not seen on the VPS):** one of those deploys replaced the live file, so Caddy has no site or certificate for the host and Cloudflare (Full (strict)) fails the TLS handshake.
+- **Fix: `deploy/ensure-caddy.sh`**, run on the VPS by every deploy (`deploy.yml`, step "Make sure Caddy routes DriveAlt") and every 15 minutes (`.github/workflows/caddy-guard.yml`). It changes nothing when the site is present. Otherwise it:
+  1. adds the Cloudflare global block (only if the file has no global block of its own) and the `# >>> drivealt` site;
+  2. validates a copy with the running Caddy's image;
+  3. backs up the live file to `Caddyfile.bak-drivealt-<UTC time>`;
+  4. writes the file in place (same inode, so the bind mount sees it) and runs `caddy reload` (graceful);
+  5. on reload failure, writes the backup back and reloads again.
+
+  If the container's mount is stale, it recreates only `caddy`.
+- **Tested locally only:** run with a stubbed `docker` against Zarqa's current Caddyfile: first run restores both blocks; second run says "already routes"; a failed reload leaves the live file byte-identical to before. **Not run on the VPS yet.**
+- **Deploy workflow, from a code review:**
+  - only `main` builds and deploys, also for a manual run;
+  - one production deploy at a time (`concurrency: drivealt-production`, shared with the guard);
+  - `generated.env` is never written with empty values (openssl failure) or regenerated;
+  - a leading `~/` in `DEPLOY_DIR` works;
+  - optional `VPS_KNOWN_HOSTS` secret pins the host key (warning while it's unset);
+  - warnings when `RESEND_API_KEY` or `GEMINI_API_KEY` is empty;
+  - the `App__PublicUrl` fallback uses `APP_PORT`;
+  - a final step checks the public URL returns 200 through Cloudflare.
+- **Manual steps** (README, compose header): `generated.env` is created only if missing.
+
 **2026-10-22/23, Claude Code** (unless noted):
 - **First deploy:**
   - GitHub secrets and variables set; deploy key `drivealt-deploy` installed on the VPS.
@@ -313,7 +341,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | `src/DriveAlt.Api/Search/ResultCards.cs`, `web/src/ui/ResultCard.tsx` | Result cards | updated by PR #5 (merged) |
 | VPS `~/drivealt/{.env,generated.env,docker-compose.yml}` | Server config. **`generated.env` (DB password, OTP secret) must never be regenerated** | live |
 | VPS `/opt/zarqa/deploy/codex/gateway.mjs` (+ `.bak-before-sol`) | Codex gateway | live, from an unmerged branch |
-| VPS `/opt/zarqa/deploy/Caddyfile` (+ `.bak-before-drivealt`) | Zarqa's Caddy, including the `# >>> drivealt` block | live; the block isn't in git |
+| VPS `/opt/zarqa/deploy/Caddyfile` (+ `.bak-before-drivealt`, `.bak-drivealt-<time>`) | Zarqa's Caddy, including the `# >>> drivealt` block | Zarqa deploys drop the block; DriveAlt's deploy and guard put it back |
+| `deploy/ensure-caddy.sh` | Restores DriveAlt's Caddy blocks on the VPS when missing; validate, in-place write, graceful reload, rollback | new 2026-10-27 |
+| `.github/workflows/caddy-guard.yml` | Runs `ensure-caddy.sh` every 15 min (`main` only) | new 2026-10-27; remove once Zarqa's repo carries the block |
 | `.box-compare/` | Model box-test images | not committed (excluded in `.git/info/exclude`) |
 
 **Secrets** (names only, in GitHub → Settings → Secrets):
@@ -330,7 +360,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 0. **Blockers found 2026-10-24 (Claude Code):**
    - **(g) Conversational bot:** done in **PR #20** (Claude Code, `claude/conversational-bot`), waiting for the owner's merge. After deploy, confirm with the owner's test query (section 3).
    - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
-   - **(f) Caddyfile drift (2026-10-25):** the VPS Caddyfile has two things the Zarqa repo lacks: the Cloudflare global block (trusted proxies) and the `drivealt` site block. A Zarqa redeploy that rewrites the Caddyfile would drop both. DriveAlt would then fail on HTTPS, or the app would see Cloudflare's IP for every visitor.
+   - **(f) Caddyfile drift:** happened on 2026-10-26 (Cloudflare 525). It is mitigated by `deploy/ensure-caddy.sh` plus the 15-minute guard, so a Zarqa deploy can now cause up to about 15 minutes of downtime. **Real fix:** add both blocks to the Zarqa repo's `deploy/Caddyfile` (PR there; the owner merges), then delete `caddy-guard.yml`.
    - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
    - **(b) Gemini quota:** the free embedding quota fails whole files (49). Options: switch on billing for the key, or make a Gemini 429 pause the file the way Codex limits do (code change, not done).
    - **(c) Wrong rule in another checkout:** `C:\Users\abdul\DriveAlt` (branch `feat/luna-sol-review`, **another agent's uncommitted work**) has a prompt saying answers are *"never inside a question box"* (`src/DriveAlt.Api/Ai/MaterialAi.cs:147` there). That contradicts the owner's rule and must be fixed before it's committed. Not edited here, because it belongs to another agent.
@@ -397,5 +427,5 @@ $D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 
 **Rollback:**
 - **Gateway:** `cd /opt/zarqa && cp -p deploy/codex/gateway.mjs.bak-before-sol deploy/codex/gateway.mjs && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build --no-deps codex`
 - **Page reading back to DeepSeek:** `gh variable delete CODEX_BASE_URL -R AbdulazizRashdi06/DriveAlt`, then `gh workflow run deploy.yml -R AbdulazizRashdi06/DriveAlt --ref main`
-- **Caddy:** restore `Caddyfile.bak-before-drivealt`, then `docker exec zarqa-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`
+- **Caddy:** restore the newest `Caddyfile.bak-drivealt-*` (or `Caddyfile.bak-before-drivealt`), then `docker exec zarqa-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`
 - **Re-logging into the ChatGPT plan** (owner only): `cd /opt/zarqa && docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec codex codex login --device-auth`
