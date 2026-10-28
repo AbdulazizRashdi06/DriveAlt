@@ -8,7 +8,7 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/chat-files-and-followups`, based on report PR #26 head `75c6349`; merge after #25 and #26 |
+| Branch / base | `codex/chat-files-and-followups`, PR #27, based on report PR #26 head `75c6349`; merge after #25 and #26 |
 | Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
 | Purpose of this update | Whole-file chat results, AI-authored replies and prewritten button follow-ups. Reports are separately implemented in PR #26; Gemini and existing vectors stay unchanged. State below distinguishes current production from the intended post-merge behavior. |
 
@@ -222,7 +222,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **2026-10-28, Codex — full files and AI-authored chat (`codex/chat-files-and-followups`):**
 - Added file refs and a metadata-aware file search; files are distinct by source file and can open/download the whole original. Existing page/crop refs remain supported. DeepSeek chooses the search format via `result_kind`.
 - Removed the old canned response and text-replacement code, including the temporary hardcoded interpretations created during this task. DeepSeek receives the conversation history and responds in its own words. The model is instructed to treat “noo answers” in the owner's screenshot as a context-dependent correction requesting visible answers, not as an instruction to exclude them.
-- Added model-prepared replies for result batches and option outcomes, plus error reporting when the AI cannot respond. Added migration, scripted-model integration tests and desktop/phone browser tests. Gemini embeddings, billing, files and jobs were not changed.
+- Added model-prepared replies for result batches and option outcomes, plus error reporting when the AI cannot respond. Added migration, scripted-model integration tests and desktop/phone browser tests. Gemini embeddings, billing, files and jobs were not changed. Opened PR #27 on PR #26; CI for code head `6e2df32` is running, and owner approval is required before merge/deploy.
 
 **2026-10-28, Codex — material reports (`codex/material-reports`):**
 - Added authenticated student reports for exact page/crop refs, with five reasons and an optional 1,000-character note. Duplicate open reports from the same student/target/reason return the existing report; a filtered unique index protects concurrent submissions. New reports are limited to 20 per student per hour; repeats do not consume that allowance.
@@ -417,7 +417,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 ## 7. Open threads
 
 0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks and full CI passed (68 backend, 11 frontend). Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. Nothing from this branch was deployed by Codex.
-0a. **Claimed — Codex, `codex/chat-files-and-followups`:** full-file results and AI-authored chat with prewritten button follow-ups, stacked on PR #26. Local checks passed; scripted-model/database CI pending. The change overlaps PR #21's `ChatService.cs` and rejects its canned pick text per the owner's newer direction; preserve the typed-course selection behavior when reconciling the branches. No other agent branch was modified.
+0a. **Codex, `codex/chat-files-and-followups`, PR #27:** full-file results and AI-authored chat with prewritten button follow-ups, stacked on PR #26. Local checks passed; scripted-model/database CI pending. The change overlaps PR #21's `ChatService.cs` and rejects its canned pick text per the owner's newer direction; preserve the typed-course selection behavior when reconciling the branches. No other agent branch was modified.
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. It modifies `ChatService.cs` and writes a canned pick line, which conflicts with the owner's newer AI-written-replies decision. Coordinate/reconcile with the chat feature before either overlapping change is merged; do not edit or push to Claude's branch. Owner approval is required to merge.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
 3. **Gateway process leak and configuration drift:** the last reviewed gateway could leave native Codex children running after timeout, and its live PID cap was raised to 1024 while the compose file still used 256 (2026-10-25 evidence above). Gateway source hash is unchanged; no fix is confirmed here. If health says signed out, inspect process pressure before asking for another login. The deployed `codex-model-choice` branch's merge status has not been rechecked in this orientation. Its limit matcher (`usage limit|rate limit|quota|too many requests`) may miss a plain 502; offline fallback handling needs review if such a response occurs.
@@ -459,7 +459,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
 # #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
-# #26 codex/material-reports also appears until the owner merges/closes the report feature.
+# #26 codex/material-reports and #27 codex/chat-files-and-followups also appear until merged/closed.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```
