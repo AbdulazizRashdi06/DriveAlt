@@ -22,8 +22,10 @@ function History({ activeId, onPick }: { activeId?: string; onPick?: () => void 
   const chats = useQuery({ queryKey: ['chats'], queryFn: () => api.get<Conversation[]>('/api/chats') })
   return (
     <>
-      <Link className="candy" to="/chat" style={{ width: '100%' }} onClick={onPick}><IconPlus />New chat</Link>
-      <div className="lbl" style={{ padding: '12px 6px 2px' }}>Your chats</div>
+      <Link className="candy" to="/chat" style={{ width: '100%', flexShrink: 0 }} onClick={onPick}><IconPlus />New chat</Link>
+      <div className="lbl" style={{ padding: '12px 6px 2px', flexShrink: 0 }}>Your chats</div>
+      {/* Only the list scrolls, so a long history can't stretch the page or the chat sheet. */}
+      <div className="hist-list">
       {chats.isLoading && [0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 46 }} />)}
       {chats.data?.length === 0 && <p style={{ margin: '4px 6px', font: "700 14px/1.4 'Nunito'", color: '#7A5A3A' }}>No chats yet. Ask me something!</p>}
       {chats.data?.map(c => (
@@ -32,6 +34,7 @@ function History({ activeId, onPick }: { activeId?: string; onPick?: () => void 
           {c.title}
         </Link>
       ))}
+      </div>
     </>
   )
 }
@@ -144,7 +147,7 @@ export function Chat() {
 
   return (
     <div className="body">
-      <aside aria-label="Chats" className="side hide-sm">
+      <aside aria-label="Chats" className="side chat-side hide-sm">
         <History activeId={id} />
       </aside>
 
