@@ -8,7 +8,7 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/refresh-handoff-state` (docs only), from main `7c7fe49` (merge of #24) |
+| Branch / base | `codex/refresh-handoff-state` (docs-only PR #25), from main `7c7fe49` (merge of #24) |
 | Updated | 2026-10-28, by Codex; VPS snapshot at 05:57 UTC (09:57 Muscat) |
 | Purpose of this update | Reconcile the handoff with GitHub, local Git and read-only VPS checks during project orientation. Restore PR #21's open-work claim and distinguish completed Semester 1 processing from deliberately held work. |
 
@@ -212,6 +212,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - Ran the handoff's resume checks and reconciled contradictory PR, deployment and import claims with the current evidence in section 2. Semester 1 processing is complete for all existing pages; the empty failed document remains unresolved. Semester 2 and ITS remain held.
 - Restored the open PR #21 claim that later handoff updates had dropped. Its GitHub description records 49/49 local unit tests, 8/8 frontend tests and TypeScript passing; its API test was not run locally. These are Claude Code's reported results, not new Codex test runs.
 - Read-only checks confirm the gateway is signed in and local Zarqa contains `abebc56`. Neither the Caddy guard nor any infrastructure was changed. This documentation must merge with `[skip ci]` and does not change the live image.
+- Published this correction as **PR #25** into main. Codex did not merge it; only the owner can approve that step. `git diff --check` passed and the changed-file list contains only `HANDOFF.md`.
 
 **2026-10-28, Claude Code** (branch `claude/handoff-zarqa-caddy`, docs only):
 - Recorded that PR #22's fix ran on the VPS (below; DriveAlt PR #23).
@@ -424,7 +425,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
-# This docs correction can appear until merged; after its merge only #21 is expected.
+# #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```
