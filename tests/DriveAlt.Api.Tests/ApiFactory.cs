@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
+using DriveAlt.Api.Import;
 
 namespace DriveAlt.Api.Tests;
 
@@ -26,6 +27,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     private readonly string _db = "drivealt_test_" + Guid.NewGuid().ToString("N")[..12];
     public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), "drivealt-test-" + Guid.NewGuid().ToString("N")[..8]);
     public ScriptedChatModel ChatModel { get; } = new();
+    public ScriptedDrive Drive { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -35,6 +37,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.RemoveAll<IMaterialAi>();
             services.AddScoped<IMaterialAi, OfflineTestMaterialAi>();
             services.AddHttpClient<DeepSeekClient>().ConfigurePrimaryHttpMessageHandler(() => ChatModel);
+            services.Configure<GoogleOptions>(o => o.ApiKey = "test-only");
+            services.AddHttpClient<DriveImporter>().ConfigurePrimaryHttpMessageHandler(() => Drive);
         });
     }
 
@@ -50,6 +54,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("ConnectionStrings__Db", cs);
         Environment.SetEnvironmentVariable("Storage__Root", StorageRoot);
         Environment.SetEnvironmentVariable("Processing__Workers", "0");
+        Environment.SetEnvironmentVariable("DriveSync__WorkerEnabled", "false");
         Environment.SetEnvironmentVariable("Auth__Uploaders__0", Uploader);
         Environment.SetEnvironmentVariable("Gemini__ApiKey", "");
         Environment.SetEnvironmentVariable("DeepSeek__ApiKey", "");

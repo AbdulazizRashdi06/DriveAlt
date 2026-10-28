@@ -32,6 +32,26 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
 
     private sealed record Planned(List<(DriveItem Item, string Path)> Items, string[] Segments, string Title);
 
+    // Sync imports only previously unseen individual Drive IDs, even when older photos were grouped together.
+    public Task<List<DriveItem>> ListFolderAsync(string folderId, CancellationToken ct) => ListAsync(folderId, ct);
+
+    public async Task<Guid?> ImportNewAsync(List<DriveItem> items, string[] segments, Guid uploaderId, CancellationToken ct)
+    {
+        var courses = await db.Courses.AsNoTracking().ToListAsync(ct);
+        var first = items[0];
+        var mapped = Map(segments, first.Name, courses);
+        if (mapped.Course is null) return null;
+        var parts = items.Select(i => (i, i.GoogleType is null ? i.Name : i.Name + ".pdf")).ToList();
+        var title = items.Count > 1 ? $"{segments.LastOrDefault() ?? "Drive"} (new photos)" : Heuristics.TitleFromName(parts[0].Item2);
+        var sourceRef = "gdrive:" + string.Join('+', items.Select(i => i.Id));
+        var existing = await db.Files.Where(f => f.SourceRef == sourceRef).Select(f => (Guid?)f.Id).FirstOrDefaultAsync(ct);
+        return existing ?? await ImportAsync(new Planned(parts, segments, title), sourceRef, mapped, uploaderId, ct);
+    }
+
+    public static bool CanImport(DriveItem item) => item.Kind != "folder" &&
+        !SkipExtensions.Contains(Path.GetExtension(item.Name).ToLowerInvariant()) &&
+        (item.GoogleType is not null || DocumentConverter.IsSupported(item.Name) || Path.GetExtension(item.Name) == "");
+
     public async Task<int> RunAsync(string[] args, CancellationToken ct)
     {
         var valued = new[] { "--only", "--limit", "--uploader", "--from-local", "--skip" };
@@ -324,7 +344,7 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
             : $"https://www.googleapis.com/drive/v3/files/{item.Id}?alt=media&key={key}";
     }
 
-    private async Task ImportAsync(Planned p, string refKey, Mapping m, Guid uploaderId, CancellationToken ct)
+    private async Task<Guid> ImportAsync(Planned p, string refKey, Mapping m, Guid uploaderId, CancellationToken ct)
     {
         var id = Guid.NewGuid();
         var dir = storage.OriginalDir(id);
@@ -352,6 +372,14 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
                     await using var dst = File.Create(path);
                     await src.CopyToAsync(dst, ct);
                 }
+                if (!DocumentConverter.IsSupported(name))
+                {
+                    var extension = SniffExtension(path) ?? throw new InvalidOperationException("Unsupported Drive file content.");
+                    var renamed = path + extension;
+                    File.Move(path, renamed);
+                    path = renamed;
+                    part += extension;
+                }
                 await using (var f = File.OpenRead(path)) hashes.Add(await SHA256.HashDataAsync(f, ct));
                 size += new FileInfo(path).Length;
                 parts.Add(part);
@@ -364,14 +392,15 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
         }
 
         var hash = Convert.ToHexString(hashes.Count == 1 ? hashes[0] : SHA256.HashData(hashes.SelectMany(h => h).ToArray())).ToLowerInvariant();
-        if (await db.Files.AnyAsync(f => f.Sha256 == hash, ct))
+        var duplicate = await db.Files.Where(f => f.Sha256 == hash).Select(f => (Guid?)f.Id).FirstOrDefaultAsync(ct);
+        if (duplicate is { } duplicateId)
         {
             Storage.TryDeleteDir(dir);
             log.LogInformation("Already have {Title} (same content)", p.Title);
-            return;
+            return duplicateId;
         }
 
-        var first = p.Items[0].Path;
+        var first = DocumentConverter.IsSupported(p.Items[0].Path) ? p.Items[0].Path : parts[0];
         var kind = DocumentConverter.IsImage(first) ? SourceKinds.Images : DocumentConverter.IsOffice(first) ? SourceKinds.Office : SourceKinds.Pdf;
         db.Files.Add(new DocFile
         {
@@ -393,5 +422,6 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
         });
         JobQueue.Enqueue(db, id, JobKinds.Process);
         await db.SaveChangesAsync(ct);
+        return id;
     }
 }

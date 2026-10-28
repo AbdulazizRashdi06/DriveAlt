@@ -578,3 +578,22 @@ a, button, input, textarea, select, label {
 .ans-toggle:active { transform: scale(.95); }
 .ans-toggle.on { background: var(--paper); border-bottom-color: #E6D3AE; }
 @media (prefers-reduced-motion: reduce) { .shot-img { animation: fade-in 150ms ease both; } .ans-toggle:active { transform: none; } }
+/* Uploader's public Drive folder controls. */
+.drive-sync { display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 24px; background: #fff9ec; border-bottom: 4px solid #f3e6cb; min-width: 0; }
+.drive-sync h2, .drive-sync p { margin: 0; }
+.drive-sync p { font-size: 15px; line-height: 1.5; color: #725437; }
+.drive-sync-head { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; }
+.drive-sync-toggle, .drive-sync-folder label { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.drive-sync input[type=checkbox] { appearance: none; width: 44px; height: 26px; flex-shrink: 0; border: 2px solid #bba584; border-radius: 20px; background: #e7dcc7; cursor: pointer; position: relative; }
+.drive-sync input[type=checkbox]::before { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform .15s; }
+.drive-sync input[type=checkbox]:checked { background: #3266ff; border-color: #3266ff; }
+.drive-sync input[type=checkbox]:checked::before { transform: translateX(18px); }
+.drive-sync input[type=checkbox]:focus-visible { outline: 3px solid #ff6b25; outline-offset: 3px; }
+.drive-sync input[type=checkbox]:disabled { opacity: .5; cursor: wait; }
+.drive-sync-search { display: grid; gap: 5px; }
+.drive-sync-folders { max-height: 480px; overflow-y: auto; display: grid; gap: 8px; }
+.drive-sync-folder { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; background: white; border-radius: 16px; padding: 12px; }
+.drive-sync-folder label { min-width: 0; flex: 1 1 240px; }
+.drive-sync-folder span { min-width: 0; overflow-wrap: anywhere; }
+.drive-sync-folder small { display: block; color: #725437; }
+.drive-sync-folder p { flex-basis: 100%; }

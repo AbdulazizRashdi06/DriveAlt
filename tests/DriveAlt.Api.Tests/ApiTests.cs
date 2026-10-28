@@ -13,7 +13,7 @@ using SkiaSharp;
 
 namespace DriveAlt.Api.Tests;
 
-public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
+public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
 {
     private static readonly string[] MidtermLines =
     [

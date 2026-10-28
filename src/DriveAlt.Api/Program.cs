@@ -49,7 +49,10 @@ builder.Services.AddScoped<ProcessingService>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<ResultCards>();
 builder.Services.AddScoped<ChatService>();
-builder.Services.AddHttpClient<DriveImporter>(c => c.Timeout = TimeSpan.FromMinutes(10));
+builder.Services.AddHttpClient<DriveImporter>(c => c.Timeout = TimeSpan.FromMinutes(10)).RemoveAllLoggers();
+builder.Services.AddScoped<DriveSyncService>();
+if (!importMode && cfg.GetValue("DriveSync:WorkerEnabled", true))
+    builder.Services.AddHostedService<DriveSyncWorker>();
 builder.Services.AddScoped<LocalImporter>();
 
 if (string.IsNullOrWhiteSpace(cfg["Resend:ApiKey"]))
@@ -155,6 +158,7 @@ InspectEndpoints.Map(app);
 BookmarkEndpoints.Map(app);
 AdminEndpoints.Map(app);
 ReportEndpoints.Map(app);
+DriveSyncEndpoints.Map(app);
 
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");
