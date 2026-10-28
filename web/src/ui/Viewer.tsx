@@ -12,6 +12,7 @@ export function originalHref(r: Pick<ResultCard, 'fileId' | 'pageNumber'>) {
 }
 
 export function resultLabel(r: ResultCard) {
+  if (r.kind === 'file') return 'Full file'
   const q = r.questionNumber ? `Q${r.questionNumber.replace(/^q/i, '')}` : null
   if (r.kind === 'question') return q ?? 'Question'
   if (r.kind === 'answer') return q ? `Answer · ${q}` : 'Answer'

@@ -76,10 +76,18 @@ public static class ChatEndpoints
             }
 
             await Send("status", new ChatStatus("Sniffing around…"));
-            await chat.SendAsync(convo, uid, body.Text, body.Option, body.More, new ChatStream(
-                s => Send("status", s),
-                m => Send("message", new { conversation = new ConversationDto(convo.Id, convo.Title, convo.UpdatedAt), message = m }),
-                (messageId, options) => Send("options", new { messageId, options })), ct);
+            try
+            {
+                await chat.SendAsync(convo, uid, body.Text, body.Option, body.More, new ChatStream(
+                    s => Send("status", s),
+                    m => Send("message", new { conversation = new ConversationDto(convo.Id, convo.Title, convo.UpdatedAt), message = m }),
+                    (messageId, options) => Send("options", new { messageId, options })), ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                app.Logger.LogWarning("Chat reply failed: {ErrorType}", e.GetType().Name);
+                await Send("error", new { error = "The AI couldn't complete this reply. Please try again." });
+            }
             await Send("done", new { });
         });
     }

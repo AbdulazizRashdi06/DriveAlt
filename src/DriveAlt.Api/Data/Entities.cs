@@ -277,6 +277,8 @@ public sealed class Message
     public string[] Results { get; set; } = [];
     /// <summary>Further result refs held back so a reply isn't overwhelming; "show more" pages through them.</summary>
     public string[] More { get; set; } = [];
+    /// <summary>Model-written follow-up lines prepared alongside held-back result batches.</summary>
+    public string[] MoreCommentary { get; set; } = [];
     /// <summary>JSON list of <c>ChatOption</c>: the choices of a clarifying question, each searched while the student answers.</summary>
     public string? Options { get; set; }
     public bool Refused { get; set; }

@@ -195,6 +195,9 @@ a, button, input, textarea, select, label {
 /* ---------- result cards ---------- */
 .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 18px; align-items: start; }
 .card { border-radius: 28px; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 7px solid rgba(0, 0, 0, .18); min-width: 0; }
+.file-card { width: 100%; max-width: 360px; justify-self: start; }
+.file-card .shot { cursor: pointer; }
+.file-card .shot img { max-height: 220px; }
 .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px 0; font: 900 13px/1 var(--font-body); text-transform: uppercase; }
 .card.on-dark { color: #fff; }
 .shot { display: block; border: 0; padding: 0; width: 100%; cursor: zoom-in; border-radius: 18px; overflow: hidden; background: var(--paper); line-height: 0;
