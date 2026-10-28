@@ -8,17 +8,31 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/handoff-zarqa-caddy-done` (docs only), from main `6c74000` (merge of #23) |
-| Updated | 2026-10-28, by Claude Code (cloud session: no VPS access, GitHub scoped to DriveAlt only) |
-| Purpose of this update | Codex: record the question-only re-read and claim the full import and usage-limit monitoring. **Claude Code:** fix the answers rule (answers may be SHOWN in crops, never WRITTEN by any AI), and record the import's real state at 2026-10-24 11:48 UTC (stuck: lost ChatGPT login, Gemini quota). **Then, on the owner's order, take over the import from Codex** and add `import-local`, which fills pages from DriveAlt-local results without the page-reading model, plus a Gemini-quota fallback. |
+| Branch / base | `codex/refresh-handoff-state` (docs-only PR #25), from main `7c7fe49` (merge of #24) |
+| Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
+| Purpose of this update | Reconcile the handoff with GitHub, local Git and read-only VPS checks during project orientation. Restore PR #21's open-work claim and distinguish completed Semester 1 processing from deliberately held work. |
 
-**2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** from 2026-10-26 (seen 15:38 UTC and still at 2026-10-27 ~21:45 UTC). Zarqa's deploys upload Zarqa's own `deploy/Caddyfile` over the shared `/opt/zarqa/deploy/Caddyfile`, and that copy has no `drivealt` block (open thread (f) predicted this). Every deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **Permanent fix merged in the Zarqa repo (PR #6, `abebc56`)**; it takes effect once the owner's local Zarqa checkout has it (open thread (f)).
+**2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
-**PR #20 (merged as `a920112`):** the conversational bot (section 3, 2026-10-25 entry). Written for after it merges: image = its merge commit, `messages` has the `more` and `options` columns.
+**PR #20 is deployed:** main contains `a920112`; the live image is the later PR #22 merge `b1461cc`, and `psql -c '\d messages'` lists `more` and `options`. **PR #21 is still open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** the app is live (image `dfb1877`; PR #20 pending). Files being re-read stay searchable (**21 of 22 Semester 1 past papers visible**). The bot shows questions for question requests. The Semester 1 files missing from the Drive import are now in. Sol works through 381 Semester 1 pages, plus 3 new files, exam files first, as the ChatGPT plan's limits allow. Semester 2 and ITS are held.
+**In one line:** the app is healthy on image `b1461cc`. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
 
 ## 2. State of the world
+
+**Current verification, 2026-10-28 05:57 UTC** (Codex; read-only SSH and GitHub connector):
+- **Full Year 2 inventory checked again at 06:03 UTC, on the owner's clarification:** SQL grouped by `courses.semester` returns Semester 1 `224 added / 210 ready / 13 reading / 1 failed / 6085 pages`; Semester 2 `179 added / 2 ready / 177 reading / 0 failed / 3588 pages`. `select count(*), count(distinct course_id), sum(page_count) from files` returns `403 / 14 / 9673`. All 403 files have a source reference. File kinds: `pdf 291`, `office 89`, `images 23`. This confirms material from both semesters has been added; exact completeness against the original Drive needs a source-manifest comparison and is not established by these counts alone.
+- `git merge-base --is-ancestor b1461cc origin/main` exits 0; fetched main is `7c7fe49`. GitHub `search_prs`, query `repo:AbdulazizRashdi06/DriveAlt is:open`, returns only **#21**.
+- `grep -o '^DRIVEALT_IMAGE=.*' ~/drivealt/.env` returns `ghcr.io/abdulazizrashdi06/drivealt:b1461cc1a18da2c1ce210a167d1f50d809dae821`, matching `git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'`.
+- Public `/api/health` returns `{"ok":true}`; gateway `/health` returns `{"signedIn":true}`; gateway source SHA256 prefix remains `5da0c724e36f4562`.
+- SQL: files `ready 212 / 5,501 pages`, `reading 190 / 4,172 pages`, `failed 1 / 0 pages`; pages `read_ok 5665`, `read_offline 0`; regions `question 1105` only.
+- SQL: jobs `done 296`, `failed 1`, `queued 190`; all 190 queued jobs have `Held: owner wants Semester 1 without ITS only`; `paused_now 0`. `docker compose ... logs --since 24h --no-log-prefix app | grep -c 'AI paused'` returns `0` (grep exit 1 is expected for no matches).
+- Semester 1 excluding `its`: Accounting 26 ready, Database Systems 56 ready + 1 failed, Data Structures 44 ready, Organisation & HR 10 ready, Probability & Statistics 41 ready, RPS 15 ready. SQL grouped by course finds **zero unread pages in every in-scope course**. The 4,008 unread pages are all in held courses.
+- Import lifecycle markers still show start `2026-10-23T18:58:30Z`, download/queuing end `2026-10-23T19:17:03Z`, exit `1`; `tail -1 import.log` says `Done: 404 queued, 1 skipped, 2 failed. The server's workers will process them.` Download completion is separate from later processing completion. The exact time the last in-scope file finished and cumulative usage-limit blocking time remain **unknown**.
+- `git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD` exits 0: the owner's local Zarqa checkout now contains the permanent Caddy fix. A subsequent Zarqa deploy preserving the route has **not been verified** here.
+- No application tests were rerun for this Markdown-only correction. Historical test results below retain their original dates and scope. No VPS, DNS, Caddy, secrets or job state was changed.
+
+**Historical evidence below is dated; the snapshot above is the current state.**
 
 **Git** (verified after the merges):
 ```
@@ -49,9 +63,13 @@
 | #17 | merged with `[skip ci]` | `claude/handoff-missing-files` (Claude Code) | Handoff after #16. Docs only. |
 | #18 | merged `dfb1877`, **deployed**; the owner confirmed chat works | `claude/show-sent-message` (Claude Code) | Chat: the sent message shows at once in a new chat. |
 | #19 | merged `6e212e0` with `[skip ci]` | `claude/handoff-after-18` (Claude Code) | This page after #18. Docs only. |
-| **#20** | **open** | `claude/conversational-bot` (Claude Code) | Bot asks instead of substituting; clarifying question with options searched while the student answers; 3 results first, the rest behind "Show more". **Code + DB migration: merge normally (CI and deploy), not `[skip ci]`.** |
+| #20 | merged `a920112`, deployed | `claude/conversational-bot` (Claude Code) | Bot asks instead of substituting; options and Show more; migration confirmed on the VPS. |
+| **#21** | **open** | `claude/pick-fix-and-owner-login` (Claude Code) | Typed picks follow the named course; owner's fixed-code student login; login subtitle removed. Owner approval required to merge; code PR, so merge normally. |
+| #22 | merged `b1461cc`, deployed | `claude/deploy-fixes-caddy` | Caddy recovery and deployment checks; current live image. |
+| #23 | merged `6c74000`, docs only | `claude/handoff-zarqa-caddy` | Records deployed Caddy recovery. |
+| #24 | merged `7c7fe49`, docs only | `claude/handoff-zarqa-caddy-done` | Records Zarqa PR #6, the permanent Caddy fix. |
 
-**Other repos:**
+**Other repos (2026-10-25 historical note; gateway branch status not rechecked on 2026-10-28):**
 - **Zarqa repo** (`AbdulazizRashdi06/Zarqa`, local `C:\Projects\LostraAi`): branch `codex-model-choice` (`f403756`) is pushed and **deployed to the VPS**, but has **no PR and isn't merged**. The owner's local LostraAi `main` is ahead of origin by 3 commits (Caddy changes for Zoor and Schedule). That's the owner's own work; leave it alone.
 
 **Tests:**
@@ -185,12 +203,18 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **Fix (also PR #16):** `import-drive --from-local <dir> [--skip <prefix>]` plans from DriveAlt-local's `manifest.json` and `originals/`, taking only Drive IDs not in the app yet. Names without an extension get one from the content (`DriveImporter.SniffExtension`: JPEG, PNG, PDF, HEIC, docx and pptx; `SniffTests`). Files are copied instead of downloaded; grouping, course mapping and the duplicate check are unchanged.
 - **Unread pages at 03:51 UTC:** Semester 1 without ITS 489; Semester 2 and ITS 4,008 (held).
 
-**Broken on purpose:** nothing known. **Drift** (live, but not in git):
-- The `drivealt.tryzarqa.com` block and the Cloudflare global block exist only in the VPS's `/opt/zarqa/deploy/Caddyfile`, not in the Zarqa repo. `ensure-caddy.sh` re-adds them after Zarqa deploys; open thread (f) is the real fix.
-- The VPS gateway runs an unmerged branch.
-- `README.md` still says Gemini does page reading and chat.
+**Broken on purpose:** Semester 2 and ITS processing is held by owner instruction; only the owner can authorize releasing those jobs. The temporary Caddy guard remains enabled pending verification after a Zarqa deploy.
+
+**Remaining drift:** gateway merge/configuration status needs verification (open thread 3). README's model table is current, but its deploy steps, secret table and offline-mode wording need review (`README.md`, sections Stack and Deploy on the Zarqa VPS). The former Caddy source drift is fixed in Git and local Zarqa; later deployment verification remains open.
 
 ## 3. What was done
+
+**2026-10-28, Codex** (`codex/refresh-handoff-state`, docs only):
+- Ran the handoff's resume checks and reconciled contradictory PR, deployment and import claims with the current evidence in section 2. Semester 1 processing is complete for all existing pages; the empty failed document remains unresolved. Semester 2 and ITS remain held.
+- Restored the open PR #21 claim that later handoff updates had dropped. Its GitHub description records 49/49 local unit tests, 8/8 frontend tests and TypeScript passing; its API test was not run locally. These are Claude Code's reported results, not new Codex test runs.
+- Read-only checks confirm the gateway is signed in and local Zarqa contains `abebc56`. Neither the Caddy guard nor any infrastructure was changed. This documentation must merge with `[skip ci]` and does not change the live image.
+- Published this correction as **PR #25** into main. Codex did not merge it; only the owner can approve that step. `git diff --check` passed and the changed-file list contains only `HANDOFF.md`.
+- After the owner clarified that almost all Year 2 files were already added, queried the complete database inventory rather than only ready/in-scope files: 403 registered files across both semesters and 14 courses. Added the distinction between ingestion and processing to the current summary; no data or jobs were changed.
 
 **2026-10-28, Claude Code** (branch `claude/handoff-zarqa-caddy`, docs only):
 - Recorded that PR #22's fix ran on the VPS (below; DriveAlt PR #23).
@@ -299,8 +323,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **Builds:** "build in github", not on the VPS. The VPS already holds about 36 GB of build cache from the apps built there.
 - **Import ownership (2026-10-24):** the owner said *"no no override codex for now do whateer it takes to upload everything"*. **Claude Code now owns the import**, which overrides Codex's claim in PR #10. Codex: don't relaunch or requeue it.
 - **Scope (2026-10-25):** process **Semester 1 without ITS only**. *"why are you processing sem 2 files?"* came after Semester 2 jobs were found queued. **Do not run Semester 2 or ITS** unless the owner asks.
-  - **Scope:** files with local results, i.e. Semester 1 PDFs without ITS.
-  - **Everything else** (photos, Office files, Semester 2, ITS, and pages without local text) still waits for Sol, which needs the ChatGPT gateway logged in again.
+  - **Current result (2026-10-28):** all existing Semester 1 pages without ITS are read, including photos and Office material. Semester 2 and ITS stay held. The remaining failed empty document has no pages.
 - **Answers: SHOWN yes, WRITTEN never.** On 2026-10-24 the owner said, with emphasis: *"answers can be shown just cant bew written by the ai ffs i told you million times"*. This **replaces** the earlier "question-only crops; find answers on the original sheet" reading from PR #5. That came from the earlier quote *"dont black the answers out … dont output them as text but leave them in paper"*, which meant: don't hide answers, and don't type them.
   - **Crops and pages:** they show the paper as it is, answers included. Nothing is blacked out or blurred.
   - **No AI writes an answer:** not the bot, not summaries, not extracted or region text.
@@ -316,7 +339,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - *"if he doesnt find what he want he take liberity to send other studff, instead he could ask and be conversational"*: when nothing matches, ask a question instead of sending other material.
   - *"he can ask question while fethcing is happening … i asked about algo analysis i wanted only ds, he searched also for efficient algos … search for both while i reply and decide then what to abandon, but let the user know that the search is started"*: for an ambiguous course, say the search has started, ask which course, search both in parallel, and keep only what the student picks.
   - *"even when not spcified "gimme every thing about ..." ask the bot to ouput a couple of the right answer and tell the user that he have more so it does not get overwhelming"*: show a couple of the right results (crops, never typed answers) and say more are ready.
-- **Merges:** PR #5 was explicitly approved with “Merge and deploy after CI passes.” The owner also approved the original full import; it remains gated on successful question-only test-file validation. New PR merges still need the owner's OK.
+- **Merges:** PR #5 was explicitly approved with “Merge and deploy after CI passes.” The original full import was also authorized and its test-file validation completed. New PR merges and any new VPS changes still need the owner's OK.
+- **Sign-in (2026-10-25):** whether to keep requiring sign-in remains undecided. PR #21 implements the owner's fixed-code student-view account using the GitHub secret `FIXED_CODES`; the secret value must never appear in this public repo. The PR is still open.
 
 ## 5. Judgment calls (made without asking)
 
@@ -329,15 +353,16 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **`CLAUDE.md`:** there was no `CLAUDE.md` to rename. `AGENTS.md` holds the rules, and `CLAUDE.md` is one line (`@AGENTS.md`), so Claude Code loads the same rules.
 - **One box per question, answers inside (2026-10-24, Claude Code):** separate answer boxes weren't brought back. Answers sit inside the question box, as they do on the paper, which keeps the model's job simple and the crop faithful to the page. The 1.5% padding in code is a safety net, so a slightly tight box can't clip a line, whatever the model does.
 - **Server details in a public repo:** this page names the VPS IP, user and paths. They're not secrets (DNS already exposes the IP, and SSH takes keys only). The owner was offered to strip them and chose to commit them as they are ("Commit AGENTS.md, CLAUDE.md and HANDOFF.md … and open a PR into main").
+- **2026-10-28, Codex:** project orientation is read-only except for correcting this stale handoff, as required by `AGENTS.md`. Existing Claude Code work in PR #21 remains owned by that agent. No inference is made about crop quality from SQL counts alone.
 
 ## 6. File inventory
 
 | Path | Role | Status |
 |---|---|---|
-| `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | created (this update) |
-| `HANDOFF.md` | This page | import progress tracked in draft PR #10 |
-| VPS `~/drivealt/import.{log,started.utc,launcher.pid,download-finished.utc,exit-code}` | Import output and lifecycle markers; never overwrite or blindly relaunch | started 18:58:30 UTC |
-| `README.md` | Features, local setup, import | **needs work**: its AI section is stale |
+| `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | current |
+| `HANDOFF.md` | This page | reconciled with 2026-10-28 read-only checks |
+| VPS `~/drivealt/import.{log,started.utc,launcher.pid,download-finished.utc,exit-code}` | Import output and lifecycle markers; never overwrite or blindly relaunch | download/queuing finished 2026-10-23; in-scope pages now complete |
+| `README.md` | Features, local setup, import | model table current; deploy steps, secret table and offline wording need review |
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
 | `deploy/docker-compose.yml`, `deploy/Dockerfile`, `deploy/.env.example` | Containers and their config; the app joins `zarqa_default` | current |
 | `src/DriveAlt.Api/Ai/{CodexClient,DeepSeekClient,GeminiClient,MaterialAi}.cs` | AI clients; page reading precedence is Codex → DeepSeek → Gemini → offline | updated by PR #5 (merged) |
@@ -347,9 +372,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | `src/DriveAlt.Api/Search/ResultCards.cs`, `web/src/ui/ResultCard.tsx` | Result cards | updated by PR #5 (merged) |
 | VPS `~/drivealt/{.env,generated.env,docker-compose.yml}` | Server config. **`generated.env` (DB password, OTP secret) must never be regenerated** | live |
 | VPS `/opt/zarqa/deploy/codex/gateway.mjs` (+ `.bak-before-sol`) | Codex gateway | live, from an unmerged branch |
-| VPS `/opt/zarqa/deploy/Caddyfile` (+ `.bak-before-drivealt`, `.bak-drivealt-<time>`) | Zarqa's Caddy, including the `# >>> drivealt` block | Zarqa deploys drop the block; DriveAlt's deploy and guard put it back |
+| VPS `/opt/zarqa/deploy/Caddyfile` (+ backups) | Shared Caddy config, including DriveAlt | route healthy; permanent fix now also present in local Zarqa |
 | `deploy/ensure-caddy.sh` | Restores DriveAlt's Caddy blocks on the VPS when missing; validate, in-place write, graceful reload, rollback | new 2026-10-27 |
-| `.github/workflows/caddy-guard.yml` | Runs `ensure-caddy.sh` every 15 min (`main` only) | new 2026-10-27; remove once Zarqa's repo carries the block |
+| `.github/workflows/caddy-guard.yml` | Runs `ensure-caddy.sh` every 15 min (`main` only) | temporary; remove only after a Zarqa deploy is verified to preserve the route |
 | `.box-compare/` | Model box-test images | not committed (excluded in `.git/info/exclude`) |
 
 **Secrets** (names only, in GitHub → Settings → Secrets):
@@ -362,77 +387,76 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-0. **Risk from `import-local` (hypothesis):** typed exam pages filled from the PDF text use the whole page text, which on solution sheets contains typed answers. That text is indexed, and search snippets are private context for the chat model. The server guardrails (`Chat/Guardrails.cs`) still stop the bot from writing them. This is the same as the app's built-in offline mode. Re-running those pages through Sol (which leaves answers out of its text) removes the risk.
-0. **Blockers found 2026-10-24 (Claude Code):**
-   - **(g) Conversational bot:** done in **PR #20** (Claude Code, `claude/conversational-bot`), waiting for the owner's merge. After deploy, confirm with the owner's test query (section 3).
-   - **(e) Codex process leak (2026-10-25):** killed runs leave the native `codex` process running. Fix it in the Zarqa repo's `deploy/codex/gateway.mjs`: spawn detached and kill the whole process group, or reap `codex` processes older than the timeout. Also set `pids_limit` in `deploy/docker-compose.yml` to 1024 to match the live value. Until then, if the gateway says `signedIn:false`, check `docker stats` PIDs before asking the owner to log in again.
-   - **(f) Caddyfile drift: fixed in the Zarqa repo, one step left.** Zarqa PR #6 (merged 2026-10-28 as `abebc56`) adds the Cloudflare global block and the `# >>> drivealt` site to Zarqa's `deploy/Caddyfile`, with the same text as `deploy/ensure-caddy.sh`. That combination was validated on the VPS by deploy run 40590404639; it wasn't re-validated in the cloud session (no Docker there).
-     - **Catch:** Zarqa's `deploy/deploy.sh` uploads the owner's **local** `C:\Projects\LostraAi` tree, not GitHub. Until that checkout contains `abebc56` (the owner pulls or merges `origin/main` into the local `main`, which is ahead by 3 unpushed commits), a Zarqa deploy still drops DriveAlt's route, and the 15-minute guard restores it.
-     - **Done when:** after a Zarqa deploy from a checkout that contains `abebc56`, `curl -s https://drivealt.tryzarqa.com/api/health` → `{"ok":true}` with no gap, and the next "Caddy guard" run says "Caddy already routes drivealt.tryzarqa.com." Then delete `.github/workflows/caddy-guard.yml` in a DriveAlt PR; keep `ensure-caddy.sh` in the deploy as a no-op safety net.
-   - **(a) ChatGPT login:** the gateway is logged out. Only the owner can log it in again (section 9, Rollback).
-   - **(b) Gemini quota:** the free embedding quota fails whole files (49). Options: switch on billing for the key, or make a Gemini 429 pause the file the way Codex limits do (code change, not done).
-   - **(c) Wrong rule in another checkout:** `C:\Users\abdul\DriveAlt` (branch `feat/luna-sol-review`, **another agent's uncommitted work**) has a prompt saying answers are *"never inside a question box"* (`src/DriveAlt.Api/Ai/MaterialAi.cs:147` there). That contradicts the owner's rule and must be fixed before it's committed. Not edited here, because it belongs to another agent.
-   - **(d) Re-run AI:** pages read before this branch have crops without answers, so re-run AI on those files once this branch deploys.
-1. **Question-only test-file validation:** complete by SQL: seven AI-read pages, zero offline pages, 29 questions and no answer/other regions. The owner can still inspect box placement in the UI; Codex has not inspected it visually.
-2. **Full Drive import:** running since 18:58:30 UTC; Codex owns startup and monitoring on `codex/drive-import-monitoring`, draft PR #10. Check markers/processes before attempting any relaunch.
-3. **Usage-limit report:** Codex is tracking this through the app follow-up `monitor-drivealt-import-and-codex-usage-limits`, initially every 15 minutes then hourly once steady. Remain quiet while unchanged. Report ready/failed files, total/offline pages, actual usage-limit pauses and estimated blocking time, and wall clock. Do not add overlapping per-file retries as independent wall-clock delays.
-4. **Zarqa repo:** open a PR for `codex-model-choice`. Until then, a Zarqa redeploy that rewrites the gateway would undo it. (The Caddy block for the same repo is thread (f).)
-5. **README:** the AI section needs updating to match section 2.
-6. **Codex's limit wording is unverified:** the gateway matches `usage limit|rate limit|quota|too many requests`. If a limit arrives as a plain 502, pages are read offline instead of pausing. Watch `read_offline` during the import.
-7. **VPS disk:** about 36 GB of unused Docker build cache from the other apps. Prune it only with the owner's OK.
-8. **Optional:** skip re-running the tests on `main` after a PR has already passed them; it would save about 1.5 min per deploy.
+1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. Do not edit or push to that branch. Owner approval is required to merge; normal code deployment applies.
+2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
+3. **Gateway process leak and configuration drift:** the last reviewed gateway could leave native Codex children running after timeout, and its live PID cap was raised to 1024 while the compose file still used 256 (2026-10-25 evidence above). Gateway source hash is unchanged; no fix is confirmed here. If health says signed out, inspect process pressure before asking for another login. The deployed `codex-model-choice` branch's merge status has not been rechecked in this orientation. Its limit matcher (`usage limit|rate limit|quota|too many requests`) may miss a plain 502; offline fallback handling needs review if such a response occurs.
+4. **Failed document:** SQL still reports one Database Systems file with zero pages and failed status. Earlier diagnosis was `pdftoppm … Document stream is empty`. Repair/replacement needs a separate task; nothing was deleted or requeued.
+5. **Answer text in local imports (hypothesis):** historical `import-local` copied PDF text from solution sheets. All in-scope pages are now read, but this does not prove all indexed answer text was removed or that every crop is visually correct. No answer content was retrieved in these checks. The rule remains: show intact paper/crops; no AI writes answers in any text field.
+6. **Usage-limit report:** actual 429 pauses occurred during the import (dated evidence in section 2). The exact cumulative wall-clock delay and last in-scope completion time are unknown. Current queued jobs are held by owner instruction, not AI pauses; do not relaunch or requeue them. Do not add overlapping per-file retry intervals as independent elapsed time. Earlier notes named the automation `monitor-drivealt-import-and-codex-usage-limits`; its present configuration was not checked here.
+7. **README and embeddings:** README's model table is current, but deploy instructions and the Gemini secret/offline descriptions need review. The 2026-10-24 import finished 105 files without embeddings using keyword search; present embedding coverage was not queried. Paid Gemini usage remains an owner decision.
+8. **Other-checkout prompt (unverified):** the 2026-10-24 note about `C:/Users/abdul/DriveAlt` had a prompt excluding answers from boxes. That checkout belongs to another agent and was not inspected or changed here.
+9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
 
 | # | Step | Owner | Verify |
 |---|---|---|---|
-| 0 | **Done:** PR #6 merged; read AGENTS.md and this handoff | all agents | Main contains `7228c22` |
-| 1 | **Done:** PR #5 merged and deployed with owner approval; evidence in section 2 | Codex, `codex/question-only-crops` | VPS image tag must equal `6852f1d012beceb6ffcdc875bb01917b3439f157` |
-| 2 | **Done:** test file re-read under PR #5 and verified by SQL | Codex | Seven pages, no offline failures, 29 question regions, zero answer/other regions |
-| 3 | **Started 18:58:30 UTC:** full import command (do not launch again): `cd ~/drivealt && nohup docker compose --env-file generated.env --env-file .env exec -T app dotnet DriveAlt.Api.dll import-drive > ~/drivealt/import.log 2>&1 &` | agent | `tail -1 ~/drivealt/import.log` shows `Done: N queued…`; file count rises toward 407 |
-| 4 | **Claude Code owns the import.** Semester 1 local data is done (section 2). The 223 files left need Sol: photos, Office files, pages with too little text, Semester 2 and some ITS. | agent | `select status, count(*) from files group by status` |
-| 4a | **Done 2026-10-24:** owner logged in, plus a container restart and the cap raised to 1024 (section 2) | owner, Claude Code | `/health` returns `{"signedIn":true}` |
-| 4b | **Owner decides:** Gemini billing, so the 105 keyword-only files get embeddings (queue `reembed` jobs for them afterwards). | **owner**, then agent | pages with `embedding is not null` rise |
-| 4c | **Queued 2026-10-24 23:07 UTC:** 457 pages to re-read (older Sol pages and typed exam pages). They run as usage limits allow; Semester 1 first. | Claude Code | Page 6 of `6a3b9e40…`: crops include its answers; typed exam pages have more than one box |
-| 5 | Report to the owner: files ready and failed, total pages, pages read offline, **how many times limits paused the import and for how long in total**, and start-to-finish time | agent | Numbers taken from the step 4 queries |
-| 6 | **Caddy blocks done** (Zarqa PR #6). Left: owner pulls `abebc56` into local LostraAi `main`; after the next Zarqa deploy, delete `caddy-guard.yml` (open thread (f)). Also PR `codex-model-choice` (open thread 4) | **owner**, then agent | Repo `deploy/Caddyfile` vs the VPS file: no diff; after a Zarqa deploy, health stays `{"ok":true}` |
-| 7 | Update the README's AI section | agent | PR |
-| 8 | **PR #20:** owner merges (normal merge, deploys a migration); owner tries *"algorithm analysis questions"* | **owner**, Claude Code | `messages` has columns `more`, `options`; chips appear |
-
-**Test re-read is complete.** The owner can inspect its question boxes; no further click is needed for the completed re-read. **Pending approval:** merging this handoff follow-up, future PRs, and pruning build cache.
+| 1 | **Done:** orient and reconcile stale handoff from GitHub/VPS evidence; docs-only correction | Codex, `codex/refresh-handoff-state` | `git diff --check`; Markdown-only diff; owner's eventual merge uses `[skip ci]` |
+| 2 | **Owner decision:** PR #21 | Claude Code owns implementation; owner merges | Review CI on its current head; after authorized merge, verify typed course selection and student-view login |
+| 3 | **Done for existing in-scope pages:** Semester 1 without ITS; preserve held work | Claude Code retains import ownership | 192 ready files, one empty failed document; zero unread in-scope pages; 190 jobs held |
+| 4 | Verify the next authorized Zarqa deploy preserves Caddy, then consider retiring guard | owner, then agent | Local Zarqa contains `abebc56`; public health good; guard reports no repair needed |
+| 5 | Diagnose gateway leak/config drift in the Zarqa repo, without deploying implicitly | unclaimed separate task | Tests plus comparison with live gateway and compose; owner approves VPS changes |
+| 6 | Recover usage-limit timing if retained logs allow it; otherwise keep duration unknown | unclaimed separate task | Non-overlapping wall-clock intervals, with log timestamps |
+| 7 | Review README, failed document and remaining text/crop risks | unclaimed separate tasks | Follow the answers rule; do not print solution content |
 
 ## 9. Resume check
 
-Run these. If the output differs, this page is stale: find out why and update it first. The local gh CLI is not authenticated in the Codex runtime; use GitHub MCP as AbdulazizRashdi06 for PR operations. Codex used an isolated clone under its chat workspace, leaving C:/Projects/DriveAlt and LostraAi unchanged.
+Read the whole handoff first. Run independent checks against GitHub and the VPS; dated counts may legitimately improve, but explain discrepancies before further work. Never read secrets or the Codex auth volume.
 
-```bash
-cd C:/Projects/DriveAlt && git fetch -q && git merge-base --is-ancestor 6852f1d origin/main && echo "main has PR #5" && git log --oneline 6852f1d..origin/main
-# expect: "main has PR #5", then only commits that sections 2–3 explain (handoff PRs #7/#9). Anything else = stale page.
-gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName --jq '.[] | "#\(.number) \(.headRefName)"'
-# Open: nothing.
-git merge-base --is-ancestor b1461cc origin/main && echo "main has PR #22 (Caddy fix)"
-curl -s https://drivealt.tryzarqa.com/api/health   # expect {"ok":true}; a 525 means Caddy lost the block and the guard hasn't run yet
-# Zarqa repo (thread (f)): git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD && echo "local Zarqa has DriveAlt's Caddy block"  → must print before any Zarqa deploy.
-ssh -i ~/.ssh/zarqa_vps deploy@173.249.40.122 'cd ~/drivealt && grep -o "^DRIVEALT_IMAGE=.*" .env && curl -s https://drivealt.tryzarqa.com/api/health && docker exec zarqa-codex-1 node -e "fetch(\"http://127.0.0.1:8090/health\").then(r=>r.text()).then(console.log)" && sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16'
-# expect: DRIVEALT_IMAGE=…drivealt:<last main commit that changed code>, i.e.
-#   git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'   (currently PR #22's merge `b1461cc`)
-#   Docs-only PRs (#7, #9) are merged with [skip ci], so they don't build or deploy and the image stays put.
-#         {"ok":true}{"signedIn":true}
-#         5da0c724e36f4562
+Local Git (PowerShell):
+
+```powershell
+git fetch -q
+git status --short --branch
+git merge-base --is-ancestor b1461cc origin/main
+# Expect exit 0: main contains PR #22, including PR #20.
+git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
+# Last verified code merge/image tag: b1461cc1a18da2c1ce210a167d1f50d809dae821.
+# Later docs-only merges must not change the running image.
+git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
+# Expect exit 0: local Zarqa contains the permanent Caddy fix.
+gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
+# #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
+# #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
+# gh is unauthenticated in this Codex runtime: use GitHub search_prs with
+# query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```
-Port 22 is blocked on campus Wi-Fi; use another network if SSH times out.
 
-**Monitoring and test-file SQL** (on the VPS, in `~/drivealt`):
-```bash
-D="docker compose --env-file generated.env --env-file .env"
-$D exec -T db psql -U drivealt -d drivealt -c "select status, count(*), sum(page_count) pages from files group by status" \
+Read-only SSH (run the following on the VPS in `~/drivealt`; Windows callers should send LF lines or strip CR from stdin):
+
+```sh
+grep -o '^DRIVEALT_IMAGE=.*' .env
+curl --max-time 15 -s https://drivealt.tryzarqa.com/api/health
+docker exec zarqa-codex-1 node -e 'fetch("http://127.0.0.1:8090/health").then(r=>r.text()).then(console.log)'
+sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16
+# Expect image tag equal to the last first-parent code commit above,
+# {"ok":true}, {"signedIn":true}, and 5da0c724e36f4562.
+docker compose --env-file generated.env --env-file .env exec -T db psql -U drivealt -d drivealt \
+  -c '\d messages' \
+  -c "select status, count(*), sum(page_count) pages from files group by status" \
   -c "select count(*) filter (where error is null and extracted) read_ok, count(*) filter (where error is not null) read_offline from pages" \
-  -c "select count(*) paused_now from jobs where state='queued' and error like 'Paused:%'"
-$D exec -T db psql -U drivealt -d drivealt -c "select label, count(*) from regions group by label order by 1"
-$D logs --since 24h --no-log-prefix app 2>&1 | grep -c "AI paused"    # exits 1 when the count is 0; that's normal
-# expect (2026-10-25 04:29 UTC): files ready 145, reading 253, queued 3, tagging 1, failed 1; Semester 1 without ITS: 381 unread pages plus 3 new files; Semester 2 and ITS jobs held.
-# The reading count only falls after the owner logs the gateway in (step 4a). Higher ready / lower reading = progress since.
+  -c "select state, count(*), count(*) filter (where error like 'Held:%') held, count(*) filter (where error like 'Paused:%') paused from jobs group by state order by state" \
+  -c "select c.slug, count(*) filter (where not p.extracted) unread from pages p join files f on f.id=p.file_id join courses c on c.id=f.course_id where c.semester=1 and c.slug <> 'its' group by c.slug order by c.slug" \
+  -c "select label, count(*) from regions group by label order by 1"
+# Last verified 2026-10-28: messages has more/options; ready 212, reading 190,
+# failed 1; read_ok 5665, read_offline 0; done jobs 296, failed 1,
+# queued 190 (all held, none paused); every in-scope unread count 0;
+# question regions 1105, no other labels.
+docker compose --env-file generated.env --env-file .env logs --since 24h --no-log-prefix app 2>&1 | grep -c 'AI paused'
+# Last verified: 0. grep exits 1 when there are no matches; that is expected.
 ```
+
+SSH identity: `~/.ssh/zarqa_vps`, account `deploy@173.249.40.122`. Port 22 can be blocked on campus Wi-Fi. These checks are reads; rollback commands below mutate the VPS and require owner approval.
 
 **Rollback:**
 - **Gateway:** `cd /opt/zarqa && cp -p deploy/codex/gateway.mjs.bak-before-sol deploy/codex/gateway.mjs && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build --no-deps codex`
