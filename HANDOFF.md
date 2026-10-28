@@ -14,7 +14,7 @@
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
-**PR #20 is deployed:** main contains `a920112`; the live image is the later PR #22 merge `b1461cc`, and `psql -c '\d messages'` lists `more` and `options`. **PR #21 is still open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
+**PR #20 is deployed:** main contains `a920112`; the latest deployed code is PR #27 (`068f0b9`). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
 **In one line:** PR #27 deployed as image `068f0b9`; GitHub deployment and the origin health check passed. The owner reports that the university network refuses the proxied site, consistent with the checks below. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
 
@@ -34,7 +34,7 @@ For new replies, the model prepares follow-up text for held-back batches and cla
 
 **Report validation (2026-10-28, Codex):** `dotnet build --no-restore` → `Build succeeded. 0 Warning(s), 0 Error(s)`; the prescribed unit-test filter → `Passed: 45, Failed: 0, Skipped: 0`; `cd web; npm test` → `3 passed` files / `11 passed` tests; `npx tsc -b` and `npx vite build --outDir ../.ci-web` passed. `dotnet ef migrations has-pending-model-changes --project src/DriveAlt.Api --no-build` → `No changes have been made to the model since the last migration.` `node e2e/reports.mjs` passed crop reporting, uploader review/resolution/history, original-page reporting and viewport overflow checks on desktop and phone against a stand-in API, with no page errors. Screenshots were visually inspected. A focus-restoration issue found by the frontend tests was fixed. Local database/API tests were not run because the local Docker daemon is unavailable. **Full CI passed** on report code head `8b8c553` (run `40645271789`, job `122672563097`): `Passed! - Failed: 0, Passed: 68, Skipped: 0, Total: 68`, including all three new report integration tests, and frontend `11 passed`; TypeScript/build also passed. Later documentation-only commits do not change that tested code.
 
-**Current verification, 2026-10-28 05:57 UTC** (Codex; read-only SSH and GitHub connector):
+**Pre-deployment verification, 2026-10-28 05:57 UTC** (Codex; read-only SSH and GitHub connector):
 - **Full Year 2 inventory checked again at 06:03 UTC, on the owner's clarification:** SQL grouped by `courses.semester` returns Semester 1 `224 added / 210 ready / 13 reading / 1 failed / 6085 pages`; Semester 2 `179 added / 2 ready / 177 reading / 0 failed / 3588 pages`. `select count(*), count(distinct course_id), sum(page_count) from files` returns `403 / 14 / 9673`. All 403 files have a source reference. File kinds: `pdf 291`, `office 89`, `images 23`. This confirms material from both semesters has been added; exact completeness against the original Drive needs a source-manifest comparison and is not established by these counts alone.
 - `git merge-base --is-ancestor b1461cc origin/main` exits 0; fetched main is `7c7fe49`. GitHub `search_prs`, query `repo:AbdulazizRashdi06/DriveAlt is:open`, returns only **#21**.
 - `grep -o '^DRIVEALT_IMAGE=.*' ~/drivealt/.env` returns `ghcr.io/abdulazizrashdi06/drivealt:b1461cc1a18da2c1ce210a167d1f50d809dae821`, matching `git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'`.
@@ -346,6 +346,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-28, sync clarification:** folder switches import only newly added Drive files. Enabling Semester 2 later must NOT release its existing held jobs. The global switch and every folder start off; no live sync was enabled by Codex.
+
 - **2026-10-28:** implement automatic syncing of the publicly shared, third-party Year 2 Drive with a toggle for every folder; allow other semesters later, not now. Start paused with all folder switches off until configured, including Semester 2 and ITS. This task does not authorize merge/deploy or live paid processing.
 
 - **2026-10-28:** owner authorized merging and deploying the report and chat changes by saying “live it”. This does not authorize Docker image deletion or pruning.
@@ -401,7 +403,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | current |
 | `HANDOFF.md` | This page | reconciled with 2026-10-28 read-only checks |
-| `src/DriveAlt.Api/Reports/ReportEndpoints.cs`, report entity/config and `20261028062003_MaterialReports` | Student reporting and uploader review, with report-only schema migration | report feature branch; merge/deploy requires owner approval |
+| `src/DriveAlt.Api/Reports/ReportEndpoints.cs`, report entity/config and `20261028062003_MaterialReports` | Student reporting and uploader review, with report-only schema migration | deployed in PR #27 |
 | `web/src/ui/{ReportButton,ReportsInbox}.tsx`, viewer/file/admin integration | Reporting dialog and review inbox | 11 frontend tests; desktop/phone stand-in API smoke passed |
 | `web/e2e/reports.mjs`, `tests/DriveAlt.Api.Tests/ApiTests.cs` | Browser report smoke and three report integration cases | browser passed locally; all DB cases passed in CI run `40645271789` |
 | VPS `~/drivealt/import.{log,started.utc,launcher.pid,download-finished.utc,exit-code}` | Import output and lifecycle markers; never overwrite or blindly relaunch | download/queuing finished 2026-10-23; in-scope pages now complete |
@@ -409,7 +411,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
 | `deploy/docker-compose.yml`, `deploy/Dockerfile`, `deploy/.env.example` | Containers and their config; the app joins `zarqa_default` | current |
 | `src/DriveAlt.Api/Ai/{CodexClient,DeepSeekClient,GeminiClient,MaterialAi}.cs` | AI clients; page reading precedence is Codex → DeepSeek → Gemini → offline | updated by PR #5 (merged) |
-| `src/DriveAlt.Api/Chat/ChatService.cs`, `ChatEndpoints.cs` | Model-directed chat, draft follow-ups, SSE errors | feature branch; old `Guardrails.cs` removed at owner's request |
+| `src/DriveAlt.Api/Chat/ChatService.cs`, `ChatEndpoints.cs` | Model-directed chat, draft follow-ups, SSE errors | deployed in PR #27; old `Guardrails.cs` removed at owner's request |
 | `src/DriveAlt.Api/Processing/{Jobs,ProcessingService}.cs` | Job queue, pipeline, pause on limits | current |
 | `src/DriveAlt.Api/Import/DriveImporter.cs` | `import-drive` command | current |
 | `src/DriveAlt.Api/Search/ResultCards.cs`, `web/src/ui/ResultCard.tsx` | Result cards | updated by PR #5 (merged) |
@@ -432,7 +434,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 **Codex, `codex/drive-folder-sync`, PR #29:** add five-minute Drive polling with per-folder controls and a paused initial state. New folders default off; only selected folders import. Reuse the importer while tracking individual source IDs to avoid regrouping old photos. Existing held jobs remain untouched. Owner reports campus Wi-Fi recovered without DNS/server changes; cause remains unverified. Resume Git checks match main `842fbec`/code `068f0b9`; SSH remains refused from campus, so VPS checks are unknown.
 
-0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks and full CI passed (68 backend, 11 frontend). Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. GitHub deployment passed; direct post-deploy database verification remains unknown because the university network refuses SSH.
+0. **Reports and chat deployed (PRs #25–#28):** GitHub deployment passed; direct post-deploy database verification remains unknown because the university network refuses SSH. PR #29 adds opt-in Drive sync; no live scanning has started.
 0a. **PR #27:** full-file results and AI-authored chat with prewritten button follow-ups are deployed. PR #21 overlaps `ChatService.cs` and contains canned pick text rejected by the owner; preserve typed-course selection when reconciling. No other agent branch was modified.
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. It modifies `ChatService.cs` and writes a canned pick line, which conflicts with the owner's newer AI-written-replies decision. Coordinate/reconcile with the chat feature before either overlapping change is merged; do not edit or push to Claude's branch. Owner approval is required to merge.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
@@ -446,7 +448,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Ready for owner review — Codex, PR #29:** local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Full CI run `40661496361` on `83e7b26` passed: `Failed: 0, Passed: 51, Skipped: 0, Total: 51`, including two scripted-Drive/database cases, and frontend `16 passed`. `node e2e/drive-sync.mjs` passed on desktop and phone using a stand-in API; both screenshots were visually inspected after controls were styled. Later changes refine original-name preservation, add a disabled-folder assertion, style the controls and document results; latest CI must pass too. Docker is unavailable locally. No live import or paid AI call was made. Merge/deploy needs owner approval; after deployment, discover folders while paused and leave Semester 2/ITS off until explicitly selected.
+**Ready for owner review — Codex, PR #29:** local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Full CI run `40661496361` on `83e7b26` passed: `Failed: 0, Passed: 51, Skipped: 0, Total: 51`, including two scripted-Drive/database cases, and frontend `16 passed`. `node e2e/drive-sync.mjs` passed on desktop and phone using a stand-in API; both screenshots were visually inspected after controls were styled. The final code head `d2be664` also passed full CI run `40661879269` (test job `122726648712`); this includes the disabled-folder assertion, original-name preservation and styled controls. Subsequent commits only record results/owner decisions. Docker is unavailable locally. No live import or paid AI call was made. Merge/deploy needs owner approval; after deployment, discover folders while paused and leave Semester 2/ITS off until explicitly selected.
 
 **Follow-up:** From an unrestricted network, verify the running image, report table, `messages.more_commentary`, and held jobs. Confirm normal Cloudflare access from outside the university network and test DeepSeek behavior when authorized. Keep PR #21 coordinated with Claude Code.
 
