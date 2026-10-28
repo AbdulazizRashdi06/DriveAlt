@@ -20,6 +20,8 @@
 
 ## 2. State of the world
 
+**Deployment in progress (2026-10-28, Codex):** Owner authorized making the reports and chat changes live. PR #25 merged as `99739d0` with `[skip ci]`, and PR #26 merged as `fbeeaeb`. Its automatic run `40652632065` was cancelled before deploy after discovery that `deploy.yml` deleted old images and pruned Docker images despite the rule requiring owner approval for deletion. PR #27 removes that automatic image cleanup and `--remove-orphans` before deployment. The running image remains `b1461cc` until the replacement deployment is verified. PR #21 remains open and belongs to Claude Code.
+
 **Chat feature, after this branch merges and deploys:** DeepSeek chooses whole-file (`f:`), question-crop (`r:`), or page (`p:`) results; a full-file card opens/downloads the original file. File searches can use already-available originals from held courses without releasing processing jobs. The model writes all conversational replies; the server no longer substitutes canned refusal/search/option lines or rewrites the model's wording. The model prompt still forbids writing, explaining, hinting at or grading answers and permits showing original images intact. The owner explicitly chose to trust DeepSeek instead of server text filtering; this makes compliance depend on the model, rather than the removed `Guardrails.cs` filter. The historical imported-text risk remains open below.
 
 For new replies, the model prepares follow-up text for held-back batches and clarification options in its initial tool response; `messages.more_commentary` and the options JSON store those lines. Clicking an option or “Show more” uses the prepared text without a new model call. If the model omits needed drafts, they are generated before the initial message is shown; older messages without drafts may need one model call on the first click. AI failures are streamed as an error to the UI, not presented as a canned bot answer. Migration `20261028072124_PredraftChatReplies` adds only the new text-array column. Nothing from this branch was deployed by Codex.
@@ -219,6 +221,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-28, Codex — deployment authorized:** Owner requested “live it” for the report and chat changes. Merged #25 with `[skip ci]` and #26 normally. Cancelled the #26 deployment before the deploy job after noticing automatic image deletion and prune; removed those commands and `--remove-orphans` from the next deployment workflow. PR #27 carries both features to production after CI. No files or held jobs were deleted or requeued by Codex.
+
 **2026-10-28, Codex — full files and AI-authored chat (`codex/chat-files-and-followups`):**
 - Added file refs and a metadata-aware file search; files are distinct by source file and can open/download the whole original. Existing page/crop refs remain supported. DeepSeek chooses the search format via `result_kind`.
 - Removed the old canned response and text-replacement code, including the temporary hardcoded interpretations created during this task. DeepSeek receives the conversation history and responds in its own words. The model is instructed to treat “noo answers” in the owner's screenshot as a context-dependent correction requesting visible answers, not as an instruction to exclude them.
@@ -338,6 +342,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-28:** owner authorized merging and deploying the report and chat changes by saying “live it”. This does not authorize Docker image deletion or pruning.
+
 - **2026-10-28:** add student problem reports from the material viewer. The owner initially selected OpenAI's embeddings API, then reversed that choice after learning models require different vector indexes: **keep Gemini**. All unfinished OpenAI embedding/config/index-rebuild changes were discarded before commit/deploy; no embeddings were regenerated and no paid API calls were made. The owner asked how to add Gemini API credit; billing instructions were checked against Google's current official documentation, with no billing changes made by the agent.
 - **2026-10-28, billing clarification:** the owner confirmed the existing Gemini API project already uses the funded billing account. Gemini/billing need no changes for this task; finish student reports only.
 - **2026-10-28, later key correction (supersedes the preceding account assumption):** the owner replaced the API key after discovering the original key's project was NOT connected to the funded billing account. The owner did not specify where it was changed. If `GEMINI_API_KEY` was updated in GitHub Secrets, the app receives it only on the next authorized deployment (`deploy.yml`, Write .env from secrets). Codex did not read or change the key, deploy, or make a paid API test call.
@@ -429,6 +435,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
+
+**Active deployment:** Codex is retargeting PR #27 to main, waiting for its checks and then deploying. Verify the image, public health, report table, `messages.more_commentary`, and held jobs; update this handoff via a docs-only PR after the deployment, merged with `[skip ci]`.
 
 | # | Step | Owner | Verify |
 |---|---|---|---|

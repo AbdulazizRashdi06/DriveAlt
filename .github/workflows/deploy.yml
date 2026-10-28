@@ -225,12 +225,10 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
         run: |
           dir="${DEPLOY_DIR:-drivealt}"; dir="${dir#\~/}"
-          ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build --remove-orphans"
+          ssh vps "cd '$dir' && docker compose --env-file generated.env --env-file .env up -d --no-build"
           for i in $(seq 1 30); do
             if ssh vps "curl -fsS http://127.0.0.1:\$(grep '^APP_PORT=' '$dir/.env' | cut -d= -f2)/api/health" >/dev/null 2>&1; then
               echo "DriveAlt is up"
-              # Drop older DriveAlt images (docker refuses to remove the one in use).
-              ssh vps "docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^(ghcr.io/[^/]+/)?drivealt:' | grep -vxF '$IMAGE' | xargs -r docker rmi >/dev/null 2>&1; docker image prune -f >/dev/null"
               exit 0
             fi
             sleep 4
