@@ -283,6 +283,143 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         Assert.Empty(pending["results"]!.AsArray());
     }
 
+    [Fact]
+    public async Task Students_report_material_and_only_uploaders_review_and_resolve_it()
+    {
+        var uploader = await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8891");
+        var (pageId, regionId) = await ReportMaterialAsync();
+        var body = new { @ref = $"r:{regionId}", reason = "clipped_crop", details = "Crop cuts off the last line." };
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await app.NewClient().PostAsJsonAsync("/api/reports", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await student.GetAsync("/api/reports")).StatusCode);
+        var sent = await student.PostAsJsonAsync("/api/reports", body);
+        Assert.Equal(HttpStatusCode.OK, sent.StatusCode);
+        var report = (await sent.Content.ReadFromJsonAsync<JsonObject>())!;
+        var id = report["id"]!.GetValue<string>();
+        Assert.False(report["alreadyReported"]!.GetValue<bool>());
+
+        var duplicate = await (await student.PostAsJsonAsync("/api/reports", body)).Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(id, duplicate!["id"]!.GetValue<string>());
+        Assert.True(duplicate["alreadyReported"]!.GetValue<bool>());
+
+        var inbox = await uploader.GetFromJsonAsync<JsonObject>("/api/reports?status=open");
+        var row = Assert.Single(inbox!["items"]!.AsArray(), r => r!["id"]!.GetValue<string>() == id)!;
+        Assert.Equal("25-8891", row["reporter"]!.GetValue<string>());
+        Assert.Equal("Crop cuts off the last line.", row["details"]!.GetValue<string>());
+        Assert.Equal(1, row["pageNumber"]!.GetValue<int>());
+        Assert.Equal(HttpStatusCode.Forbidden, (await student.PostAsync($"/api/reports/{id}/resolve", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await uploader.PostAsync($"/api/reports/{id}/resolve", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await uploader.PostAsync($"/api/reports/{id}/resolve", null)).StatusCode);
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var saved = await db.MaterialReports.SingleAsync(r => r.Id == Guid.Parse(id));
+            Assert.Equal("resolved", saved.Status);
+            Assert.NotNull(saved.ResolvedAt);
+            Assert.NotNull(saved.ResolvedById);
+            Assert.Equal(pageId, saved.PageId);
+            Assert.Equal(regionId, saved.RegionId);
+            // Student feedback remains separate from the searchable material and is never sent to an AI.
+            Assert.Equal("Question 1", (await db.Pages.FindAsync(pageId))!.Text);
+        }
+
+        // A recurrence after resolution is a new report, rather than being silently discarded.
+        var again = await (await student.PostAsJsonAsync("/api/reports", body)).Content.ReadFromJsonAsync<JsonObject>();
+        Assert.NotEqual(id, again!["id"]!.GetValue<string>());
+        Assert.False(again["alreadyReported"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Reports_validate_the_target_and_note_and_survive_a_crop_replacement()
+    {
+        var uploader = await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8891");
+        var (pageId, regionId) = await ReportMaterialAsync();
+        foreach (var target in new[] { "", "not-a-ref", $"r:{Guid.Empty}" })
+        {
+            var response = await student.PostAsJsonAsync("/api/reports", new { @ref = target, reason = "other" });
+            Assert.True(response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound);
+        }
+        Assert.Equal(HttpStatusCode.BadRequest, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{pageId}", reason = "unknown" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{pageId}", reason = "other", details = new string('x', 1001) })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await uploader.GetAsync("/api/reports?status=unknown")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await uploader.PostAsync($"/api/reports/{Guid.NewGuid()}/resolve", null)).StatusCode);
+
+        var (hiddenId, _) = await ReportMaterialAsync(FileStatuses.Uploaded);
+        Assert.Equal(HttpStatusCode.NotFound, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{hiddenId}", reason = "other" })).StatusCode);
+        var ids = new List<Guid>();
+        // Reports for different crops must stay distinct even after both crops are replaced in Inspect.
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var extra = new Region { PageId = pageId, Label = RegionLabels.Question, Text = "Question 2" };
+            db.Regions.Add(extra);
+            await db.SaveChangesAsync();
+            ids.AddRange([regionId, extra.Id]);
+        }
+        foreach (var region in ids)
+            Assert.Equal(HttpStatusCode.OK, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"r:{region}", reason = "wrong_course" })).StatusCode);
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            db.Regions.RemoveRange(await db.Regions.Where(r => ids.Contains(r.Id)).ToListAsync());
+            await db.SaveChangesAsync();
+            var reports = await db.MaterialReports.Where(r => r.PageId == pageId).ToListAsync();
+            Assert.Equal(2, reports.Count);
+            Assert.All(reports, r => Assert.Null(r.RegionId));
+        }
+        Assert.Equal(HttpStatusCode.OK, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{pageId}", reason = "missing_page" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Student_reports_have_an_hourly_limit_without_counting_duplicate_submissions()
+    {
+        await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8892");
+        var (pageId, _) = await ReportMaterialAsync();
+        Guid fileId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            fileId = (await db.Pages.FindAsync(pageId))!.FileId;
+        }
+        for (var i = 0; i < 20; i++)
+        {
+            Guid id;
+            using (var scope = app.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+                var page = new Page { FileId = fileId, Number = i + 2 };
+                db.Pages.Add(page);
+                await db.SaveChangesAsync();
+                id = page.Id;
+            }
+            Assert.Equal(HttpStatusCode.OK, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{id}", reason = "other" })).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{id}", reason = "other" })).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{pageId}", reason = "other" })).StatusCode);
+    }
+
+    private async Task<(Guid PageId, Guid RegionId)> ReportMaterialAsync(string status = FileStatuses.Ready)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+        var file = new DocFile
+        {
+            Title = "Report test paper", OriginalName = "report-test.pdf", Sha256 = Guid.NewGuid().ToString(),
+            UploadedById = (await db.Users.SingleAsync(u => u.UniId == ApiFactory.Uploader)).Id,
+            CourseId = (await db.Courses.SingleAsync(c => c.Slug == "data-structures")).Id,
+            Status = status, PageCount = 1,
+        };
+        var page = new Page { File = file, Number = 1, Text = "Question 1", Extracted = true };
+        var region = new Region { Page = page, Label = RegionLabels.Question, Text = "Question 1" };
+        db.Regions.Add(region);
+        await db.SaveChangesAsync();
+        return (page.Id, region.Id);
+    }
+
     private static async Task<JsonObject> SendAsync(HttpClient client, string chatId, string text, object? extra = null)
     {
         var res = await client.PostAsJsonAsync($"/api/chats/{chatId}/messages",

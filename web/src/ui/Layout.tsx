@@ -68,7 +68,7 @@ function AvatarMenu() {
       {open && (
         <div className="menu" role="menu">
           <div className="lbl">{me.uniId} · {me.role === 'uploader' ? 'Uploader' : 'Student'}</div>
-          {me.role === 'uploader' && <Link role="menuitem" to="/admin" onClick={() => setOpen(false)}>People & roles</Link>}
+          {me.role === 'uploader' && <Link role="menuitem" to="/admin" onClick={() => setOpen(false)}>People & reports</Link>}
           <button role="menuitem" type="button" onClick={() => void signOut()}>Sign out</button>
         </div>
       )}

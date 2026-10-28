@@ -11,6 +11,7 @@ The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot 
   - Semester 1 is grouped into AI / ALL / CS & CYS, then course → type → folders → files → pages.
   - It also has keyword search and tag filters.
 - **Saved:** bookmarked crops grouped by course, downloadable one by one or as a ZIP.
+- **Report a problem:** students can flag a clipped crop, wrong course/label, missing or unreadable page, or irrelevant result from the viewer or original page, with an optional note. Uploaders review open/resolved reports in Account → People & reports and jump straight to Inspect to fix them. Reports stay separate from searchable material and are never sent to AI.
 - **Upload** (uploaders):
   - PDF / PPTX / PPT / DOCX / photos, several at once, with an option to combine photos of one paper.
   - The course and type are pre-filled (from the file name, then an AI look at page 1). Uploaders confirm them, then a live 5-step pipeline runs.
@@ -164,6 +165,7 @@ Without `Google__ApiKey` it reads the public folder view. The running app's work
 dotnet test                      # unit + integration (needs local Postgres with pgvector; DRIVEALT_TEST_PG to override)
 cd web && npm test               # Vitest
 cd web && node e2e/screens.mjs   # Playwright walkthrough + desktop/phone screenshots against a running dev API
+cd web && node e2e/reports.mjs   # report flow against Vite on :5177 with a stand-in API; desktop/phone (no DB or AI calls)
 ```
 
 ## Layout

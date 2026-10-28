@@ -8,11 +8,12 @@ import { api, TYPE_SINGULAR, type FileDto, type PageThumb } from '../lib/api'
 import { useApp } from '../lib/app'
 import { IconBack, IconDownload } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
+import { ReportButton, type ReportTarget } from '../ui/ReportButton'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
 /** Renders one PDF page when it scrolls near the viewport. */
-function PdfPage({ doc, number, width }: { doc: PDFDocumentProxy; number: number; width: number }) {
+function PdfPage({ doc, number, width, target }: { doc: PDFDocumentProxy; number: number; width: number; target?: ReportTarget }) {
   const holder = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [visible, setVisible] = useState(false)
@@ -55,14 +56,17 @@ function PdfPage({ doc, number, width }: { doc: PDFDocumentProxy; number: number
   }, [visible, doc, number, width])
 
   return (
-    <div ref={holder} id={`page-${number}`} className="doc-page" style={{ aspectRatio: `1 / ${ratio}` }}>
-      <canvas ref={canvas} aria-label={`Page ${number}`} />
-      <span className="doc-num">{number}</span>
+    <div>
+      <div ref={holder} id={`page-${number}`} className="doc-page" style={{ aspectRatio: `1 / ${ratio}` }}>
+        <canvas ref={canvas} aria-label={`Page ${number}`} />
+        <span className="doc-num">{number}</span>
+      </div>
+      {target && <div className="doc-page-actions"><ReportButton target={target} /></div>}
     </div>
   )
 }
 
-function PdfDoc({ url, startPage, onPageCount }: { url: string; startPage: number; onPageCount: (n: number) => void }) {
+function PdfDoc({ url, startPage, onPageCount, pages, title }: { url: string; startPage: number; onPageCount: (n: number) => void; pages: PageThumb[]; title: string }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [error, setError] = useState<string | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
@@ -93,7 +97,10 @@ function PdfDoc({ url, startPage, onPageCount }: { url: string; startPage: numbe
     <div ref={wrap} className="doc-pages">
       {error && <div className="err">Couldn't open this file: {error}</div>}
       {!doc && !error && <div className="skeleton" style={{ width: '100%', aspectRatio: '1 / 1.41' }} />}
-      {doc && width > 0 && Array.from({ length: doc.numPages }, (_, i) => <PdfPage key={i} doc={doc} number={i + 1} width={width} />)}
+      {doc && width > 0 && Array.from({ length: doc.numPages }, (_, i) => {
+        const page = pages.find(p => p.number === i + 1)
+        return <PdfPage key={i} doc={doc} number={i + 1} width={width} target={page ? { ref: `p:${page.id}`, fileTitle: title, pageNumber: page.number } : undefined} />
+      })}
     </div>
   )
 }
@@ -141,15 +148,19 @@ export function FileView() {
 
       {file && file.sourceKind === 'images' && (
         <div className="doc-pages">
-          {Array.from({ length: file.parts }, (_, i) => (
-            <div key={i} id={`page-${i + 1}`} className="doc-page">
-              <img src={`/api/files/${file.id}/view?part=${i + 1}`} alt={`Photo ${i + 1} of ${file.title}`} loading={Math.abs(i + 1 - startPage) < 3 ? 'eager' : 'lazy'} />
-              <span className="doc-num">{i + 1}</span>
+          {Array.from({ length: file.parts }, (_, i) => {
+            const page = q.data?.pages.find(p => p.number === i + 1)
+            return <div key={i}>
+              <div id={`page-${i + 1}`} className="doc-page">
+                <img src={`/api/files/${file.id}/view?part=${i + 1}`} alt={`Photo ${i + 1} of ${file.title}`} loading={Math.abs(i + 1 - startPage) < 3 ? 'eager' : 'lazy'} />
+                <span className="doc-num">{i + 1}</span>
+              </div>
+              {page && <div className="doc-page-actions"><ReportButton target={{ ref: `p:${page.id}`, fileTitle: file.title, pageNumber: page.number }} /></div>}
             </div>
-          ))}
+          })}
         </div>
       )}
-      {file && file.sourceKind !== 'images' && <PdfDoc url={`/api/files/${file.id}/view`} startPage={startPage} onPageCount={setPageCount} />}
+      {file && file.sourceKind !== 'images' && <PdfDoc url={`/api/files/${file.id}/view`} startPage={startPage} onPageCount={setPageCount} pages={q.data?.pages ?? []} title={file.title} />}
     </main>
   )
 }

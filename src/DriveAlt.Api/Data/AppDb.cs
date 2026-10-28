@@ -16,6 +16,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<Bookmark> Bookmarks => Set<Bookmark>();
+    public DbSet<MaterialReport> MaterialReports => Set<MaterialReport>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -95,6 +96,20 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             e.HasIndex(x => new { x.UserId, x.PageId, x.RegionId }).IsUnique().AreNullsDistinct(false);
             e.HasOne(x => x.Page).WithMany().HasForeignKey(x => x.PageId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Region).WithMany().HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MaterialReport>(e =>
+        {
+            e.Property(x => x.Reason).HasMaxLength(40);
+            e.Property(x => x.Details).HasMaxLength(1000);
+            e.Property(x => x.Status).HasMaxLength(20);
+            e.Property(x => x.TargetRef).HasMaxLength(40);
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+            e.HasIndex(x => new { x.UserId, x.TargetRef, x.Reason }).IsUnique().HasFilter("status = 'open'");
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Page).WithMany().HasForeignKey(x => x.PageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Region).WithMany().HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ResolvedById).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

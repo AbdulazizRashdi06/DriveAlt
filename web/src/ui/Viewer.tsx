@@ -5,6 +5,7 @@ import type { ResultCard } from '../lib/api'
 import { CARD_COLORS } from '../lib/api'
 import { useSaved } from '../lib/saved'
 import { IconBookmark, IconClose, IconExternal, IconLeft, IconMinus, IconPlus, IconRight } from './Icons'
+import { ReportButton } from './ReportButton'
 
 export function originalHref(r: Pick<ResultCard, 'fileId' | 'pageNumber'>) {
   return `/files/${r.fileId}?page=${r.pageNumber}`
@@ -75,6 +76,7 @@ export function Viewer({ items, start, onClose }: { items: ResultCard[]; start: 
             <button className="candy c-dark rnd sm" type="button" aria-label="Zoom in" onClick={() => zoomRef.current?.zoomIn(0.4)}><IconPlus /></button>
           </div>
           <Link className="candy c-white hide-phone" to={originalHref(item)} onClick={onClose}><IconExternal />Open original</Link>
+          <ReportButton key={item.ref} target={item} compact />
           <button className={`candy ${saved ? 'c-pink' : 'c-white'} ${saved ? 'saved-pop' : ''}`} key={String(saved)} type="button"
             aria-pressed={saved} aria-label={saved ? 'Saved' : 'Save'} onClick={() => void toggleSaved()}>
             <IconBookmark filled={saved} /><span className="hide-phone">{saved ? 'Saved' : 'Save'}</span>

@@ -293,3 +293,21 @@ public sealed class Bookmark
     public Region? Region { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+public sealed class MaterialReport
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
+    public Guid PageId { get; set; }
+    public Page? Page { get; set; }
+    public Guid? RegionId { get; set; }
+    public Region? Region { get; set; }
+    public required string TargetRef { get; set; }
+    public required string Reason { get; set; }
+    public string Details { get; set; } = "";
+    public string Status { get; set; } = "open";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ResolvedAt { get; set; }
+    public Guid? ResolvedById { get; set; }
+}
