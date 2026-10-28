@@ -8,7 +8,7 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/material-reports`, based on PR #25 head `8498d02`; merge after docs PR #25 |
+| Branch / base | `codex/material-reports` (PR #26), based on PR #25 head `8498d02`; merge after docs PR #25 |
 | Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
 | Purpose of this update | Student material reports with an uploader review inbox; migration adds only reports. Owner chose to KEEP GEMINI embeddings. The report feature is written for after owner-approved merge/deployment; the dated production snapshot below predates it. |
 
@@ -217,6 +217,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - Added authenticated student reports for exact page/crop refs, with five reasons and an optional 1,000-character note. Duplicate open reports from the same student/target/reason return the existing report; a filtered unique index protects concurrent submissions. New reports are limited to 20 per student per hour; repeats do not consume that allowance.
 - Added an uploader-only paginated inbox and idempotent resolution with actor/time recorded. Inspect/Open page links preserve the page number. Reports keep their page reference if Inspect replaces a crop; immutable target refs prevent collisions when multiple removed crops become null. Student notes are never indexed or sent to AI.
 - Added the dialog to the result viewer and to each available original page, plus desktop/phone browser smoke coverage. No production data, jobs, billing, secrets, Caddy or embeddings were changed.
+- Opened **PR #26** into main and attached it to this chat. It depends on docs PR #25 and is a normal code/schema deployment, not a `[skip ci]` merge. CI pending; owner approval to merge/deploy is still required.
 
 **2026-10-28, Codex** (`codex/refresh-handoff-state`, docs only):
 - Ran the handoff's resume checks and reconciled contradictory PR, deployment and import claims with the current evidence in section 2. Semester 1 processing is complete for all existing pages; the empty failed document remains unresolved. Semester 2 and ITS remain held.
@@ -328,6 +329,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 - **2026-10-28:** add student problem reports from the material viewer. The owner initially selected OpenAI's embeddings API, then reversed that choice after learning models require different vector indexes: **keep Gemini**. All unfinished OpenAI embedding/config/index-rebuild changes were discarded before commit/deploy; no embeddings were regenerated and no paid API calls were made. The owner asked how to add Gemini API credit; billing instructions were checked against Google's current official documentation, with no billing changes made by the agent.
 - **2026-10-28, billing clarification:** the owner confirmed the existing Gemini API project already uses the funded billing account. Gemini/billing need no changes for this task; finish student reports only.
+- **2026-10-28, later key correction (supersedes the preceding account assumption):** the owner replaced the API key after discovering the original key's project was NOT connected to the funded billing account. The owner did not specify where it was changed. If `GEMINI_API_KEY` was updated in GitHub Secrets, the app receives it only on the next authorized deployment (`deploy.yml`, Write .env from secrets). Codex did not read or change the key, deploy, or make a paid API test call.
 - **2026-10-28, additional chat requests:** fix follow-ups such as “no answers” being refused and identity messages getting empty-search fallbacks; whole-file/past-paper requests must return distinct full files with open/download actions, while topic-question requests keep returning crops. These are separate chat work after the reports PR and overlap `ChatService.cs` with Claude Code's PR #21; preserve its typed-pick fix.
 - **Domain:** `drivealt.tryzarqa.com`. The owner added the Cloudflare record themselves. Using an `*.sslip.io` address was raised and not adopted.
 - **Keys:** the owner made a new Resend key `drivealt` and pasted it into GitHub. They first said to take keys from the other projects, then reversed that: "I will make new ones for this". Later they asked for DeepSeek "from zoors repo for now", so `DEEPSEEK_API_KEY` is Zoor's key.
@@ -402,7 +404,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-0. **Codex, `codex/material-reports`:** reporting implemented; local checks passed, database integration checks await CI. Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. Nothing from this branch was deployed by Codex.
+0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks passed, database integration checks await CI. Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. Nothing from this branch was deployed by Codex.
 0a. **Next — Codex, separate chat branch:** full-file results and follow-up/refusal handling requested by owner. No chat code changed in the reports branch. `ChatService.cs` overlaps open PR #21; keep Claude Code's typed-pick fix and coordinate any conflict here.
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. Do not edit or push to that branch. Owner approval is required to merge; normal code deployment applies.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
@@ -445,6 +447,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
 # #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
+# #26 codex/material-reports also appears until the owner merges/closes the report feature.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```
