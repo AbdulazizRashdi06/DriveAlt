@@ -542,6 +542,25 @@ a, button, input, textarea, select, label {
 @media (prefers-reduced-motion: reduce) { .chomp { animation: none; } }
 .field .sel:disabled { opacity: .7; cursor: default; }
 
+.report-dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; border: 0; border-radius: 26px; padding: 24px; background: var(--cream); color: var(--ink); box-shadow: 0 12px 0 #0002; }
+.report-dialog::backdrop { background: #23190db3; }
+.report-dialog form, .reports-inbox { display: flex; flex-direction: column; gap: 16px; }
+.report-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.report-title h2 { margin: 0; font-size: 30px; line-height: 1.1; }
+.report-source { margin: 0; color: #7A5A3A; font-size: 14px; overflow-wrap: anywhere; }
+.report-dialog .field { display: flex; gap: 8px; }
+.report-dialog .lbl { color: #7A5A3A; }
+.report-dialog .sel { width: 100%; }
+.report-dialog .textarea { font-family: inherit; }
+.report-optional { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.report-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.report-dialog .report-actions { justify-content: flex-end; }
+.reports-inbox { border-top: 3px solid var(--line); border-bottom: 3px solid var(--line); padding: 24px 0; }
+.report-row { background: var(--cream-2); padding: 18px; border-radius: 20px; display: flex; flex-direction: column; gap: 10px; }
+.report-row h3, .report-details { margin: 0; }
+.report-details { white-space: pre-wrap; overflow-wrap: anywhere; }
+.doc-page-actions { display: flex; justify-content: flex-end; padding: 10px 0; }
+
 /* ---------- answer screenshots ---------- */
 .shot-wrap { display: flex; flex-direction: column; gap: 8px; }
 .shot-wrap .shot { min-height: 96px; display: flex; align-items: center; justify-content: center; }

@@ -8,9 +8,9 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/refresh-handoff-state` (docs-only PR #25), from main `7c7fe49` (merge of #24) |
+| Branch / base | `codex/material-reports` (PR #26), based on PR #25 head `8498d02`; merge after docs PR #25 |
 | Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
-| Purpose of this update | Reconcile the handoff with GitHub, local Git and read-only VPS checks during project orientation. Restore PR #21's open-work claim and distinguish completed Semester 1 processing from deliberately held work. |
+| Purpose of this update | Student material reports with an uploader review inbox; migration adds only reports. Owner chose to KEEP GEMINI embeddings. The report feature is written for after owner-approved merge/deployment; the dated production snapshot below predates it. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -19,6 +19,10 @@
 **In one line:** the app is healthy on image `b1461cc`. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
 
 ## 2. State of the world
+
+**Report feature, after this branch merges and deploys:** `material_reports` stores student feedback separately from page text/search/AI. Viewer crops and original pages have a Report action; uploaders review open/resolved reports under Account → People & reports. Migration `20261028062003_MaterialReports` adds the report table/indexes/FKs only. No model change or re-embedding is needed. Owner approval for merge/deploy remains required.
+
+**Report validation (2026-10-28, Codex):** `dotnet build --no-restore` → `Build succeeded. 0 Warning(s), 0 Error(s)`; the prescribed unit-test filter → `Passed: 45, Failed: 0, Skipped: 0`; `cd web; npm test` → `3 passed` files / `11 passed` tests; `npx tsc -b` and `npx vite build --outDir ../.ci-web` passed. `dotnet ef migrations has-pending-model-changes --project src/DriveAlt.Api --no-build` → `No changes have been made to the model since the last migration.` `node e2e/reports.mjs` passed crop reporting, uploader review/resolution/history, original-page reporting and viewport overflow checks on desktop and phone against a stand-in API, with no page errors. Screenshots were visually inspected. A focus-restoration issue found by the frontend tests was fixed. Local database/API tests were not run because the local Docker daemon is unavailable. **Full CI passed** on report code head `8b8c553` (run `40645271789`, job `122672563097`): `Passed! - Failed: 0, Passed: 68, Skipped: 0, Total: 68`, including all three new report integration tests, and frontend `11 passed`; TypeScript/build also passed. Later documentation-only commits do not change that tested code.
 
 **Current verification, 2026-10-28 05:57 UTC** (Codex; read-only SSH and GitHub connector):
 - **Full Year 2 inventory checked again at 06:03 UTC, on the owner's clarification:** SQL grouped by `courses.semester` returns Semester 1 `224 added / 210 ready / 13 reading / 1 failed / 6085 pages`; Semester 2 `179 added / 2 ready / 177 reading / 0 failed / 3588 pages`. `select count(*), count(distinct course_id), sum(page_count) from files` returns `403 / 14 / 9673`. All 403 files have a source reference. File kinds: `pdf 291`, `office 89`, `images 23`. This confirms material from both semesters has been added; exact completeness against the original Drive needs a source-manifest comparison and is not established by these counts alone.
@@ -209,6 +213,12 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-28, Codex — material reports (`codex/material-reports`):**
+- Added authenticated student reports for exact page/crop refs, with five reasons and an optional 1,000-character note. Duplicate open reports from the same student/target/reason return the existing report; a filtered unique index protects concurrent submissions. New reports are limited to 20 per student per hour; repeats do not consume that allowance.
+- Added an uploader-only paginated inbox and idempotent resolution with actor/time recorded. Inspect/Open page links preserve the page number. Reports keep their page reference if Inspect replaces a crop; immutable target refs prevent collisions when multiple removed crops become null. Student notes are never indexed or sent to AI.
+- Added the dialog to the result viewer and to each available original page, plus desktop/phone browser smoke coverage. No production data, jobs, billing, secrets, Caddy or embeddings were changed.
+- Opened **PR #26** into main and attached it to this chat. It depends on docs PR #25 and is a normal code/schema deployment, not a `[skip ci]` merge. Full CI passed (68 backend tests and 11 frontend tests); owner approval to merge/deploy is still required.
+
 **2026-10-28, Codex** (`codex/refresh-handoff-state`, docs only):
 - Ran the handoff's resume checks and reconciled contradictory PR, deployment and import claims with the current evidence in section 2. Semester 1 processing is complete for all existing pages; the empty failed document remains unresolved. Semester 2 and ITS remain held.
 - Restored the open PR #21 claim that later handoff updates had dropped. Its GitHub description records 49/49 local unit tests, 8/8 frontend tests and TypeScript passing; its API test was not run locally. These are Claude Code's reported results, not new Codex test runs.
@@ -317,6 +327,10 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-28:** add student problem reports from the material viewer. The owner initially selected OpenAI's embeddings API, then reversed that choice after learning models require different vector indexes: **keep Gemini**. All unfinished OpenAI embedding/config/index-rebuild changes were discarded before commit/deploy; no embeddings were regenerated and no paid API calls were made. The owner asked how to add Gemini API credit; billing instructions were checked against Google's current official documentation, with no billing changes made by the agent.
+- **2026-10-28, billing clarification:** the owner confirmed the existing Gemini API project already uses the funded billing account. Gemini/billing need no changes for this task; finish student reports only.
+- **2026-10-28, later key correction (supersedes the preceding account assumption):** the owner replaced the API key after discovering the original key's project was NOT connected to the funded billing account. The owner did not specify where it was changed. If `GEMINI_API_KEY` was updated in GitHub Secrets, the app receives it only on the next authorized deployment (`deploy.yml`, Write .env from secrets). Codex did not read or change the key, deploy, or make a paid API test call.
+- **2026-10-28, additional chat requests:** fix follow-ups such as “no answers” being refused and identity messages getting empty-search fallbacks; whole-file/past-paper requests must return distinct full files with open/download actions, while topic-question requests keep returning crops. These are separate chat work after the reports PR and overlap `ChatService.cs` with Claude Code's PR #21; preserve its typed-pick fix.
 - **Domain:** `drivealt.tryzarqa.com`. The owner added the Cloudflare record themselves. Using an `*.sslip.io` address was raised and not adopted.
 - **Keys:** the owner made a new Resend key `drivealt` and pasted it into GitHub. They first said to take keys from the other projects, then reversed that: "I will make new ones for this". Later they asked for DeepSeek "from zoors repo for now", so `DEEPSEEK_API_KEY` is Zoor's key.
 - **Repo public:** "make the repo public it is ok", so ghcr.io storage and pulls are free. The history was scanned first and no secrets were found.
@@ -361,6 +375,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | current |
 | `HANDOFF.md` | This page | reconciled with 2026-10-28 read-only checks |
+| `src/DriveAlt.Api/Reports/ReportEndpoints.cs`, report entity/config and `20261028062003_MaterialReports` | Student reporting and uploader review, with report-only schema migration | report feature branch; merge/deploy requires owner approval |
+| `web/src/ui/{ReportButton,ReportsInbox}.tsx`, viewer/file/admin integration | Reporting dialog and review inbox | 11 frontend tests; desktop/phone stand-in API smoke passed |
+| `web/e2e/reports.mjs`, `tests/DriveAlt.Api.Tests/ApiTests.cs` | Browser report smoke and three report integration cases | browser passed locally; all DB cases passed in CI run `40645271789` |
 | VPS `~/drivealt/import.{log,started.utc,launcher.pid,download-finished.utc,exit-code}` | Import output and lifecycle markers; never overwrite or blindly relaunch | download/queuing finished 2026-10-23; in-scope pages now complete |
 | `README.md` | Features, local setup, import | model table current; deploy steps, secret table and offline wording need review |
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
@@ -387,6 +404,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks and full CI passed (68 backend, 11 frontend). Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. Nothing from this branch was deployed by Codex.
+0a. **Next — Codex, separate chat branch:** full-file results and follow-up/refusal handling requested by owner. No chat code changed in the reports branch. `ChatService.cs` overlaps open PR #21; keep Claude Code's typed-pick fix and coordinate any conflict here.
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. Do not edit or push to that branch. Owner approval is required to merge; normal code deployment applies.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
 3. **Gateway process leak and configuration drift:** the last reviewed gateway could leave native Codex children running after timeout, and its live PID cap was raised to 1024 while the compose file still used 256 (2026-10-25 evidence above). Gateway source hash is unchanged; no fix is confirmed here. If health says signed out, inspect process pressure before asking for another login. The deployed `codex-model-choice` branch's merge status has not been rechecked in this orientation. Its limit matcher (`usage limit|rate limit|quota|too many requests`) may miss a plain 502; offline fallback handling needs review if such a response occurs.
@@ -428,6 +447,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
 # #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
+# #26 codex/material-reports also appears until the owner merges/closes the report feature.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```

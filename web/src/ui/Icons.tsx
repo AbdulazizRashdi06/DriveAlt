@@ -37,3 +37,4 @@ export const IconRefresh = (p: P) => <Icon {...p}><path d="M20 11a8 8 0 1 0-2.3 
 export const IconBack = (p: P) => <Icon strokeWidth={3} {...p}><path d="M19 12H5M11 6l-6 6 6 6" /></Icon>
 export const IconEye = (p: P) => <Icon {...p}><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></Icon>
 export const IconLock = (p: P) => <Icon {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icon>
+export const IconFlag = (p: P) => <Icon {...p}><path d="M5 21V4c5-4 9 4 14 0v10c-5 4-9-4-14 0" /></Icon>

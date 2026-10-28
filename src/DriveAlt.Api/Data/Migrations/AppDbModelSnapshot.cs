@@ -330,6 +330,83 @@ namespace DriveAlt.Api.Data.Migrations
                     b.ToTable("jobs", (string)null);
                 });
 
+            modelBuilder.Entity("DriveAlt.Api.Data.MaterialReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("details");
+
+                    b.Property<Guid>("PageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("page_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("RegionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("region_id");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TargetRef")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("target_ref");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_material_reports");
+
+                    b.HasIndex("PageId")
+                        .HasDatabaseName("ix_material_reports_page_id");
+
+                    b.HasIndex("RegionId")
+                        .HasDatabaseName("ix_material_reports_region_id");
+
+                    b.HasIndex("ResolvedById")
+                        .HasDatabaseName("ix_material_reports_resolved_by_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_material_reports_status_created_at");
+
+                    b.HasIndex("UserId", "TargetRef", "Reason")
+                        .IsUnique()
+                        .HasDatabaseName("ix_material_reports_user_id_target_ref_reason")
+                        .HasFilter("status = 'open'");
+
+                    b.ToTable("material_reports", (string)null);
+                });
+
             modelBuilder.Entity("DriveAlt.Api.Data.Message", b =>
                 {
                     b.Property<Guid>("Id")
@@ -686,6 +763,41 @@ namespace DriveAlt.Api.Data.Migrations
                     b.Navigation("Course");
 
                     b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("DriveAlt.Api.Data.MaterialReport", b =>
+                {
+                    b.HasOne("DriveAlt.Api.Data.Page", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_reports_pages_page_id");
+
+                    b.HasOne("DriveAlt.Api.Data.Region", "Region")
+                        .WithMany()
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_material_reports_regions_region_id");
+
+                    b.HasOne("DriveAlt.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("ResolvedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_material_reports_users_resolved_by_id");
+
+                    b.HasOne("DriveAlt.Api.Data.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_reports_users_user_id");
+
+                    b.Navigation("Page");
+
+                    b.Navigation("Region");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("DriveAlt.Api.Data.Message", b =>

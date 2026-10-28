@@ -11,6 +11,7 @@ using DriveAlt.Api.Import;
 using DriveAlt.Api.Infrastructure;
 using DriveAlt.Api.Inspect;
 using DriveAlt.Api.Processing;
+using DriveAlt.Api.Reports;
 using DriveAlt.Api.Search;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -153,6 +154,7 @@ ChatEndpoints.Map(app);
 InspectEndpoints.Map(app);
 BookmarkEndpoints.Map(app);
 AdminEndpoints.Map(app);
+ReportEndpoints.Map(app);
 
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");

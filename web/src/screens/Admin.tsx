@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useApp } from '../lib/app'
+import { ReportsInbox } from '../ui/ReportsInbox'
 
 interface UserRow { id: string; uniId: string; email: string; role: 'student' | 'uploader'; lastLoginAt: string | null; pinned: boolean }
 interface Stats { files: number; ready: number; processing: number; failed: number; pages: number; questions: number; users: number }
@@ -23,7 +24,7 @@ export function Admin() {
   return (
     <main className="page-main">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h1 className="disp" style={{ margin: 0, fontSize: 44, lineHeight: 1 }}>People & roles</h1>
+        <h1 className="disp" style={{ margin: 0, fontSize: 44, lineHeight: 1 }}>People & reports</h1>
         <span style={{ font: "800 16px/1.4 'Nunito', sans-serif", color: '#7A5A3A' }}>Uploaders can upload and inspect. Everyone in the batch can search, browse and save.</span>
       </div>
       {s && (
@@ -36,7 +37,9 @@ export function Admin() {
           ))}
         </div>
       )}
+      <ReportsInbox />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <h2 className="disp" style={{ margin: 0 }}>People & roles</h2>
         {users.data?.map(u => (
           <div key={u.id} className="row" style={{ padding: '12px 16px', gap: 12 }}>
             <div className="fname">
