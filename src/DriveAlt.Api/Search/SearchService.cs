@@ -146,6 +146,57 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
 
     private static string NormalizeQ(string s) => new(s.ToLowerInvariant().Where(char.IsLetterOrDigit).SkipWhile(c => c == 'q').ToArray());
 
+    /// <summary>One result per whole file, including held files whose originals/pages already exist.</summary>
+    public async Task<List<SearchHit>> SearchFilesAsync(SearchQuery q, CancellationToken ct)
+    {
+        var files = db.Files.AsNoTracking().Where(f => FileStatuses.Visible.Contains(f.Status) && f.CourseId != null && f.Pages.Any());
+        if (q.CourseIds is { Count: > 0 } courses) files = files.Where(f => courses.Contains(f.CourseId!.Value));
+        if (q.Types is { Count: > 0 } types) files = files.Where(f => types.Contains(f.MaterialType));
+        if (q.Year is { } year) files = files.Where(f => f.AcademicYear == year || f.Pages.Any(p => p.AcademicYear == year));
+        if (q.FileId is { } fileId) files = files.Where(f => f.Id == fileId);
+        if (!string.IsNullOrWhiteSpace(q.AssessmentLabel)) files = files.Where(f => EF.Functions.ILike(f.AssessmentLabel ?? f.Title, $"%{q.AssessmentLabel}%"));
+        if (!string.IsNullOrWhiteSpace(q.Tag)) files = files.Where(f => f.Pages.Any(p => p.Tags.Contains(q.Tag)));
+
+        var courseQuery = db.Courses.AsNoTracking();
+        if (q.CourseIds is { Count: > 0 } selected) courseQuery = courseQuery.Where(c => selected.Contains(c.Id));
+        var selectedCourses = await courseQuery.ToListAsync(ct);
+        var topic = FileTopic(q.Text, selectedCourses, q.AssessmentLabel);
+        Dictionary<Guid, double>? scores = null;
+        if (topic.Length > 0)
+        {
+            var hits = await SearchAsync(q with { Text = topic, Limit = Candidates * 2 }, ct);
+            var pageIds = hits.Select(h => h.PageId).Distinct().ToList();
+            var pageFiles = await db.Pages.AsNoTracking().Where(p => pageIds.Contains(p.Id)).Select(p => new { p.Id, p.FileId }).ToDictionaryAsync(p => p.Id, ct);
+            scores = hits.Where(h => pageFiles.ContainsKey(h.PageId)).GroupBy(h => pageFiles[h.PageId].FileId).ToDictionary(g => g.Key, g => g.Max(h => h.Score));
+            // An original can be found by its filename even while its AI/text indexing is held.
+            var titleMatches = await files.Where(f => EF.Functions.ILike(f.Title, $"%{topic}%")).Select(f => f.Id).Take(Candidates).ToListAsync(ct);
+            foreach (var id in titleMatches) scores[id] = Math.Max(scores.GetValueOrDefault(id), 1);
+            var ids = scores.Keys.ToArray();
+            files = files.Where(f => ids.Contains(f.Id));
+        }
+        var candidates = await files.OrderByDescending(f => f.AcademicYear).ThenBy(f => f.Title).Take(scores is null ? q.Limit : scores.Count)
+            .Select(f => new { f.Id, Cover = f.Pages.OrderBy(p => p.Number).First().Id }).ToListAsync(ct);
+        return candidates.OrderByDescending(f => scores?.GetValueOrDefault(f.Id) ?? 0).Take(q.Limit)
+            .Select(f => new SearchHit(ResultRefs.File(f.Id), f.Cover, null, scores?.GetValueOrDefault(f.Id) ?? 0)).ToList();
+    }
+
+    private static readonly HashSet<string> FileBoilerplate = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ok", "okay", "hi", "hey", "full", "whole", "complete", "entire", "file", "files", "document", "documents", "pdf", "pdfs",
+        "past", "paper", "papers", "pastpaper", "pastpapers", "exam", "exams", "midterm", "midterms", "final", "finals", "quiz", "quizzes", "exercise", "exercises",
+        "slide", "slides", "lecture", "lectures", "notes", "lab", "labs", "download", "send", "gimme", "everything", "every", "only", "just",
+        "can", "could", "would", "will", "you", "your", "us", "let", "have", "like", "look", "looking", "material", "materials", "course", "btw",
+    };
+
+    internal static string FileTopic(string text, IReadOnlyCollection<Course> courses, string? label = null)
+    {
+        var ignored = courses.SelectMany(c => c.Aliases.Append(c.Name).Append(c.Slug.Replace('-', ' ')))
+            .Append(label ?? "").SelectMany(s => Token().Matches(s.ToLowerInvariant()).Select(m => m.Value)).ToHashSet();
+        return string.Join(' ', Token().Matches(text.ToLowerInvariant()).Select(m => m.Value)
+            .Where(w => !Stop.Contains(w) && !FileBoilerplate.Contains(w) && !ignored.Contains(w)
+                && (!int.TryParse(w, out var number) || number is < 1900 or > 2100)).Distinct().Take(16));
+    }
+
     private static IQueryable<Page> FilterPages(IQueryable<Page> pages, SearchQuery q)
     {
         pages = pages.Where(p => FileStatuses.Visible.Contains(p.File!.Status));

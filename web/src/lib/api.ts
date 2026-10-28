@@ -56,7 +56,7 @@ export interface Box { x: number; y: number; w: number; h: number }
 
 export interface ResultCard {
   ref: string
-  kind: 'question' | 'answer' | 'slide' | 'page'
+  kind: 'question' | 'answer' | 'slide' | 'page' | 'file'
   imageUrl: string
   pageImageUrl: string
   thumbUrl: string
@@ -234,6 +234,7 @@ export async function sendChat(conversationId: string, text: string, h: StreamHa
       if (event === 'status') h.onStatus?.(parsed.text)
       else if (event === 'message') h.onMessage(parsed)
       else if (event === 'options') h.onOptions?.(parsed)
+      else if (event === 'error') throw new ApiError(503, parsed.error ?? 'The AI could not complete this reply.')
     }
   }
 }

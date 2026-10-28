@@ -1,15 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using DriveAlt.Api.Ai;
 using DriveAlt.Api.Auth;
+using DriveAlt.Api.Data;
+using DriveAlt.Api.Infrastructure;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 
 namespace DriveAlt.Api.Tests;
 
 /// <summary>
-/// Runs the real API against a throwaway Postgres database (needs pgvector) and a temp storage folder, with the
-/// offline AI (no Gemini key) and the dev email sender. Set DRIVEALT_TEST_PG to point at another server.
+/// Runs the real API against a throwaway Postgres database (needs pgvector) and a temp storage folder, with offline
+/// material extraction, a scripted chat model and the dev email sender. Set DRIVEALT_TEST_PG to point at another server.
 /// </summary>
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
@@ -19,6 +25,18 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     private readonly string _db = "drivealt_test_" + Guid.NewGuid().ToString("N")[..12];
     public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), "drivealt-test-" + Guid.NewGuid().ToString("N")[..8]);
+    public ScriptedChatModel ChatModel { get; } = new();
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureTestServices(services =>
+        {
+            services.Configure<DeepSeekOptions>(o => { o.ApiKey = "test-only"; o.BaseUrl = "https://chat.invalid"; });
+            services.RemoveAll<IMaterialAi>();
+            services.AddScoped<IMaterialAi, OfflineTestMaterialAi>();
+            services.AddHttpClient<DeepSeekClient>().ConfigurePrimaryHttpMessageHandler(() => ChatModel);
+        });
+    }
 
     public async Task InitializeAsync()
     {

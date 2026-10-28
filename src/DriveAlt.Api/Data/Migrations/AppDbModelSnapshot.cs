@@ -426,6 +426,11 @@ namespace DriveAlt.Api.Data.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("more");
 
+                    b.PrimitiveCollection<string[]>("MoreCommentary")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("more_commentary");
+
                     b.Property<string>("Options")
                         .HasColumnType("jsonb")
                         .HasColumnName("options");

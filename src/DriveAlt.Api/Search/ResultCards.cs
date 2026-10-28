@@ -40,6 +40,12 @@ public sealed record ResultCard(
 
 public static class ResultRefs
 {
+    public static bool TryParseFile(string r, out Guid id)
+    {
+        id = Guid.Empty;
+        return r.StartsWith("f:") && Guid.TryParse(r[2..], out id);
+    }
+    public static string File(Guid id) => "f:" + id;
     public static bool TryParse(string r, out bool isRegion, out Guid id)
     {
         isRegion = r.StartsWith("r:");
@@ -98,14 +104,20 @@ public sealed class ResultCards(AppDb db)
     {
         var regionIds = new List<Guid>();
         var pageIds = new List<Guid>();
+        var fileIds = new List<Guid>();
         foreach (var r in refs)
         {
+            if (ResultRefs.TryParseFile(r, out var fid)) { fileIds.Add(fid); continue; }
             if (!ResultRefs.TryParse(r, out var isRegion, out var id)) continue;
             (isRegion ? regionIds : pageIds).Add(id);
         }
 
         var regionPages = await db.Regions.AsNoTracking().Where(r => regionIds.Contains(r.Id)).Select(r => r.PageId).Distinct().ToListAsync(ct);
-        var allPageIds = pageIds.Concat(regionPages).Distinct().ToList();
+        var covers = fileIds.Count == 0 ? new Dictionary<Guid, Guid>() : await db.Pages.AsNoTracking()
+            .Where(p => fileIds.Contains(p.FileId) && FileStatuses.Visible.Contains(p.File!.Status))
+            .GroupBy(p => p.FileId).Select(g => new { FileId = g.Key, PageId = g.OrderBy(p => p.Number).First().Id })
+            .ToDictionaryAsync(c => c.FileId, c => c.PageId, ct);
+        var allPageIds = pageIds.Concat(regionPages).Concat(covers.Values).Distinct().ToList();
         var pages = await db.Pages.AsNoTracking().Include(p => p.File).ThenInclude(f => f!.Course).Include(p => p.Regions)
             .Where(p => allPageIds.Contains(p.Id))
             .AsSplitQuery()
@@ -123,6 +135,12 @@ public sealed class ResultCards(AppDb db)
         var cards = new List<ResultCard>();
         foreach (var r in refs.Distinct())
         {
+            if (ResultRefs.TryParseFile(r, out var fid))
+            {
+                if (covers.TryGetValue(fid, out var coverId) && pages.TryGetValue(coverId, out var first))
+                    cards.Add(Build(r, "file", first, null, null, null, false, null));
+                continue;
+            }
             if (!ResultRefs.TryParse(r, out var isRegion, out var id)) continue;
             if (isRegion)
             {

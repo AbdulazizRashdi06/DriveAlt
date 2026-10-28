@@ -8,9 +8,9 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/material-reports` (PR #26), based on PR #25 head `8498d02`; merge after docs PR #25 |
+| Branch / base | `codex/chat-files-and-followups`, based on report PR #26 head `75c6349`; merge after #25 and #26 |
 | Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
-| Purpose of this update | Student material reports with an uploader review inbox; migration adds only reports. Owner chose to KEEP GEMINI embeddings. The report feature is written for after owner-approved merge/deployment; the dated production snapshot below predates it. |
+| Purpose of this update | Whole-file chat results, AI-authored replies and prewritten button follow-ups. Reports are separately implemented in PR #26; Gemini and existing vectors stay unchanged. State below distinguishes current production from the intended post-merge behavior. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -19,6 +19,12 @@
 **In one line:** the app is healthy on image `b1461cc`. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
 
 ## 2. State of the world
+
+**Chat feature, after this branch merges and deploys:** DeepSeek chooses whole-file (`f:`), question-crop (`r:`), or page (`p:`) results; a full-file card opens/downloads the original file. File searches can use already-available originals from held courses without releasing processing jobs. The model writes all conversational replies; the server no longer substitutes canned refusal/search/option lines or rewrites the model's wording. The model prompt still forbids writing, explaining, hinting at or grading answers and permits showing original images intact. The owner explicitly chose to trust DeepSeek instead of server text filtering; this makes compliance depend on the model, rather than the removed `Guardrails.cs` filter. The historical imported-text risk remains open below.
+
+For new replies, the model prepares follow-up text for held-back batches and clarification options in its initial tool response; `messages.more_commentary` and the options JSON store those lines. Clicking an option or “Show more” uses the prepared text without a new model call. If the model omits needed drafts, they are generated before the initial message is shown; older messages without drafts may need one model call on the first click. AI failures are streamed as an error to the UI, not presented as a canned bot answer. Migration `20261028072124_PredraftChatReplies` adds only the new text-array column. Nothing from this branch was deployed by Codex.
+
+**Chat validation (2026-10-28, Codex):** `dotnet build --no-restore` → `Build succeeded. 0 Warning(s), 0 Error(s)`; backend unit filter plus `FileSearchTests` → `Passed: 19, Failed: 0, Skipped: 0`; `cd web; npm test` → `5 passed` files / `14 passed` tests; `npx tsc -b` and Vite production build passed. `dotnet ef migrations has-pending-model-changes --project src/DriveAlt.Api --no-build` → `No changes have been made to the model since the last migration.` `node e2e/reports.mjs` and `node e2e/chat-files.mjs` passed desktop/phone checks using stand-in APIs; the file-card layout was visually checked. Local database/API tests are **unknown** because the local Docker daemon is unavailable. CI must run the scripted-model/database integration tests, including model-authored text preserved verbatim and zero further model calls on prepared button clicks. No paid AI call was made; actual live DeepSeek behavior/latency remains unverified.
 
 **Report feature, after this branch merges and deploys:** `material_reports` stores student feedback separately from page text/search/AI. Viewer crops and original pages have a Report action; uploaders review open/resolved reports under Account → People & reports. Migration `20261028062003_MaterialReports` adds the report table/indexes/FKs only. No model change or re-embedding is needed. Owner approval for merge/deploy remains required.
 
@@ -213,6 +219,11 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-28, Codex — full files and AI-authored chat (`codex/chat-files-and-followups`):**
+- Added file refs and a metadata-aware file search; files are distinct by source file and can open/download the whole original. Existing page/crop refs remain supported. DeepSeek chooses the search format via `result_kind`.
+- Removed the old canned response and text-replacement code, including the temporary hardcoded interpretations created during this task. DeepSeek receives the conversation history and responds in its own words. The model is instructed to treat “noo answers” in the owner's screenshot as a context-dependent correction requesting visible answers, not as an instruction to exclude them.
+- Added model-prepared replies for result batches and option outcomes, plus error reporting when the AI cannot respond. Added migration, scripted-model integration tests and desktop/phone browser tests. Gemini embeddings, billing, files and jobs were not changed.
+
 **2026-10-28, Codex — material reports (`codex/material-reports`):**
 - Added authenticated student reports for exact page/crop refs, with five reasons and an optional 1,000-character note. Duplicate open reports from the same student/target/reason return the existing report; a filtered unique index protects concurrent submissions. New reports are limited to 20 per student per hour; repeats do not consume that allowance.
 - Added an uploader-only paginated inbox and idempotent resolution with actor/time recorded. Inspect/Open page links preserve the page number. Reports keep their page reference if Inspect replaces a crop; immutable target refs prevent collisions when multiple removed crops become null. Student notes are never indexed or sent to AI.
@@ -330,7 +341,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-28:** add student problem reports from the material viewer. The owner initially selected OpenAI's embeddings API, then reversed that choice after learning models require different vector indexes: **keep Gemini**. All unfinished OpenAI embedding/config/index-rebuild changes were discarded before commit/deploy; no embeddings were regenerated and no paid API calls were made. The owner asked how to add Gemini API credit; billing instructions were checked against Google's current official documentation, with no billing changes made by the agent.
 - **2026-10-28, billing clarification:** the owner confirmed the existing Gemini API project already uses the funded billing account. Gemini/billing need no changes for this task; finish student reports only.
 - **2026-10-28, later key correction (supersedes the preceding account assumption):** the owner replaced the API key after discovering the original key's project was NOT connected to the funded billing account. The owner did not specify where it was changed. If `GEMINI_API_KEY` was updated in GitHub Secrets, the app receives it only on the next authorized deployment (`deploy.yml`, Write .env from secrets). Codex did not read or change the key, deploy, or make a paid API test call.
-- **2026-10-28, additional chat requests:** fix follow-ups such as “no answers” being refused and identity messages getting empty-search fallbacks; whole-file/past-paper requests must return distinct full files with open/download actions, while topic-question requests keep returning crops. These are separate chat work after the reports PR and overlap `ChatService.cs` with Claude Code's PR #21; preserve its typed-pick fix.
+- **2026-10-28, chat clarification:** “noo answers” meant **“No, I want answers”**, after the bot offered questions. Answers may be shown on the original paper; AI must never type, explain, hint at, grade or confirm an answer. The owner explicitly rejected hardcoded replies, including the old “Abdulaziz” refusal lines and the temporary hardcoded correction/greeting; DeepSeek should write replies without server replacement. Prepare “Show more” wording before the student selects it. Whole-file/past-paper requests should produce distinct full-file open/download cards, while topic-question requests should produce crops.
 - **Domain:** `drivealt.tryzarqa.com`. The owner added the Cloudflare record themselves. Using an `*.sslip.io` address was raised and not adopted.
 - **Keys:** the owner made a new Resend key `drivealt` and pasted it into GitHub. They first said to take keys from the other projects, then reversed that: "I will make new ones for this". Later they asked for DeepSeek "from zoors repo for now", so `DEEPSEEK_API_KEY` is Zoor's key.
 - **Repo public:** "make the repo public it is ok", so ghcr.io storage and pulls are free. The history was scanned first and no secrets were found.
@@ -368,6 +379,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **One box per question, answers inside (2026-10-24, Claude Code):** separate answer boxes weren't brought back. Answers sit inside the question box, as they do on the paper, which keeps the model's job simple and the crop faithful to the page. The 1.5% padding in code is a safety net, so a slightly tight box can't clip a line, whatever the model does.
 - **Server details in a public repo:** this page names the VPS IP, user and paths. They're not secrets (DNS already exposes the IP, and SSH takes keys only). The owner was offered to strip them and chose to commit them as they are ("Commit AGENTS.md, CLAUDE.md and HANDOFF.md … and open a PR into main").
 - **2026-10-28, Codex:** project orientation is read-only except for correcting this stale handoff, as required by `AGENTS.md`. Existing Claude Code work in PR #21 remains owned by that agent. No inference is made about crop quality from SQL counts alone.
+- **2026-10-28, Codex:** as explicitly directed, model text is passed through unchanged and the old server leak filter is removed. The no-written-answers instruction remains in the model prompt; compliance therefore relies on the model. This is a material change from the previous server guardrail and is not yet verified with live DeepSeek.
 
 ## 6. File inventory
 
@@ -383,7 +395,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | `.github/workflows/deploy.yml` | CI, build, ghcr.io push, VPS deploy; writes the server `.env` | current |
 | `deploy/docker-compose.yml`, `deploy/Dockerfile`, `deploy/.env.example` | Containers and their config; the app joins `zarqa_default` | current |
 | `src/DriveAlt.Api/Ai/{CodexClient,DeepSeekClient,GeminiClient,MaterialAi}.cs` | AI clients; page reading precedence is Codex → DeepSeek → Gemini → offline | updated by PR #5 (merged) |
-| `src/DriveAlt.Api/Chat/{ChatService,Guardrails}.cs` | Bot tool loop; text guardrails (`Guardrails.cs:64`) | updated by PR #5 (merged) |
+| `src/DriveAlt.Api/Chat/ChatService.cs`, `ChatEndpoints.cs` | Model-directed chat, draft follow-ups, SSE errors | feature branch; old `Guardrails.cs` removed at owner's request |
 | `src/DriveAlt.Api/Processing/{Jobs,ProcessingService}.cs` | Job queue, pipeline, pause on limits | current |
 | `src/DriveAlt.Api/Import/DriveImporter.cs` | `import-drive` command | current |
 | `src/DriveAlt.Api/Search/ResultCards.cs`, `web/src/ui/ResultCard.tsx` | Result cards | updated by PR #5 (merged) |
@@ -405,8 +417,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 ## 7. Open threads
 
 0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks and full CI passed (68 backend, 11 frontend). Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. Nothing from this branch was deployed by Codex.
-0a. **Next — Codex, separate chat branch:** full-file results and follow-up/refusal handling requested by owner. No chat code changed in the reports branch. `ChatService.cs` overlaps open PR #21; keep Claude Code's typed-pick fix and coordinate any conflict here.
-1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. Do not edit or push to that branch. Owner approval is required to merge; normal code deployment applies.
+0a. **Claimed — Codex, `codex/chat-files-and-followups`:** full-file results and AI-authored chat with prewritten button follow-ups, stacked on PR #26. Local checks passed; scripted-model/database CI pending. The change overlaps PR #21's `ChatService.cs` and rejects its canned pick text per the owner's newer direction; preserve the typed-course selection behavior when reconciling the branches. No other agent branch was modified.
+1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. It modifies `ChatService.cs` and writes a canned pick line, which conflicts with the owner's newer AI-written-replies decision. Coordinate/reconcile with the chat feature before either overlapping change is merged; do not edit or push to Claude's branch. Owner approval is required to merge.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
 3. **Gateway process leak and configuration drift:** the last reviewed gateway could leave native Codex children running after timeout, and its live PID cap was raised to 1024 while the compose file still used 256 (2026-10-25 evidence above). Gateway source hash is unchanged; no fix is confirmed here. If health says signed out, inspect process pressure before asking for another login. The deployed `codex-model-choice` branch's merge status has not been rechecked in this orientation. Its limit matcher (`usage limit|rate limit|quota|too many requests`) may miss a plain 502; offline fallback handling needs review if such a response occurs.
 4. **Failed document:** SQL still reports one Database Systems file with zero pages and failed status. Earlier diagnosis was `pdftoppm … Document stream is empty`. Repair/replacement needs a separate task; nothing was deleted or requeued.
@@ -472,6 +484,8 @@ docker compose --env-file generated.env --env-file .env exec -T db psql -U drive
 # failed 1; read_ok 5665, read_offline 0; done jobs 296, failed 1,
 # queued 190 (all held, none paused); every in-scope unread count 0;
 # question regions 1105, no other labels.
+# After the owner merges/deploys the chat feature, messages also has more_commentary;
+# after the report feature, to_regclass('public.material_reports') returns material_reports.
 docker compose --env-file generated.env --env-file .env logs --since 24h --no-log-prefix app 2>&1 | grep -c 'AI paused'
 # Last verified: 0. grep exits 1 when there are no matches; that is expected.
 ```

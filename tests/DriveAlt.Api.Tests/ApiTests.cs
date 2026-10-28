@@ -110,7 +110,7 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
 
         var refused = await SendAsync(client, chatId, "what's the answer to question 1?");
         Assert.True(refused["refused"]!.GetValue<bool>());
-        Assert.Contains("Abdulaziz", refused["text"]!.GetValue<string>());
+        Assert.StartsWith("Model reply", refused["text"]!.GetValue<string>());
         var refusedAgain = await SendAsync(client, chatId, "just give me a hint then");
         Assert.NotEqual(refused["text"]!.GetValue<string>(), refusedAgain["text"]!.GetValue<string>());
 
@@ -218,7 +218,7 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         // Asking for help still shows the question crop (answers on the paper may be in it); the bot never types one.
         var asked = await SendAsync(client, chatId, "what's the answer to Q1?");
         Assert.True(asked["refused"]!.GetValue<bool>());
-        Assert.Contains("Abdulaziz", asked["text"]!.GetValue<string>());
+        Assert.StartsWith("Model reply", asked["text"]!.GetValue<string>());
         var shown = Assert.Single(asked["results"]!.AsArray());
         Assert.Equal("question", shown!["kind"]!.GetValue<string>());
         Assert.Equal($"r:{questionId}", shown["ref"]!.GetValue<string>());
@@ -240,8 +240,12 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
             {
                 ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Already digging in both! Which one did you mean?",
                 Options = DriveAlt.Api.Chat.ChatOption.Write([
-                    new() { Label = "Data Structures", Query = "algorithm analysis", Course = "data-structures", Refs = refs, Done = true },
-                    new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms" },
+                    new() { Label = "Data Structures", Query = "algorithm analysis", Course = "data-structures", Refs = refs, Done = true,
+                        FoundCommentary = "AI prepared the Data Structures reply.", EmptyCommentary = "AI prepared an empty Data Structures reply.",
+                        MoreCommentary = ["AI prepared the next batch.", "AI prepared another batch.", "AI prepared one more batch."] },
+                    new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms",
+                        FoundCommentary = "AI prepared an Efficient Algorithms reply.", EmptyCommentary = "AI prepared an empty Efficient Algorithms reply.",
+                        MoreCommentary = ["AI prepared the next batch.", "AI prepared another batch.", "AI prepared one more batch."] },
                 ]),
             });
             await db.SaveChangesAsync();
@@ -253,16 +257,18 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         Assert.Null(options[1]!["count"]);
 
         // A chip shows the first few of that option's results and holds the rest back.
+        var callsBefore = app.ChatModel.RequestCount;
         var picked = await SendAsync(client, chatId, "Data Structures", new { option = 0 });
         Assert.Equal(2, picked["moreCount"]!.GetValue<int>());
-        Assert.StartsWith("Data Structures it is!", picked["text"]!.GetValue<string>());
-        Assert.Contains("2 more", picked["text"]!.GetValue<string>());
+        Assert.Equal("AI prepared the Data Structures reply.", picked["text"]!.GetValue<string>());
+        Assert.Equal(callsBefore, app.ChatModel.RequestCount);
 
         var more = await SendAsync(client, chatId, "Show more", new { more = true });
         Assert.Equal(0, more["moreCount"]!.GetValue<int>());
-        Assert.Contains("That's all of them", more["text"]!.GetValue<string>());
+        Assert.Equal("AI prepared the next batch.", more["text"]!.GetValue<string>());
+        Assert.Equal(callsBefore, app.ChatModel.RequestCount);
         var none = await SendAsync(client, chatId, "Show more", new { more = true });
-        Assert.StartsWith("That's everything I found", none["text"]!.GetValue<string>());
+        Assert.Equal("Model reply for the completed list.", none["text"]!.GetValue<string>());
 
         // A chip whose search hadn't finished searches on the spot.
         using (var scope = app.Services.CreateScope())
@@ -272,14 +278,16 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
             {
                 ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Which one?", CreatedAt = DateTime.UtcNow.AddSeconds(1),
                 Options = DriveAlt.Api.Chat.ChatOption.Write([
-                    new() { Label = "Data Structures", Query = "zzqx nothing", Course = "data-structures" },
-                    new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms" },
+                    new() { Label = "Data Structures", Query = "zzqx nothing", Course = "data-structures",
+                        FoundCommentary = "AI prepared a result.", EmptyCommentary = "AI prepared an empty reply.", MoreCommentary = ["Next.", "More.", "Another."] },
+                    new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms",
+                        FoundCommentary = "AI prepared a result.", EmptyCommentary = "AI prepared the empty Efficient Algorithms reply.", MoreCommentary = ["Next.", "More.", "Another."] },
                 ]),
             });
             await db.SaveChangesAsync();
         }
         var pending = await SendAsync(client, chatId, "Efficient Algorithms", new { option = 1 });
-        Assert.Equal("Nothing in Efficient Algorithms yet. Want me to try other words?", pending["text"]!.GetValue<string>());
+        Assert.Equal("AI prepared the empty Efficient Algorithms reply.", pending["text"]!.GetValue<string>());
         Assert.Empty(pending["results"]!.AsArray());
     }
 
@@ -402,6 +410,208 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.TooManyRequests, (await student.PostAsJsonAsync("/api/reports", new { @ref = $"p:{pageId}", reason = "other" })).StatusCode);
     }
 
+    [Fact]
+    public async Task Whole_paper_requests_return_distinct_full_files_and_topic_requests_keep_crops()
+    {
+        await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8894");
+        var paperIds = new List<Guid>();
+        Guid exerciseId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var course = await db.Courses.SingleAsync(c => c.Slug == "data-structures");
+            var owner = await db.Users.SingleAsync(u => u.UniId == ApiFactory.Uploader);
+            for (var i = 0; i < 5; i++)
+            {
+                var file = new DocFile
+                {
+                    Title = $"File request fixture {i}", OriginalName = $"paper-{i}.pdf", Sha256 = Guid.NewGuid().ToString(),
+                    UploadedById = owner.Id, Course = course, AcademicYear = 2026, PageCount = 2,
+                    MaterialType = i == 4 ? MaterialTypes.Exercise : MaterialTypes.PastPaper,
+                    Status = i == 3 ? FileStatuses.Reading : FileStatuses.Ready,
+                };
+                for (var number = 1; number <= 2; number++)
+                {
+                    var page = new Page { File = file, Number = number, Width = 600, Height = 800, Extracted = i != 3,
+                        Text = i == 3 ? "" : "Questions about queues", Kind = PageKinds.Assessment };
+                    file.Pages.Add(page);
+                    if (i != 3)
+                    {
+                        page.Regions.Add(new Region { Page = page, Label = RegionLabels.Question, Text = "Question about queues", QuestionNumber = number.ToString(), W = .8f, H = .4f });
+                        IndexText.Refresh(file, page);
+                    }
+                }
+                db.Files.Add(file);
+                if (i < 4) paperIds.Add(file.Id);
+            }
+            await db.SaveChangesAsync();
+            exerciseId = await db.Files.Where(f => f.Title == "File request fixture 4").Select(f => f.Id).SingleAsync();
+        }
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        var reply = await SendAsync(student, chatId, "ok i want full ds past papers 2026");
+        Assert.False(reply["refused"]!.GetValue<bool>());
+        Assert.Equal(1, reply["moreCount"]!.GetValue<int>());
+        var cards = reply["results"]!.AsArray().ToList();
+        Assert.Equal(3, cards.Count);
+        var callsBeforeMore = app.ChatModel.RequestCount;
+        var more = await SendAsync(student, chatId, "Show more", new { more = true });
+        Assert.Equal(callsBeforeMore, app.ChatModel.RequestCount);
+        Assert.Equal("AI prepared batch one.", more["text"]!.GetValue<string>());
+        cards.AddRange(more["results"]!.AsArray());
+        Assert.Equal(4, cards.Count);
+        Assert.Equal(paperIds.Order(), cards.Select(c => Guid.Parse(c!["fileId"]!.GetValue<string>())).Order());
+        Assert.DoesNotContain(cards, c => c!["fileId"]!.GetValue<string>() == exerciseId.ToString());
+        Assert.All(cards, c =>
+        {
+            Assert.Equal("file", c!["kind"]!.GetValue<string>());
+            Assert.StartsWith("f:", c["ref"]!.GetValue<string>());
+            Assert.Null(c["regionId"]);
+            Assert.Null(c["box"]);
+            Assert.Equal(1, c["pageNumber"]!.GetValue<int>());
+            Assert.Equal(2, c["pageCount"]!.GetValue<int>());
+            Assert.Contains("/api/media/pages/", c["imageUrl"]!.GetValue<string>());
+        });
+        var stored = await student.GetFromJsonAsync<JsonObject>($"/api/chats/{chatId}");
+        Assert.All(stored!["messages"]!.AsArray().Where(m => m!["role"]!.GetValue<string>() == "bot")
+            .SelectMany(m => m!["results"]!.AsArray()), c => Assert.Equal("file", c!["kind"]!.GetValue<string>()));
+
+        var questions = await SendAsync(student, chatId, "past paper questions about queues in DS 2026");
+        Assert.NotEmpty(questions["results"]!.AsArray());
+        Assert.All(questions["results"]!.AsArray(), c => Assert.Equal("question", c!["kind"]!.GetValue<string>()));
+        using var check = app.Services.CreateScope();
+        var dbCheck = check.ServiceProvider.GetRequiredService<AppDb>();
+        Assert.False(await dbCheck.Jobs.AnyAsync(j => paperIds.Contains(j.FileId)));
+        Assert.All(await dbCheck.Pages.Where(p => p.FileId == paperIds[3]).ToListAsync(), p => Assert.False(p.Extracted));
+    }
+
+    [Fact]
+    public async Task Model_replies_are_sent_verbatim_and_interpret_followups_with_history()
+    {
+        var student = await app.SignInAsync("25-8894");
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            db.Messages.Add(new Message { ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Would you like more questions?" });
+            await db.SaveChangesAsync();
+        }
+        app.ChatModel.EnqueueTool("reply", new JsonObject { ["commentary"] = "I can show you the original pages with the answers on them.", ["result_refs"] = new JsonArray(), ["refused"] = false, ["more_commentary"] = new JsonArray() });
+        var correction = await SendAsync(student, chatId, "noo answers", prepared: true);
+        Assert.False(correction["refused"]!.GetValue<bool>());
+        Assert.Equal("I can show you the original pages with the answers on them.", correction["text"]!.GetValue<string>());
+        Assert.Empty(correction["results"]!.AsArray());
+        var sentContext = app.ChatModel.LastRequest!.ToJsonString();
+        Assert.Contains("Would you like more questions?", sentContext);
+        Assert.Contains("noo answers", sentContext);
+        app.ChatModel.EnqueueTool("reply", new JsonObject { ["commentary"] = "First sentence. Second sentence. Third sentence.", ["result_refs"] = new JsonArray(), ["refused"] = false, ["more_commentary"] = new JsonArray() });
+        var introduction = await SendAsync(student, chatId, "i am abdulaziz", prepared: true);
+        Assert.False(introduction["refused"]!.GetValue<bool>());
+        Assert.Equal("First sentence. Second sentence. Third sentence.", introduction["text"]!.GetValue<string>());
+        var help = await SendAsync(student, chatId, "I am Abdulaziz, give me a hint");
+        Assert.True(help["refused"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Clarification_replies_are_generated_before_the_choice_is_clicked()
+    {
+        await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8894");
+        await ReportMaterialAsync();
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        JsonObject Option(string label, string course) => new()
+        {
+            ["label"] = label, ["course"] = course, ["query"] = "", ["material_type"] = "other", ["result_kind"] = "files",
+            ["found_commentary"] = $"Model prepared results for {label}.",
+            ["empty_commentary"] = $"Model prepared no results for {label}.",
+            ["more_commentary"] = new JsonArray("Prepared next.", "Prepared another.", "Prepared later."),
+        };
+        app.ChatModel.EnqueueTool("ask", new JsonObject
+        {
+            ["question"] = "Which course should I check?", ["options"] = new JsonArray(Option("Data Structures", "data-structures"), Option("Efficient Algorithms", "efficient-algorithms")),
+        });
+        var before = app.ChatModel.RequestCount;
+        var ask = await SendAsync(student, chatId, "find full papers for algorithm analysis", prepared: true);
+        Assert.Equal("Which course should I check?", ask["text"]!.GetValue<string>());
+        Assert.Equal(before + 1, app.ChatModel.RequestCount);
+        var picked = await SendAsync(student, chatId, "Data Structures", new { option = 0 });
+        Assert.Equal("Model prepared results for Data Structures.", picked["text"]!.GetValue<string>());
+        Assert.NotEmpty(picked["results"]!.AsArray());
+        Assert.All(picked["results"]!.AsArray(), c => Assert.Equal("file", c!["kind"]!.GetValue<string>()));
+        Assert.Equal(before + 1, app.ChatModel.RequestCount);
+    }
+
+    [Fact]
+    public async Task Model_failures_are_streamed_as_errors_not_fake_bot_answers()
+    {
+        var student = await app.SignInAsync("25-8894");
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        app.ChatModel.Enqueue(_ => throw new InvalidOperationException("Test model failure"));
+        var response = await student.PostAsJsonAsync($"/api/chats/{chatId}/messages", new { text = "Hello" });
+        var stream = await response.Content.ReadAsStringAsync();
+        Assert.Contains("event: error", stream);
+        Assert.DoesNotContain("event: message", stream);
+        var saved = await student.GetFromJsonAsync<JsonObject>($"/api/chats/{chatId}");
+        Assert.DoesNotContain(saved!["messages"]!.AsArray(), m => m!["role"]!.GetValue<string>() == "bot");
+    }
+
+    [Fact]
+    public async Task Older_chat_results_without_prepared_text_get_a_model_reply()
+    {
+        var student = await app.SignInAsync("25-8894");
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            db.Messages.Add(new Message { ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Earlier results", More = [$"p:{Guid.NewGuid()}"] });
+            await db.SaveChangesAsync();
+        }
+        app.ChatModel.EnqueueText("{\"lines\":[\"Model prepared the older follow-up.\"]}");
+        var before = app.ChatModel.RequestCount;
+        var more = await SendAsync(student, chatId, "Show more", new { more = true });
+        Assert.Equal("Model prepared the older follow-up.", more["text"]!.GetValue<string>());
+        Assert.Equal(before + 1, app.ChatModel.RequestCount);
+    }
+
+    [Fact]
+    public async Task Course_inventory_counts_existing_unread_files_without_processing_them()
+    {
+        await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8894");
+        Guid fileId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var file = new DocFile
+            {
+                Title = "Unread inventory fixture", OriginalName = "inventory.pdf", Sha256 = Guid.NewGuid().ToString(),
+                UploadedById = (await db.Users.SingleAsync(u => u.UniId == ApiFactory.Uploader)).Id,
+                CourseId = (await db.Courses.SingleAsync(c => c.Slug == "data-structures")).Id,
+                Status = FileStatuses.Reading, MaterialType = MaterialTypes.PastPaper, PageCount = 1,
+            };
+            db.Pages.Add(new Page { File = file, Number = 1, Extracted = false });
+            await db.SaveChangesAsync();
+            fileId = file.Id;
+        }
+        app.ChatModel.EnqueueTool("list_courses", new JsonObject());
+        app.ChatModel.Enqueue(request =>
+        {
+            var tool = request["messages"]!.AsArray().Last(m => m?["role"]?.GetValue<string>() == "tool")!;
+            var output = JsonNode.Parse(tool["content"]!.GetValue<string>())!;
+            var course = output["courses"]!.AsArray().Single(c => c!["slug"]!.GetValue<string>() == "data-structures")!;
+            Assert.True(course["files"]!.GetValue<int>() > course["searchable_files"]!.GetValue<int>());
+            return ScriptedChatModel.Tool("reply", new JsonObject { ["commentary"] = "Model checked the course inventory.",
+                ["result_refs"] = new JsonArray(), ["refused"] = false, ["more_commentary"] = new JsonArray() });
+        });
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        var reply = await SendAsync(student, chatId, "What files are available?", prepared: true);
+        Assert.Equal("Model checked the course inventory.", reply["text"]!.GetValue<string>());
+        using var check = app.Services.CreateScope();
+        var dbCheck = check.ServiceProvider.GetRequiredService<AppDb>();
+        Assert.False(await dbCheck.Jobs.AnyAsync(j => j.FileId == fileId));
+        Assert.False((await dbCheck.Pages.SingleAsync(p => p.FileId == fileId)).Extracted);
+    }
+
     private async Task<(Guid PageId, Guid RegionId)> ReportMaterialAsync(string status = FileStatuses.Ready)
     {
         using var scope = app.Services.CreateScope();
@@ -420,14 +630,58 @@ public class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         return (page.Id, region.Id);
     }
 
-    private static async Task<JsonObject> SendAsync(HttpClient client, string chatId, string text, object? extra = null)
+    private async Task<JsonObject> SendAsync(HttpClient client, string chatId, string text, object? extra = null, bool prepared = false)
     {
+        if (!prepared && extra is null) await PrepareModelTurnAsync(chatId, text);
+        if (!prepared && extra is not null && JsonSerializer.SerializeToNode(extra)?["more"]?.GetValue<bool>() == true)
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var last = await db.Messages.AsNoTracking().Where(m => m.ConversationId == Guid.Parse(chatId) && m.Role == "bot")
+                .OrderByDescending(m => m.CreatedAt).FirstAsync();
+            if (last.More.Length == 0) app.ChatModel.EnqueueText("Model reply for the completed list.");
+        }
         var res = await client.PostAsJsonAsync($"/api/chats/{chatId}/messages",
             extra is null ? new JsonObject { ["text"] = text } : Merge(text, extra));
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var body = await res.Content.ReadAsStringAsync();
         var data = body.Split("\n\n").First(c => c.StartsWith("event: message")).Split('\n')[1]["data: ".Length..];
         return JsonNode.Parse(data)!["message"]!.AsObject();
+    }
+
+    private async Task PrepareModelTurnAsync(string chatId, string text)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+        var last = await db.Messages.AsNoTracking().Where(m => m.ConversationId == Guid.Parse(chatId) && m.Role == "bot")
+            .OrderByDescending(m => m.CreatedAt).FirstOrDefaultAsync();
+        var lower = text.ToLowerInvariant();
+        if (lower.Contains("what's the answer") || lower.Contains("hint"))
+        {
+            var refs = new JsonArray((last?.Results ?? []).Take(1).Select(r => (JsonNode)r).ToArray());
+            app.ChatModel.EnqueueTool("reply", new JsonObject { ["commentary"] = $"Model reply {app.ChatModel.RequestCount + 1}.",
+                ["result_refs"] = refs, ["refused"] = true, ["more_commentary"] = new JsonArray() });
+            return;
+        }
+        var courses = await db.Courses.AsNoTracking().ToListAsync();
+        var course = Heuristics.MatchCourse(lower, courses);
+        var args = new JsonObject { ["query"] = text };
+        if (course is not null) args["course"] = course.Slug;
+        if (Heuristics.MaterialType(lower) is { } type) args["material_type"] = type;
+        if (Heuristics.Year(text) is { } year) args["year"] = year;
+        if (Heuristics.Label(text) is { } label) args["assessment_label"] = label;
+        if (lower.Contains("full") && lower.Contains("papers")) args["result_kind"] = "files";
+        app.ChatModel.EnqueueTool("search_material", args);
+        app.ChatModel.Enqueue(request =>
+        {
+            var messages = request["messages"]!.AsArray();
+            var tool = messages.Last(m => m?["role"]?.GetValue<string>() == "tool")!;
+            var result = JsonNode.Parse(tool["content"]!.GetValue<string>())!;
+            var refs = new JsonArray(result["results"]!.AsArray().Take(12).Select(r => (JsonNode)r!["ref"]!.GetValue<string>()).ToArray());
+            return ScriptedChatModel.Tool("reply", new JsonObject { ["commentary"] = $"Model reply {app.ChatModel.RequestCount}.",
+                ["result_refs"] = refs, ["refused"] = false,
+                ["more_commentary"] = new JsonArray("AI prepared batch one.", "AI prepared batch two.", "AI prepared batch three.") });
+        });
     }
 
     private static JsonObject Merge(string text, object extra)

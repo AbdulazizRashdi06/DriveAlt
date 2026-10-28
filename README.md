@@ -5,6 +5,7 @@ The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot 
 - **Chat:** ask in plain words ("past paper questions on queue rear counting in DS", "Quiz 3 from last year", "where did we cover AVL trees?").
   - The bot figures out course, type and year itself. It only asks when something is truly ambiguous.
   - Results are question crops or full slides, each with its source (course, file, year, page, question number) and tags. A question crop shows the question as it is on the paper, including any answer written there.
+  - Requests for whole files or full past papers can return distinct full-file cards with open and download actions. Topic-question requests can return crops instead.
   - Ask it for an answer, hint or check and it won't type anything: it blames Abdulaziz and shows the question crop or page from the file instead.
 - **Viewer:** zoom, flip through results with ← / →, open the full page or the original file at that page, save.
 - **Browse:** the Drive's Year 2 tree:
@@ -29,13 +30,11 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 
 1. The page-reading model boxes each question on a page. The box covers everything that belongs to the question on the paper: stem, sub-parts, figures, code, **and any answer, solution or handwriting with it**. Each box is padded by 1.5% of the page on every side (`MaterialAi.BoxPadding`), so a tight box never clips anything. Pages themselves are shown exactly as they are.
 2. Crops and pages are never edited: nothing is blacked out, blurred or hidden.
-3. When a student asks the bot for an answer, a hint or a check, the bot replies with a rotating "blame Abdulaziz" line and shows the question crop or page, answers included as they appear on the paper. It never types the answer, explains it or checks work.
-4. No AI writes answers anywhere. The page `text` and each question's text leave answers out, so answer text is never indexed, embedded or sent to the chat model.
+3. The chat model is instructed not to write answers, explain solutions, provide hints or check work. It may show the original page or crop, including answers as they appear on the paper, and writes its own conversational reply.
+4. The page-reading model is instructed to leave answers out of page and question text. Historical PDF-text imports may have included solution text; the extent of that historical risk is unverified and is tracked in `HANDOFF.md`.
 5. The bot picks results by reference, and the server renders them from the database. It only accepts references its own searches (or earlier messages) returned.
-6. The bot's one-line comment is filtered on the server:
-   - It is capped at 2 sentences.
-   - It is rejected if it contains answer-like phrases or quotes 5+ words from any page involved, answers included.
-7. Refusal lines are written by the server, not the model (`Chat/RefusalLines`).
+6. The server does not replace or rewrite the chat model's conversational text. The no-written-answers rule is in the model instructions; original paper images are kept intact.
+7. The model prepares follow-up lines for held-back results and clarification options with its initial response, so button clicks can use those lines without another model call. Older conversations without prepared lines may require one call the first time.
 
 ## Stack
 
@@ -48,12 +47,7 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 | Email | Resend: `{uniId}@student.gutech.edu.om` gets a 6-digit code |
 | Web | React 19 + Vite + TanStack Query + React Router, pdf.js, react-zoom-pan-pinch; served by the API from `wwwroot` |
 
-**Without a Gemini key the app still runs in offline mode:**
-- text comes from the PDF text layer;
-- each assessment page counts as one question region;
-- "give me the answer" gets the refusal line and the whole page;
-- search is keyword-only;
-- the bot is rule-based.
+**Without configured AI:** page processing can fall back to the PDF text layer and whole-page assessment regions, and search is keyword-only. Chat requires DeepSeek or Gemini; if neither is configured, the UI reports that the AI reply could not be completed.
 
 Useful for development; set the key for real use.
 
@@ -166,12 +160,13 @@ dotnet test                      # unit + integration (needs local Postgres with
 cd web && npm test               # Vitest
 cd web && node e2e/screens.mjs   # Playwright walkthrough + desktop/phone screenshots against a running dev API
 cd web && node e2e/reports.mjs   # report flow against Vite on :5177 with a stand-in API; desktop/phone (no DB or AI calls)
+cd web && node e2e/chat-files.mjs # whole-file cards and question viewer against Vite on :5177 with a stand-in API
 ```
 
 ## Layout
 
 ```
-src/DriveAlt.Api/   Auth, Files, Processing (pipeline, renderer), Ai (Gemini), Search, Chat (bot + guardrails),
+src/DriveAlt.Api/   Auth, Files, Processing (pipeline, renderer), Ai (Gemini), Search, Chat (model-directed bot),
                     Browse, Inspect, Bookmarks, Admin, Import (Drive), Data (EF, migrations, course seed)
 tests/              xUnit tests
 web/                React app (screens/, ui/, lib/, styles/app.css design tokens)
