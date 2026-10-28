@@ -400,7 +400,7 @@ public sealed partial class DriveImporter(HttpClient http, AppDb db, Storage sto
             return duplicateId;
         }
 
-        var first = parts[0];
+        var first = DocumentConverter.IsSupported(p.Items[0].Path) ? p.Items[0].Path : parts[0];
         var kind = DocumentConverter.IsImage(first) ? SourceKinds.Images : DocumentConverter.IsOffice(first) ? SourceKinds.Office : SourceKinds.Pdf;
         db.Files.Add(new DocFile
         {

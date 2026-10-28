@@ -63,6 +63,11 @@ public partial class ApiTests
         Assert.Equal(2, app.Drive.Downloads.Count);
         Assert.False((await db.DriveSyncFolders.FindAsync("new-subfolder"))!.Enabled);
         await admin.PutAsJsonAsync("/api/admin/drive-sync/folders/ds-folder", new { enabled = false });
+        app.Drive.Folders["ds-folder"] = [.. app.Drive.Folders["ds-folder"], new("disabled-file", "disabled.pdf", "file", null)];
+        await admin.PostAsJsonAsync("/api/admin/drive-sync/scan", new { });
+        db.ChangeTracker.Clear();
+        await sync.RunOnceAsync(default);
+        Assert.Equal(2, app.Drive.Downloads.Count);
         await admin.PutAsJsonAsync("/api/admin/drive-sync/", new { enabled = false });
     }
 

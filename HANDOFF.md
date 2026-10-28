@@ -10,7 +10,7 @@
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `codex/drive-folder-sync`, based on main `842fbec` |
 | Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
-| Purpose of this update | Implement uploader-controlled automatic Drive discovery/import with per-folder switches. Work in progress; not deployed. |
+| Purpose of this update | Implement uploader-controlled automatic Drive discovery/import with per-folder switches. Implemented in PR #29; not deployed. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -223,7 +223,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
-**2026-10-28, Codex — Drive folder sync (in progress):** per-folder controls and paused master switch, five-minute polling, existing-source/photo deduplication, and explicit discovery while paused. New folders are off; only direct files in selected folders import. Original source edits/deletions do not replace/delete imported material. Database integration cases use a scripted Drive, not real downloads or paid AI. Owner-authorized DNS-only change is verified above.
+**2026-10-28, Codex — Drive folder sync (PR #29):** per-folder controls and paused master switch, five-minute polling, existing-source/photo deduplication, and explicit discovery while paused. New folders are off; only direct files in selected folders import. Original source edits/deletions do not replace/delete imported material. Database integration cases use a scripted Drive, not real downloads or paid AI. Owner-authorized DNS-only change is verified above.
 
 **2026-10-28, Codex — deployment authorized:** Owner requested “live it” for the report and chat changes. Merged #25 with `[skip ci]` and #26 normally. Cancelled the #26 deployment before the deploy job after noticing automatic image deletion and prune; removed those commands and `--remove-orphans` from the next deployment workflow. PR #27 carries both features to production after CI. No files or held jobs were deleted or requeued by Codex.
 
@@ -430,7 +430,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Claimed — Codex, `codex/drive-folder-sync`:** add five-minute Drive polling with per-folder controls and a paused initial state. New folders default off; only selected folders import. Reuse the importer while tracking individual source IDs to avoid regrouping old photos. Existing held jobs remain untouched. Owner reports campus Wi-Fi recovered without DNS/server changes; cause remains unverified. Resume Git checks match main `842fbec`/code `068f0b9`; SSH remains refused from campus, so VPS checks are unknown.
+**Codex, `codex/drive-folder-sync`, PR #29:** add five-minute Drive polling with per-folder controls and a paused initial state. New folders default off; only selected folders import. Reuse the importer while tracking individual source IDs to avoid regrouping old photos. Existing held jobs remain untouched. Owner reports campus Wi-Fi recovered without DNS/server changes; cause remains unverified. Resume Git checks match main `842fbec`/code `068f0b9`; SSH remains refused from campus, so VPS checks are unknown.
 
 0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks and full CI passed (68 backend, 11 frontend). Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. GitHub deployment passed; direct post-deploy database verification remains unknown because the university network refuses SSH.
 0a. **PR #27:** full-file results and AI-authored chat with prewritten button follow-ups are deployed. PR #21 overlaps `ChatService.cs` and contains canned pick text rejected by the owner; preserve typed-course selection when reconciling. No other agent branch was modified.
@@ -446,7 +446,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Active — Codex:** finish `codex/drive-folder-sync`; local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Docker is unavailable locally; full database tests await CI. Browser smoke awaits a current Playwright runtime (Edge exited at launch; bundled runtime download underway). Review and owner approval are needed before merge/deploy.
+**Ready for owner review — Codex, PR #29:** local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Full CI run `40661496361` on `83e7b26` passed: `Failed: 0, Passed: 51, Skipped: 0, Total: 51`, including two scripted-Drive/database cases, and frontend `16 passed`. `node e2e/drive-sync.mjs` passed on desktop and phone using a stand-in API; both screenshots were visually inspected after controls were styled. Later changes refine original-name preservation, add a disabled-folder assertion, style the controls and document results; latest CI must pass too. Docker is unavailable locally. No live import or paid AI call was made. Merge/deploy needs owner approval; after deployment, discover folders while paused and leave Semester 2/ITS off until explicitly selected.
 
 **Follow-up:** From an unrestricted network, verify the running image, report table, `messages.more_commentary`, and held jobs. Confirm normal Cloudflare access from outside the university network and test DeepSeek behavior when authorized. Keep PR #21 coordinated with Claude Code.
 
@@ -479,7 +479,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
 # #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
-# PRs #25–#27 are merged; PR #21 remains open.
+# PRs #25–#28 are merged; PR #21 remains open. PR #29 can appear until approved/merged.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const base = process.env.BASE_URL ?? 'http://127.0.0.1:5177'
 const out = mkdtempSync(join(tmpdir(), 'drivealt-sync-'))
-const browser = await chromium.launch()
+const browser = await chromium.launch({ channel: 'chromium' })
 try {
   for (const [name, viewport] of [['desktop', { width: 1440, height: 1000 }], ['phone', { width: 390, height: 844 }]]) {
     const context = await browser.newContext({ viewport })
@@ -35,7 +35,7 @@ try {
     await page.goto(`${base}/admin`)
     const ds = page.getByRole('switch', { name: 'Sync semester 1 / Data Structures / past papers', exact: true })
     await expect(ds).not.toBeChecked()
-    await ds.check()
+    await ds.click()
     await expect(ds).toBeChecked()
     await expect(page.getByRole('switch', { name: 'Sync semester 1 / AI / ITS', exact: true })).not.toBeChecked()
     await expect(page.getByRole('switch', { name: 'Sync semester 2 / CS / Efficient Algorithms / slides', exact: true })).not.toBeChecked()

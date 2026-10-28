@@ -30,9 +30,9 @@ export function DriveSyncPanel() {
       <label className="drive-sync-toggle"><input type="checkbox" role="switch" aria-label="Automatic Drive sync" checked={s?.enabled ?? false}
         disabled={busy || !s} onChange={e => void change('/api/admin/drive-sync/', e.target.checked)} />{s?.enabled ? 'Auto-sync on' : 'Auto-sync paused'}</label>
     </div>
-    <p>Starts paused. Every folder starts off, including newly discovered folders. A switch applies only to files directly in that folder; subfolders have their own switches. Turning it off stops future imports; work already queued continues.</p>
+    <p>Select folders, then turn on auto-sync. Each switch covers that folder’s files only. Subfolders and new folders stay off until selected. Pausing stops new imports; current processing finishes.</p>
     <div className="drive-sync-head">
-      <button type="button" className="btn secondary" disabled={busy || scanning || !s} onClick={() => void change('/api/admin/drive-sync/scan')}>
+      <button type="button" className="candy c-blue sm" disabled={busy || scanning || !s} onClick={() => void change('/api/admin/drive-sync/scan')}>
         {scanning ? 'Checking Drive…' : s?.enabled ? 'Sync now' : 'Discover folders'}
       </button>
       <span>{s?.finishedAt ? `Last checked ${new Date(s.finishedAt).toLocaleString()} · ${s.imported} file groups imported` : 'No completed scan yet'}</span>
@@ -41,7 +41,7 @@ export function DriveSyncPanel() {
     {s?.error && <p role="alert">{s.error}</p>}
     {s && s.folders.length === 0 && <p>Discover folders first, select the ones you want, then turn on automatic sync. Discovery while paused only lists folders.</p>}
     {!!s?.folders.length && <>
-      <label className="drive-sync-search">Find a folder<input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Semester, course or folder name" /></label>
+      <label className="drive-sync-search">Find a folder<input className="input" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Semester, course or folder name" /></label>
       <div className="drive-sync-folders">
         {s.folders.filter(f => [f.name, ...f.segments].join('/').toLowerCase().includes(filter.toLowerCase())).map(f => <div key={f.id} className="drive-sync-folder">
           <label><input type="checkbox" role="switch" aria-label={`Sync ${f.segments.join(' / ') || f.name}`} checked={f.enabled} disabled={busy || !f.available}
@@ -52,6 +52,6 @@ export function DriveSyncPanel() {
         </div>)}
       </div>
     </>}
-    <p>Existing imports and held jobs stay as they are. Sync adds new files; editing or deleting a Drive file does not replace or delete its imported copy.</p>
+    <p>Files already in the app stay available. Editing or deleting a Drive file does not change its imported copy.</p>
   </section>
 }
