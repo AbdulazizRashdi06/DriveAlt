@@ -9,18 +9,19 @@
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `codex/refresh-handoff-state` (docs-only PR #25), from main `7c7fe49` (merge of #24) |
-| Updated | 2026-10-28, by Codex; VPS snapshot at 05:57 UTC (09:57 Muscat) |
+| Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
 | Purpose of this update | Reconcile the handoff with GitHub, local Git and read-only VPS checks during project orientation. Restore PR #21's open-work claim and distinguish completed Semester 1 processing from deliberately held work. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
 **PR #20 is deployed:** main contains `a920112`; the live image is the later PR #22 merge `b1461cc`, and `psql -c '\d messages'` lists `more` and `options`. **PR #21 is still open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** the app is healthy on image `b1461cc`. Semester 1 without ITS has **192 ready files, one failed empty document, and zero unread pages**. The remaining **190 queued jobs are all explicitly held** for Semester 2 and ITS. The gateway reports signed in; no job is currently paused on AI availability or limits. PR #21 awaits the owner's merge decision.
+**In one line:** the app is healthy on image `b1461cc`. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
 
 ## 2. State of the world
 
 **Current verification, 2026-10-28 05:57 UTC** (Codex; read-only SSH and GitHub connector):
+- **Full Year 2 inventory checked again at 06:03 UTC, on the owner's clarification:** SQL grouped by `courses.semester` returns Semester 1 `224 added / 210 ready / 13 reading / 1 failed / 6085 pages`; Semester 2 `179 added / 2 ready / 177 reading / 0 failed / 3588 pages`. `select count(*), count(distinct course_id), sum(page_count) from files` returns `403 / 14 / 9673`. All 403 files have a source reference. File kinds: `pdf 291`, `office 89`, `images 23`. This confirms material from both semesters has been added; exact completeness against the original Drive needs a source-manifest comparison and is not established by these counts alone.
 - `git merge-base --is-ancestor b1461cc origin/main` exits 0; fetched main is `7c7fe49`. GitHub `search_prs`, query `repo:AbdulazizRashdi06/DriveAlt is:open`, returns only **#21**.
 - `grep -o '^DRIVEALT_IMAGE=.*' ~/drivealt/.env` returns `ghcr.io/abdulazizrashdi06/drivealt:b1461cc1a18da2c1ce210a167d1f50d809dae821`, matching `git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'`.
 - Public `/api/health` returns `{"ok":true}`; gateway `/health` returns `{"signedIn":true}`; gateway source SHA256 prefix remains `5da0c724e36f4562`.
@@ -213,6 +214,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - Restored the open PR #21 claim that later handoff updates had dropped. Its GitHub description records 49/49 local unit tests, 8/8 frontend tests and TypeScript passing; its API test was not run locally. These are Claude Code's reported results, not new Codex test runs.
 - Read-only checks confirm the gateway is signed in and local Zarqa contains `abebc56`. Neither the Caddy guard nor any infrastructure was changed. This documentation must merge with `[skip ci]` and does not change the live image.
 - Published this correction as **PR #25** into main. Codex did not merge it; only the owner can approve that step. `git diff --check` passed and the changed-file list contains only `HANDOFF.md`.
+- After the owner clarified that almost all Year 2 files were already added, queried the complete database inventory rather than only ready/in-scope files: 403 registered files across both semesters and 14 courses. Added the distinction between ingestion and processing to the current summary; no data or jobs were changed.
 
 **2026-10-28, Claude Code** (branch `claude/handoff-zarqa-caddy`, docs only):
 - Recorded that PR #22's fix ran on the VPS (below; DriveAlt PR #23).
