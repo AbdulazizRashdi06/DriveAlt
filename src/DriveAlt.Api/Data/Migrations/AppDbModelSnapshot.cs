@@ -271,6 +271,119 @@ namespace DriveAlt.Api.Data.Migrations
                     b.ToTable("files", (string)null);
                 });
 
+            modelBuilder.Entity("DriveAlt.Api.Data.DriveSyncFolder", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Available")
+                        .HasColumnType("boolean")
+                        .HasColumnName("available");
+
+                    b.Property<DateTime?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_at");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ParentId")
+                        .HasColumnType("text")
+                        .HasColumnName("parent_id");
+
+                    b.PrimitiveCollection<string[]>("Segments")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("segments");
+
+                    b.HasKey("Id")
+                        .HasName("pk_drive_sync_folders");
+
+                    b.HasIndex("ParentId")
+                        .HasDatabaseName("ix_drive_sync_folders_parent_id");
+
+                    b.ToTable("drive_sync_folders", (string)null);
+                });
+
+            modelBuilder.Entity("DriveAlt.Api.Data.DriveSyncItem", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("file_id");
+
+                    b.Property<string>("FolderId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("folder_id");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("imported_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_drive_sync_items");
+
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_drive_sync_items_folder_id");
+
+                    b.ToTable("drive_sync_items", (string)null);
+                });
+
+            modelBuilder.Entity("DriveAlt.Api.Data.DriveSyncState", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<int>("Imported")
+                        .HasColumnType("integer")
+                        .HasColumnName("imported");
+
+                    b.Property<bool>("ScanRequested")
+                        .HasColumnType("boolean")
+                        .HasColumnName("scan_requested");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<Guid?>("UploaderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploader_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_drive_sync_states");
+
+                    b.ToTable("drive_sync_states", (string)null);
+                });
+
             modelBuilder.Entity("DriveAlt.Api.Data.Job", b =>
                 {
                     b.Property<long>("Id")

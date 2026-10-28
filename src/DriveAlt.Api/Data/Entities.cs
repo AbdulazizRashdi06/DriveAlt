@@ -3,6 +3,38 @@ using Pgvector;
 
 namespace DriveAlt.Api.Data;
 
+public sealed class DriveSyncState
+{
+    public int Id { get; set; } = 1;
+    public bool Enabled { get; set; }
+    public bool ScanRequested { get; set; }
+    public Guid? UploaderId { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+    public string? Error { get; set; }
+    public int Imported { get; set; }
+}
+
+public sealed class DriveSyncFolder
+{
+    public required string Id { get; set; }
+    public string? ParentId { get; set; }
+    public required string Name { get; set; }
+    public string[] Segments { get; set; } = [];
+    public bool Enabled { get; set; }
+    public bool Available { get; set; } = true;
+    public DateTime? CheckedAt { get; set; }
+    public string? Error { get; set; }
+}
+
+public sealed class DriveSyncItem
+{
+    public required string Id { get; set; }
+    public required string FolderId { get; set; }
+    public Guid FileId { get; set; }
+    public DateTime ImportedAt { get; set; } = DateTime.UtcNow;
+}
+
 public static class Roles
 {
     public const string Student = "student";

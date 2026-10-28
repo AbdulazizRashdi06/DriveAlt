@@ -138,6 +138,10 @@ Production refuses to start without `Auth__OtpSecret`. Originals, page images an
 
 ## Import the Year 2 Google Drive
 
+Uploaders can also use **Account → People & reports → Google Drive sync**. Press **Discover folders** while paused, select individual folders, then enable **Automatic Drive sync**. It checks the public Year 2 folder every five minutes and sends new material through the normal processing queue. An uploader does not need to own a publicly shared folder.
+
+All switches start off, including newly discovered folders. Each folder switch covers only its direct files; subfolders have independent controls. Discovery while paused downloads no material. Stopping sync prevents future imports; processing already queued continues. Existing held jobs are not released. A new photo batch includes only unseen Drive IDs, so adding a photo does not duplicate an older grouped paper. This is an additive sync: source edits, moves or deletions do not replace or delete imported copies. Folder errors and last scan status appear in the panel. `GOOGLE_API_KEY` uses the Drive API when set; otherwise the existing public-folder listing fallback is used. Set `DriveSync__WorkerEnabled=false` only to disable the background scanner (for local test hosts).
+
 The importer walks the public Year 2 folder and maps folder paths to course / type / year / subfolder. For example, `semester 1/ALL/data structures/past papers/midterm/midterm 1` becomes:
 - **course:** Data Structures
 - **type:** Past paper

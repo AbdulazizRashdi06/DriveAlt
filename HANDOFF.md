@@ -8,9 +8,9 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/handoff-live-chat`, based on deployed merge `068f0b9` |
+| Branch / base | `codex/drive-folder-sync`, based on main `842fbec` |
 | Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
-| Purpose of this update | Record the successful authorized deployment of reports and AI-authored file/chat changes, and the university-network connection issue. |
+| Purpose of this update | Implement uploader-controlled automatic Drive discovery/import with per-folder switches. Work in progress; not deployed. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -19,6 +19,8 @@
 **In one line:** PR #27 deployed as image `068f0b9`; GitHub deployment and the origin health check passed. The owner reports that the university network refuses the proxied site, consistent with the checks below. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
 
 ## 2. State of the world
+
+**DNS-only, 2026-10-28 (Codex, owner approved):** repeated campus failures returned curl exit 7 against Cloudflare IPs while origin HTTPS returned 200. Owner accepted slower photos and authorized DNS-only; the Cloudflare UI now shows only `drivealt.tryzarqa.com` set to DNS only, A `173.249.40.122`. After propagation, `Resolve-DnsName` returned that IP and normal `/api/health` returned `HTTP=200 ip=173.249.40.122`. No Caddy/server change was needed. Screenshot: local temp `drivealt-dns-only-confirmed.png`. Historical notes about proxying below are superseded by this state.
 
 **Deployed (2026-10-28, Codex):** Owner authorized making the reports and chat changes live. PR #25 merged as `99739d0` with `[skip ci]`, PR #26 as `fbeeaeb`, and PR #27 as `068f0b9f7936984d64a19c73ea11063e5ea0dd6d`. GitHub run `40657842044` passed test, build and deploy; deploy logs at 08:39 UTC report `DriveAlt is up`, `Caddy already routes drivealt.tryzarqa.com`, and `https://drivealt.tryzarqa.com is up`. Its image tag is the merge SHA. An origin health request using `curl --resolve drivealt.tryzarqa.com:443:173.249.40.122 https://drivealt.tryzarqa.com/api/health` returned HTTP 200 and `{`"ok`":true}`. On the university network, Cloudflare IPs `188.114.96.6` and `188.114.97.6` refused TCP 443; the owner confirmed the university network was refusing it. SSH port 22 was also refused from this network, so direct post-deploy schema, running-image and held-job checks are **unknown**; verify later from an unrestricted network. The earlier PR #26 run `40652632065` was cancelled before deploy after discovery that its workflow deleted old images and pruned Docker images despite the owner-approval rule. PR #27 removed that cleanup and `--remove-orphans`. PR #21 remains open and belongs to Claude Code.
 
@@ -221,6 +223,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-28, Codex — Drive folder sync (in progress):** per-folder controls and paused master switch, five-minute polling, existing-source/photo deduplication, and explicit discovery while paused. New folders are off; only direct files in selected folders import. Original source edits/deletions do not replace/delete imported material. Database integration cases use a scripted Drive, not real downloads or paid AI. Owner-authorized DNS-only change is verified above.
+
 **2026-10-28, Codex — deployment authorized:** Owner requested “live it” for the report and chat changes. Merged #25 with `[skip ci]` and #26 normally. Cancelled the #26 deployment before the deploy job after noticing automatic image deletion and prune; removed those commands and `--remove-orphans` from the next deployment workflow. PR #27 carries both features to production after CI. No files or held jobs were deleted or requeued by Codex.
 
 **2026-10-28, Codex — full files and AI-authored chat (`codex/chat-files-and-followups`):**
@@ -342,6 +346,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-28:** implement automatic syncing of the publicly shared, third-party Year 2 Drive with a toggle for every folder; allow other semesters later, not now. Start paused with all folder switches off until configured, including Semester 2 and ITS. This task does not authorize merge/deploy or live paid processing.
+
 - **2026-10-28:** owner authorized merging and deploying the report and chat changes by saying “live it”. This does not authorize Docker image deletion or pruning.
 
 - **2026-10-28:** add student problem reports from the material viewer. The owner initially selected OpenAI's embeddings API, then reversed that choice after learning models require different vector indexes: **keep Gemini**. All unfinished OpenAI embedding/config/index-rebuild changes were discarded before commit/deploy; no embeddings were regenerated and no paid API calls were made. The owner asked how to add Gemini API credit; billing instructions were checked against Google's current official documentation, with no billing changes made by the agent.
@@ -389,6 +395,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 6. File inventory
 
+**Drive sync additions:** `Import/DriveSync.cs` (uploader API and scanner), `Import/DriveImporter.cs` (reused download path), `DriveSyncState/Folder/Item` entities and migration `20261028090020_DriveFolderSync`, `web/src/ui/DriveSyncPanel.tsx`, and scripted API/browser tests. Sync is disabled until the uploader configures it. No live scanning or AI processing was enabled by Codex.
+
 | Path | Role | Status |
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | current |
@@ -422,6 +430,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**Claimed — Codex, `codex/drive-folder-sync`:** add five-minute Drive polling with per-folder controls and a paused initial state. New folders default off; only selected folders import. Reuse the importer while tracking individual source IDs to avoid regrouping old photos. Existing held jobs remain untouched. Owner reports campus Wi-Fi recovered without DNS/server changes; cause remains unverified. Resume Git checks match main `842fbec`/code `068f0b9`; SSH remains refused from campus, so VPS checks are unknown.
+
 0. **Codex, `codex/material-reports`, PR #26:** reporting implemented; local checks and full CI passed (68 backend, 11 frontend). Based on open docs PR #25; must merge after it. Keep Gemini and all existing vectors. GitHub deployment passed; direct post-deploy database verification remains unknown because the university network refuses SSH.
 0a. **PR #27:** full-file results and AI-authored chat with prewritten button follow-ups are deployed. PR #21 overlaps `ChatService.cs` and contains canned pick text rejected by the owner; preserve typed-course selection when reconciling. No other agent branch was modified.
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. It modifies `ChatService.cs` and writes a canned pick line, which conflicts with the owner's newer AI-written-replies decision. Coordinate/reconcile with the chat feature before either overlapping change is merged; do not edit or push to Claude's branch. Owner approval is required to merge.
@@ -435,6 +445,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
+
+**Active — Codex:** finish `codex/drive-folder-sync`; local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Docker is unavailable locally; full database tests await CI. Browser smoke awaits a current Playwright runtime (Edge exited at launch; bundled runtime download underway). Review and owner approval are needed before merge/deploy.
 
 **Follow-up:** From an unrestricted network, verify the running image, report table, `messages.more_commentary`, and held jobs. Confirm normal Cloudflare access from outside the university network and test DeepSeek behavior when authorized. Keep PR #21 coordinated with Claude Code.
 

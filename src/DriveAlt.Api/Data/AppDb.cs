@@ -17,10 +17,16 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<Bookmark> Bookmarks => Set<Bookmark>();
     public DbSet<MaterialReport> MaterialReports => Set<MaterialReport>();
+    public DbSet<DriveSyncState> DriveSyncStates => Set<DriveSyncState>();
+    public DbSet<DriveSyncFolder> DriveSyncFolders => Set<DriveSyncFolder>();
+    public DbSet<DriveSyncItem> DriveSyncItems => Set<DriveSyncItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasPostgresExtension("vector");
+        b.Entity<DriveSyncState>().Property(x => x.Id).ValueGeneratedNever();
+        b.Entity<DriveSyncFolder>().HasIndex(x => x.ParentId);
+        b.Entity<DriveSyncItem>().HasIndex(x => x.FolderId);
 
         // Guid ids are assigned in code (new() => Guid.NewGuid()), so EF must treat unknown ones as inserts.
         foreach (var entity in b.Model.GetEntityTypes())

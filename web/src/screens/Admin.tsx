@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useApp } from '../lib/app'
 import { ReportsInbox } from '../ui/ReportsInbox'
+import { DriveSyncPanel } from '../ui/DriveSyncPanel'
 
 interface UserRow { id: string; uniId: string; email: string; role: 'student' | 'uploader'; lastLoginAt: string | null; pinned: boolean }
 interface Stats { files: number; ready: number; processing: number; failed: number; pages: number; questions: number; users: number }
@@ -38,6 +39,7 @@ export function Admin() {
         </div>
       )}
       <ReportsInbox />
+      <DriveSyncPanel />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <h2 className="disp" style={{ margin: 0 }}>People & roles</h2>
         {users.data?.map(u => (
