@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/handoff-reader-deployment`, based on PR #32 merge `56bd76b585e6540bdd25645760b2a640dc37efa0` |
-| Updated | 2026-10-29, by Codex (PR #32 deployment reconciliation) |
+| Branch / base | `codex/drive-scan-speed`, based on docs merge `60090bf` (PR #33); live code `56bd76b` |
+| Updated | 2026-10-29, by Codex (Drive listing delay fix; Terra workflow pending) |
 | Purpose of this update | Record PR #32 reader/sharing/duplicate-check deployment, fixes to both reader regressions, and verified CI/production evidence; preserve separate Terra data issues. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
@@ -18,6 +18,8 @@
 
 **In one line:** PR #32 is merged as `56bd76b585e6540bdd25645760b2a640dc37efa0`; full CI passed (67 backend / 20 frontend tests). Features #5–#7 and both reader fixes are deployed. Run `40826986882` passed test/build/deploy; public health and home return HTTP 200, and HTML references the new `index-CvtCAUQw.js` bundle (matching the locally tested build). Last independently queried production SQL (2026-10-29, before PR #32): 400 ready / 2 reading / 1 failed files, 9,666 extracted / 7 unread pages, jobs 484 done / 2 queued / 1 failed, Drive sync 2 enabled / 118 folders. SSH is refused from the current network, so these counts are dated. Separate issues remain: 322 Terra slide pages have empty extracted text and 42 producer review flags remain.
 ## 2. State of the world
+
+**Drive scan performance fix, 2026-10-29 (Codex, `codex/drive-scan-speed`, not deployed):** scanner previously listed all folders serially using the import HTTP client's ten-minute timeout (`DriveSync.cs` and `DriveImporter.ListFolderAsync`). It now lists at most six folders concurrently with a 20-second timeout per listing, keeping all EF operations, downloads, current-switch checks and import commits serial. One slow folder produces its existing safe retryable error and does not prevent siblings being checked. The panel reports checked/known folders and imported groups while running. Unit tests verify overlap/bound/order, slow-folder isolation and scan cancellation (3/3 pass); frontend suite 7 files / 21 tests and TypeScript pass. Full DB CI pending. No live scan or import was triggered; production remains PR #32. PR #33 docs reconciliation is already merged (`60090bf`), contrary to the older pending language below.
 
 **PR #32 deployed, 2026-10-29 (Codex):** owner-authorized merge `56bd76b585e6540bdd25645760b2a640dc37efa0` contains feature/fix commit `18a6b605ec768a54c83fde6583e90db0f7afb2f5`. PR CI run `40826739134` passed; `dotnet test` output: `Failed: 0, Passed: 67, Skipped: 0, Total: 67`; frontend `7 passed` suites / `20 passed` tests, TypeScript and production build passed. Main run `40826986882` passed test (`123292178528`), image build (`123292178200`) and deploy (`123292920754`). Independent public requests returned `health HTTP 200 {"ok":true}`, `home HTTP 200` and `/assets/index-CvtCAUQw.js` (new tested bundle). Local desktop/phone mocked-API smoke and screenshot inspection passed. Direct SSH is refused from the current network; post-deploy authenticated production interactions, SQL counts and an independent `docker inspect` remain **unknown**. No new migration was needed, no source material was imported or requeued, no paid AI call was made in testing. This docs-only reconciliation must merge with `[skip ci]`; live image stays `56bd76b`.
 
@@ -242,6 +244,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-29, Codex:** prepared a bounded-concurrency Drive folder-listing fix and progress UI after the owner reported the Checking Drive screen takes ages. Source and focused local tests pass; no VPS mutation or deployment. Separately investigating the owner's requested Terra-low batch workflow for future uploads.
+
 **2026-10-29, Codex — deployed PR #32:** carried forward Antigravity's approved reader/sharing/upload-preflight work and fixed both reviewed reader bugs. Full CI passed before merge; main image build and deployment passed; public health and new asset bundle verified. The remaining Terra empty-text/producer flags, failed file, gateway drift and PR #21 are separate open work, not fixed by this deployment.
 
 **2026-10-29, Codex — fixes following Antigravity review:** fixed lost bookmark state and topic-filter leakage between file routes; added regression coverage and carried forward Features #5–#7 for the owner's authorized deployment. Previous Codex review entry in section 7 records the original reproductions; those two findings are now resolved in source. Full CI and deployment evidence is recorded above (PR #32 and run `40826986882`).
@@ -379,6 +383,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-29:** owner wants future uploads processed using the external Terra workflow as well, rather than the current online per-page path. Continue using Terra on low (earlier model choice). Prepare code; this request does not release historical held jobs or authorize a new production deployment.
+- **2026-10-29:** owner reported slow Drive discovery and confirmed no Editor permission on the source Drive. Reverse uploads to that folder cannot be configured without a write-capable account; no reverse sync was implemented.
+
 - **2026-10-29:** owner authorized fixing the reviewed bugs and merging/deploying the reader, sharing and duplicate-preflight changes. Other open data/gateway issues remain separate tasks.
 
 - **2026-10-28:** owner authorized merge/deployment of PR #29 by saying “deploy”. Sync stays paused; deployment does not authorize importing files or releasing held jobs.
@@ -471,6 +478,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**Active, Codex:** `codex/drive-scan-speed` fixes sequential folder-listing delays; full CI and owner merge/deploy approval remain. Terra-low workflow for future uploads is next, in a separate branch/PR. Gateway source currently accepts only four images and forces medium effort; eight-image Terra-low requests require a reviewed gateway update before deployment. SSH remains unavailable from this network. Do not restart the shared gateway or run paid test calls without approval.
+
 **Reader review findings resolved in PR #32:** `FileEndpoints` now projects current-user page/region bookmark status, and the reader cards consume it. `FileView` keys its reader subtree by file ID, resetting filters, PDF state and controls during file changes. Frontend regressions and a user-isolation DB regression pass in full CI. The following review entry is the original pre-fix evidence.
 
 **Potential follow-up requested by owner, 2026-10-29:** app uploads could also be copied to Google Drive. This is a feasibility discussion; destination folder and a connected Google account with write permission are not configured. Existing public-folder import credentials are read-only. Proposed design: background copy with retry/status, separate destination or source-ID tracking to avoid re-import loops. No reverse-sync code or Google writes were performed. Google API reference: https://developers.google.com/workspace/drive/api/guides/manage-uploads and https://developers.google.com/workspace/drive/api/guides/ref-roles.
@@ -495,7 +504,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Active, Codex (`codex/handoff-reader-deployment`):** PR #32 passed full CI (run `40826739134`, test job `123291392748`: 67 backend / 20 frontend) and merged under owner authorization. Main deploy run `40826986882` passed test/build/deploy. Public health and home returned HTTP 200 and served the new bundle. Merge this docs-only reconciliation with `[skip ci]` so it does not restart processing. Preserve PR #21 and unrelated `external-prep/` files.
+**Completed documentation, Codex (PR #33 merged `60090bf` with `[skip ci]`):** PR #32 passed full CI (run `40826739134`, test job `123291392748`: 67 backend / 20 frontend) and merged under owner authorization. Main deploy run `40826986882` passed test/build/deploy. Public health and home returned HTTP 200 and served the new bundle. Merge this docs-only reconciliation with `[skip ci]` so it does not restart processing. Preserve PR #21 and unrelated `external-prep/` files.
 
 **Ready for owner review — Codex, PR #29:** local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Full CI run `40661496361` on `83e7b26` passed: `Failed: 0, Passed: 51, Skipped: 0, Total: 51`, including two scripted-Drive/database cases, and frontend `16 passed`. `node e2e/drive-sync.mjs` passed on desktop and phone using a stand-in API; both screenshots were visually inspected after controls were styled. The final code head `d2be664` also passed full CI run `40661879269` (test job `122726648712`); this includes the disabled-folder assertion, original-name preservation and styled controls. Subsequent commits only record results/owner decisions. Docker is unavailable locally. No live import or paid AI call was made. Owner-authorized deployment is complete (run `40662469965`). Next: the owner can discover folders while paused, select desired folders and enable sync; Semester 2/ITS should stay off until explicitly selected.
 

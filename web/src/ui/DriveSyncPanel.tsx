@@ -23,6 +23,7 @@ export function DriveSyncPanel() {
   }
   const s = sync.data
   const scanning = !!s && (s.scanRequested || (!!s.startedAt && !s.finishedAt && Date.now() - new Date(s.startedAt).getTime() < 15 * 60 * 1000))
+  const checked = s?.startedAt ? s.folders.filter(f => f.checkedAt && new Date(f.checkedAt) >= new Date(s.startedAt!)).length : 0
   return <section className="drive-sync" aria-labelledby="drive-sync-heading">
     <div className="drive-sync-head">
       <div><h2 className="disp" id="drive-sync-heading">Google Drive sync</h2>
@@ -35,7 +36,9 @@ export function DriveSyncPanel() {
       <button type="button" className="candy c-blue sm" disabled={busy || scanning || !s} onClick={() => void change('/api/admin/drive-sync/scan')}>
         {scanning ? 'Checking Drive…' : s?.enabled ? 'Sync now' : 'Discover folders'}
       </button>
-      <span>{s?.finishedAt ? `Last checked ${new Date(s.finishedAt).toLocaleString()} · ${s.imported} file groups imported` : 'No completed scan yet'}</span>
+      <span role="status">{scanning
+        ? s?.scanRequested && !s.startedAt ? 'Scan queued…' : `${checked} folders checked · ${s?.folders.length ?? 0} known · ${s?.imported ?? 0} file groups imported`
+        : s?.finishedAt ? `Last checked ${new Date(s.finishedAt).toLocaleString()} · ${s.imported} file groups imported` : 'No completed scan yet'}</span>
     </div>
     {sync.isError && <p role="alert">Couldn’t load Drive sync settings. Please try again.</p>}
     {s?.error && <p role="alert">{s.error}</p>}

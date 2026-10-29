@@ -11,6 +11,15 @@ const state = { enabled: false, scanRequested: false, startedAt: null, finishedA
     { id: 'sem2', name: 'semester 2', segments: ['semester 2'], enabled: false, available: true }] }
 function mount() { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DriveSyncPanel /></QueryClientProvider>) }
 describe('Drive folder controls', () => {
+  it('shows progress from this scan rather than a permanent empty completion message', async () => {
+    vi.mocked(api.get).mockResolvedValue({ ...state, startedAt: new Date().toISOString(), folders: [
+      { ...state.folders[0], checkedAt: new Date(Date.now() + 1000).toISOString() },
+      { ...state.folders[1], checkedAt: '2026-01-01T00:00:00Z' },
+    ] })
+    mount()
+    expect(await screen.findByText('1 folders checked · 2 known · 0 file groups imported')).toBeTruthy()
+    expect(screen.queryByText('No completed scan yet')).toBeNull()
+  })
   it('starts paused and changes only the chosen folder', async () => {
     vi.mocked(api.get).mockResolvedValue(state)
     vi.mocked(api.put).mockResolvedValue({})
