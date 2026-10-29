@@ -83,6 +83,29 @@ public class MappingTests
         Assert.Equal("quiz | 3", SearchService.OrTsQuery("Quiz 3 from last year"));
         Assert.Null(SearchService.OrTsQuery("the of and"));
     }
+
+    [Theory]
+    [InlineData("MIDTERM Numerical computation SS2024 (1).pdf", "midterm numerical computation ss2024")]
+    [InlineData("Copy of MIDTERM_Numerical_computation_SS2024 - Copy.pdf", "midterm numerical computation ss2024")]
+    [InlineData("Lecture 4 - Queues (2).pptx", "lecture 4 queues")]
+    [InlineData("Chapter 2.1 - Introduction to Trees", "chapter 2 1 introduction to trees")]
+    [InlineData("Chapter 2.1 - Introduction to Trees.pdf", "chapter 2 1 introduction to trees")]
+    [InlineData("Chapter 2.2 - Binary Search Trees", "chapter 2 2 binary search trees")]
+    [InlineData("DS Quiz (1).pdf", "ds quiz 1")]
+    [InlineData("DS Quiz (2).pdf", "ds quiz 2")]
+    [InlineData("Midterm (1)", "midterm 1")]
+    [InlineData("IMG_1234.JPG", "")]
+    [InlineData("WhatsApp Image 2024-10-12.jpeg", "")]
+    public void Normalizes_titles_for_duplicate_checks(string name, string expected) =>
+        Assert.Equal(expected, Heuristics.CanonicalTitle(name));
+
+    [Theory]
+    [InlineData(true, false, "private, max-age=604800, immutable")]
+    [InlineData(true, true, "private, no-cache")]
+    [InlineData(false, true, "private, no-cache")]
+    [InlineData(false, false, null)]
+    public void Media_cache_control_revalidates_fallbacks(bool hasVersion, bool usedFallback, string? expected) =>
+        Assert.Equal(expected, FileEndpoints.MediaCacheControl(hasVersion, usedFallback));
 }
 
 public class TypeWordTests

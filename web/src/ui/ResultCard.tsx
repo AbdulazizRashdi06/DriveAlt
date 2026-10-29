@@ -3,8 +3,8 @@ import type { ResultCard as Card } from '../lib/api'
 import { CARD_COLORS, onDark, TYPE_SINGULAR } from '../lib/api'
 import { useApp } from '../lib/app'
 import { useSaved } from '../lib/saved'
-import { IconDownload, IconExpand, IconExternal } from './Icons'
-import { originalHref, resultLabel } from './Viewer'
+import { IconDownload, IconExpand, IconExternal, IconShare } from './Icons'
+import { copyShareLink, originalHref, resultLabel } from './Viewer'
 
 const TILTS = [-1.5, 1, -0.5, 0.75]
 
@@ -67,7 +67,7 @@ function QuestionResultCard({ card, index, all }: Props) {
       <div className="shot-wrap">
         <button className="shot" type="button" aria-label={`Open ${resultLabel(card)} from ${card.fileTitle}, page ${card.pageNumber}`}
           onClick={open}>
-          <img className="shot-img" src={card.imageUrl} loading="lazy"
+          <img className="shot-img" src={card.kind === 'question' ? card.imageUrl : card.thumbUrl} loading="lazy"
             alt={`Screenshot of ${resultLabel(card)} from ${card.fileTitle}, page ${card.pageNumber}`} />
         </button>
       </div>
@@ -82,6 +82,9 @@ function QuestionResultCard({ card, index, all }: Props) {
         <Link className="candy c-white rnd" to={originalHref(card)} aria-label={`Open original file at page ${card.pageNumber}`} title="Open original file">
           <IconExternal />
         </Link>
+        <button className="candy c-white rnd" type="button" aria-label={`Copy link to ${resultLabel(card)}`} title="Copy shareable link" onClick={() => void copyShareLink(card, toast)}>
+          <IconShare />
+        </button>
         <button className={`candy ${saved ? 'c-pink saved-pop' : 'c-white'}`} key={String(saved)} type="button" aria-pressed={saved}
           style={{ minHeight: 44, flex: 1 }} onClick={() => void save()}>
           {saved ? 'Saved!' : 'Save'}

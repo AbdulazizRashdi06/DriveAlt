@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, type AppConfig, type Me, type ResultCard } from './api'
 import { Viewer } from '../ui/Viewer'
@@ -43,6 +44,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [viewer, setViewer] = useState<{ items: ResultCard[]; index: number } | null>(null)
   const openViewer = useCallback((items: ResultCard[], index: number) => setViewer({ items, index }), [])
+  const [params, setParams] = useSearchParams()
+  const refParam = params.get('ref')
+  const openedRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!refParam) { openedRef.current = null; return }
+    if (!meQuery.data || openedRef.current === refParam) return
+    let cancelled = false
+    void api.get<ResultCard[]>(`/api/cards?refs=${encodeURIComponent(refParam)}`).then(cards => {
+      if (cancelled) return
+      openedRef.current = refParam
+      if (cards.length > 0) setViewer({ items: cards, index: 0 })
+      else toast("Couldn't find that shared item.")
+    }).catch(() => {
+      if (cancelled) return
+      openedRef.current = refParam
+      toast("Couldn't open that shared link.")
+    })
+    return () => { cancelled = true }
+  }, [refParam, meQuery.data, toast])
+
+  const closeViewer = useCallback(() => {
+    setViewer(null)
+    if (params.has('ref')) {
+      const next = new URLSearchParams(params)
+      next.delete('ref')
+      setParams(next, { replace: true })
+    }
+  }, [params, setParams])
 
   const value = useMemo<AppCtx>(() => ({
     me: meQuery.data ?? null,
@@ -61,7 +91,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {viewer && <Viewer items={viewer.items} start={viewer.index} onClose={() => setViewer(null)} />}
+      {viewer && <Viewer items={viewer.items} start={viewer.index} onClose={closeViewer} />}
       {toastText && <div className="toast" role="status">{toastText}</div>}
     </Ctx.Provider>
   )

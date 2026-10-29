@@ -88,5 +88,14 @@ public static class BrowseEndpoints
             var hits = await search.SearchAsync(new SearchQuery(q ?? "", courseIds, type is null ? null : [type], year, null, tag, file, Limit: 48), ct);
             return Results.Ok(await cards.HydrateAsync(hits.Select(h => h.Ref).ToList(), http.User.UserId(), ct));
         });
+
+        // Hydrate specific card refs (for deep-link sharing via ?ref=r:... or ?ref=p:...).
+        g.MapGet("/cards", async (string? refs, HttpContext http, ResultCards cards, CancellationToken ct) =>
+        {
+            var list = (refs ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct().Take(24).ToList();
+            if (list.Count == 0) return Results.Ok(Array.Empty<ResultCard>());
+            return Results.Ok(await cards.HydrateAsync(list, http.User.UserId(), ct));
+        });
     }
 }

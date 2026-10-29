@@ -38,3 +38,4 @@ export const IconBack = (p: P) => <Icon strokeWidth={3} {...p}><path d="M19 12H5
 export const IconEye = (p: P) => <Icon {...p}><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></Icon>
 export const IconLock = (p: P) => <Icon {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></Icon>
 export const IconFlag = (p: P) => <Icon {...p}><path d="M5 21V4c5-4 9 4 14 0v10c-5 4-9-4-14 0" /></Icon>
+export const IconShare = (p: P) => <Icon {...p}><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 4.93" /><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L13 19.07" /></Icon>

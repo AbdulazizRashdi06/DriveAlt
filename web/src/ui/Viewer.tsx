@@ -3,12 +3,28 @@ import { Link } from 'react-router'
 import { TransformComponent, TransformWrapper, type ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import type { ResultCard } from '../lib/api'
 import { CARD_COLORS } from '../lib/api'
+import { useApp } from '../lib/app'
 import { useSaved } from '../lib/saved'
-import { IconBookmark, IconClose, IconExternal, IconLeft, IconMinus, IconPlus, IconRight } from './Icons'
+import { IconBookmark, IconClose, IconExternal, IconLeft, IconMinus, IconPlus, IconRight, IconShare } from './Icons'
 import { ReportButton } from './ReportButton'
 
 export function originalHref(r: Pick<ResultCard, 'fileId' | 'pageNumber'>) {
   return `/files/${r.fileId}?page=${r.pageNumber}`
+}
+
+export function shareHref(r: Pick<ResultCard, 'ref' | 'courseSlug'>) {
+  const path = r.courseSlug ? `/browse/${r.courseSlug}` : '/browse'
+  return `${path}?ref=${encodeURIComponent(r.ref)}`
+}
+
+export async function copyShareLink(r: Pick<ResultCard, 'ref' | 'courseSlug' | 'fileTitle'>, toast: (t: string) => void) {
+  const url = `${window.location.origin}${shareHref(r)}`
+  try {
+    await navigator.clipboard.writeText(url)
+    toast('Link copied! Share it with your batch.')
+  } catch {
+    toast("Couldn't copy link.")
+  }
 }
 
 export function resultLabel(r: ResultCard) {
@@ -26,6 +42,7 @@ export function Viewer({ items, start, onClose }: { items: ResultCard[]; start: 
   const zoomRef = useRef<ReactZoomPanPinchContentRef | null>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const item = items[index]
+  const { toast } = useApp()
   const [saved, toggleSaved] = useSaved(item.ref, item.saved)
 
   useEffect(() => {
@@ -70,13 +87,16 @@ export function Viewer({ items, start, onClose }: { items: ResultCard[]; start: 
             <div className="lbl ellipsis">{meta}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div className="zoom hide-phone" role="group" aria-label="Zoom">
             <button className="candy c-dark rnd sm" type="button" aria-label="Zoom out" onClick={() => zoomRef.current?.zoomOut(0.4)}><IconMinus /></button>
             <span style={{ minWidth: 56, textAlign: 'center', font: "900 14px/1 'Nunito', sans-serif" }}>{Math.round(scale * 100)}%</span>
             <button className="candy c-dark rnd sm" type="button" aria-label="Zoom in" onClick={() => zoomRef.current?.zoomIn(0.4)}><IconPlus /></button>
           </div>
           <Link className="candy c-white hide-phone" to={originalHref(item)} onClick={onClose}><IconExternal />Open original</Link>
+          <button className="candy c-white" type="button" aria-label="Copy link" title="Copy shareable link" onClick={() => void copyShareLink(item, toast)}>
+            <IconShare /><span className="hide-phone">Copy link</span>
+          </button>
           <ReportButton key={item.ref} target={item} compact />
           <button className={`candy ${saved ? 'c-pink' : 'c-white'} ${saved ? 'saved-pop' : ''}`} key={String(saved)} type="button"
             aria-pressed={saved} aria-label={saved ? 'Saved' : 'Save'} onClick={() => void toggleSaved()}>

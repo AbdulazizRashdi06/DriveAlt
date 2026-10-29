@@ -103,7 +103,18 @@ export interface ChatMessage {
 
 export interface ChatOption { label: string; count: number | null }
 
+export interface PageRegion {
+  saved?: boolean
+  id: string
+  questionNumber: string | null
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface PageThumb {
+  saved?: boolean
   id: string
   number: number
   kind: string
@@ -113,6 +124,20 @@ export interface PageThumb {
   questions: number
   width: number
   height: number
+  regions?: PageRegion[]
+}
+
+export interface UploadCheckItem {
+  fileName: string
+  sizeBytes: number
+  sha256: string
+  courseId?: number | null
+}
+
+export interface UploadCheckResult {
+  index: number
+  kind: 'none' | 'exact' | 'similar'
+  existing: FileDto | null
 }
 
 export interface CourseListing {
