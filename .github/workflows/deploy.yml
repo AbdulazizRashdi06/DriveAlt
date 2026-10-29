@@ -66,6 +66,8 @@ jobs:
         env:
           DRIVEALT_TEST_PG: Host=localhost;Username=postgres;Password=postgres;Database=postgres
         run: dotnet test
+      - name: Validate gateway deployment script
+        run: bash -n deploy/ensure-terra-gateway.sh
       - name: Frontend tests and build
         working-directory: web
         run: npm ci && npm test && npx tsc -b && npx vite build --outDir ../.ci-web

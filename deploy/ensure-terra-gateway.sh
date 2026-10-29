@@ -46,6 +46,7 @@ docker exec -e DRIVEALT_GATEWAY_PIDS="$pids" zarqa-codex-1 node -e '
   console.log(JSON.stringify({services:{codex:{pids_limit:Number(process.env.DRIVEALT_GATEWAY_PIDS),environment:{CODEX_MODELS:[...models].join(",")}}}}));
 ' > deploy/drivealt-terra.override.yml
 rollback() {
+  trap - ERR
   set +e
   cp -p "$backup" "$source"
   printf '{"services":{"codex":{"image":"%s"}}}\n' "$previous_image" > deploy/drivealt-terra.rollback.yml
