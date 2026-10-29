@@ -8,6 +8,8 @@ using Pgvector;
 
 namespace DriveAlt.Api.Processing;
 
+public sealed class MaterialReviewRequiredException(int page) : Exception($"Terra review required on page {page}. Correct it in Inspect, then retry processing.");
+
 /// <summary>
 /// The upload pipeline: split → read (AI extraction) → tag (embeddings) → crop questions and answers → ready.
 /// Each stage saves its progress, so a retried job resumes where it stopped.
@@ -132,6 +134,11 @@ public sealed class ProcessingService(
         var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
         var pdf = PdfPath(file);
         var pending = file.Pages.Where(p => !p.Extracted).OrderBy(p => p.Number).ToList();
+        if (ai.UsesBatchExtraction)
+        {
+            await ReadBatchesAsync(file, pending, pdf, courses, ct);
+            return;
+        }
         var gate = new SemaphoreSlim(1, 1);
 
         await Parallel.ForEachAsync(pending, new ParallelOptions { MaxDegreeOfParallelism = procOpts.Value.PageConcurrency, CancellationToken = ct },
@@ -168,6 +175,56 @@ public sealed class ProcessingService(
                     gate.Release();
                 }
             });
+    }
+
+    private async Task ReadBatchesAsync(DocFile file, List<Page> pending, string? pdf, IReadOnlyList<Course> courses, CancellationToken ct)
+    {
+        // Review flags require an uploader correction, never repeated billed attempts or an offline success marker.
+        if (pending.FirstOrDefault(p => p.Error?.StartsWith("Terra review required") == true) is { } held)
+            throw new MaterialReviewRequiredException(held.Number);
+        foreach (var batch in pending.Chunk(Math.Clamp(ai.ExtractionBatchSize, 1, 8)))
+        {
+            var inputs = new List<PageReadInput>();
+            foreach (var page in batch)
+            {
+                ct.ThrowIfCancellationRequested();
+                var text = pdf is null ? "" : await converter.PdfPageTextAsync(pdf, page.Number, ct);
+                var context = new FileContext(file.Course!.Name, file.MaterialType, file.Title, file.AcademicYear,
+                    file.AssessmentLabel, page.Number, file.PageCount);
+                inputs.Add(new PageReadInput(await File.ReadAllBytesAsync(storage.PageImage(file.Id, page.Number), ct), context, text));
+            }
+            // No offline fallback here: limits pause the job; invalid batches retry without marking pages extracted.
+            var results = await ai.ExtractBatchAsync(inputs, courses, ct);
+            if (results.Count != batch.Length) throw new InvalidDataException("Incomplete extraction batch.");
+            var ids = batch.Select(p => p.Id).ToList();
+            var current = await db.Pages.AsNoTracking().Where(p => ids.Contains(p.Id))
+                .Select(p => new { p.Id, p.Extracted, p.EditedAt }).ToDictionaryAsync(p => p.Id, ct);
+            int? reviewPage = null;
+            for (var i = 0; i < batch.Length; i++)
+            {
+                var page = batch[i];
+                var result = results[i];
+                // A batch may take minutes. An uploader's edit made during inference wins over its stale input.
+                if (current[page.Id].Extracted || current[page.Id].EditedAt != null)
+                {
+                    await db.Entry(page).ReloadAsync(ct);
+                    continue;
+                }
+                if (result.NeedsReview)
+                {
+                    page.RawExtraction = result.RawJson;
+                    page.Error = new MaterialReviewRequiredException(page.Number).Message;
+                    reviewPage ??= page.Number;
+                    continue;
+                }
+                Apply(file, page, result);
+                page.Error = null;
+                file.Progress++;
+            }
+            file.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct); // A restart/limit resumes only the remaining unread pages.
+            if (reviewPage is { } number) throw new MaterialReviewRequiredException(number);
+        }
     }
 
     public static void Apply(DocFile file, Page page, PageExtraction x)

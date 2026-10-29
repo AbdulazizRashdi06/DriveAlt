@@ -165,6 +165,9 @@ jobs:
           DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
           CODEX_BASE_URL: ${{ vars.CODEX_BASE_URL }}
           CODEX_MODEL: ${{ vars.CODEX_MODEL }}
+          CODEX_BATCH_MODEL: ${{ vars.CODEX_BATCH_MODEL }}
+          CODEX_BATCH_REASONING_EFFORT: ${{ vars.CODEX_BATCH_REASONING_EFFORT }}
+          CODEX_BATCH_SIZE: ${{ vars.CODEX_BATCH_SIZE }}
           UPLOADERS: ${{ vars.UPLOADERS }}
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
           APP_PORT: ${{ vars.APP_PORT }}
@@ -188,6 +191,9 @@ jobs:
             echo "DeepSeek__Model=${DEEPSEEK_MODEL:-deepseek-chat}"
             echo "Codex__BaseUrl=${CODEX_BASE_URL:-}"
             echo "Codex__Model=${CODEX_MODEL:-gpt-6.1-sol}"
+            echo "Codex__BatchModel=${CODEX_BATCH_MODEL:-gpt-6.1-terra}"
+            echo "Codex__BatchReasoningEffort=${CODEX_BATCH_REASONING_EFFORT:-low}"
+            echo "Codex__BatchSize=${CODEX_BATCH_SIZE:-8}"
             echo "Google__ApiKey=$GOOGLE_API_KEY"
           } > deploy.env
 

@@ -43,13 +43,23 @@ Design: the "Candy pop" handoff (Lilita One + Nunito, candy buttons, mascot, Emi
 | API | ASP.NET Core 10, EF Core + Npgsql, background job workers (Postgres `SKIP LOCKED` queue) |
 | DB | PostgreSQL 17 + pgvector: full-text search + vector embeddings, merged with reciprocal-rank fusion |
 | Files | Originals on disk (`/data`, never modified), LibreOffice (Office → PDF), poppler (PDF → page images, text layer), libheif (HEIC), SkiaSharp (crops, thumbnails) |
-| AI | Page reading: Codex `gpt-6.1-sol` through the Zarqa gateway (`Codex:BaseUrl`), else DeepSeek, else Gemini. Chat bot: DeepSeek (`deepseek-chat`), else Gemini. Search: `gemini-embedding-001` (768-d). |
+| AI | Page reading: batches of up to eight pages with Codex `gpt-6.1-terra` on low through the Zarqa gateway (`Codex:BaseUrl`). Without that gateway, development retains the single-page DeepSeek/Gemini/offline path. Chat bot: DeepSeek (`deepseek-chat`), else Gemini. Search: `gemini-embedding-001` (768-d). |
 | Email | Resend: `{uniId}@student.gutech.edu.om` gets a 6-digit code |
 | Web | React 19 + Vite + TanStack Query + React Router, pdf.js, react-zoom-pan-pinch; served by the API from `wwwroot` |
 
 **Without configured AI:** page processing can fall back to the PDF text layer and whole-page assessment regions, and search is keyword-only. Chat requires DeepSeek or Gemini; if neither is configured, the UI reports that the AI reply could not be completed.
 
 Useful for development; set the key for real use.
+
+## Terra batch extraction
+
+New uploads and new Drive imports use the same batched visual workflow as the external Terra run when `Codex__BaseUrl` is configured: render originals, extract each PDF text layer as an aid, send up to eight images in page order to `gpt-6.1-terra` on low, validate page IDs/order, actual image dimensions and pixel boxes, then checkpoint each batch in Postgres. Readable slide/notes content is retained even when there are no question regions. Question wording is returned only once by the model and composed into page text by the server. Original images and answers inside crops stay intact; answers are forbidden in every generated text field.
+
+Completed and manually edited pages are reused on retry. A quota/login/configuration error pauses the job; other batch errors retry without marking pages extracted or falling back to offline text. A producer review flag or empty content page is held unread, exposes its original in Inspect and stops automatic retries. Correct the page in Inspect, then use Retry on the upload; corrections are marked extracted so no new model call is needed for those pages. This does not reprocess historical files or release held jobs. Gemini embeddings and the chat model stay unchanged.
+
+Configuration: `Codex__BatchModel=gpt-6.1-terra`, `Codex__BatchReasoningEffort=low`, `Codex__BatchSize=8` (1–8). The deployment workflow uses matching optional GitHub variables `CODEX_BATCH_MODEL`, `CODEX_BATCH_REASONING_EFFORT`, `CODEX_BATCH_SIZE`; defaults are Terra/low/8, independent of the old `CODEX_MODEL` variable.
+
+**Deployment prerequisite:** the shared Zarqa gateway currently accepts four images and forces medium effort. The reviewable [gateway patch](deploy/codex-terra-batches.patch) adds Terra to the default allow-list, accepts eight images, validates request-specific low/medium/high effort, and keeps medium as the default for other callers. It was checked against gateway SHA256 `5da0c724e36f45626f438728030eb357e02c7a45163425c8ad9562bbcc3f607f`. If `CODEX_MODELS` is explicitly set in the gateway container, append `gpt-6.1-terra` while preserving its existing models. First check the live source matches, run `git apply --check` against the Zarqa checkout, apply/review the patch, test with `node --test deploy/codex/gateway.test.mjs`, and rebuild **only** its `codex` service after owner approval. Never use Zarqa's whole deployment script or read the login files/volume. Recheck the gateway health, then deploy DriveAlt. If the live source differs, reconcile it before applying; do not overwrite other changes. Actual live Terra access/performance must be checked after approval; local tests use scripted inference and make no model calls.
 
 ## Run locally
 

@@ -18,15 +18,21 @@ public sealed record PageExtraction(
     string? AssessmentLabel,
     string? CourseGuess,
     List<ExtractedRegion> Regions,
-    string RawJson);
+    string RawJson,
+    bool NeedsReview = false);
 
 public sealed record FileContext(string CourseName, string MaterialType, string Title, int? Year, string? AssessmentLabel, int PageNumber, int PageCount);
 
 public sealed record FileSuggestion(string? CourseSlug, string? MaterialType, int? AcademicYear, string? AssessmentLabel);
+public sealed record PageReadInput(byte[] Jpeg, FileContext Context, string EmbeddedText);
 
 public interface IMaterialAi
 {
     bool Online { get; }
+    bool UsesBatchExtraction => false;
+    int ExtractionBatchSize => 1;
+    Task<IReadOnlyList<PageExtraction>> ExtractBatchAsync(IReadOnlyList<PageReadInput> pages, IReadOnlyList<Course> courses, CancellationToken ct) =>
+        throw new NotSupportedException("This provider reads individual pages.");
     Task<PageExtraction> ExtractPageAsync(byte[] jpeg, FileContext ctx, string? embeddedText, IReadOnlyList<Course> courses, CancellationToken ct);
     Task<FileSuggestion?> SuggestAsync(byte[] jpeg, string fileName, string? embeddedText, IReadOnlyList<Course> courses, CancellationToken ct);
     Task<float[]?[]> EmbedAsync(IReadOnlyList<string> texts, bool query, CancellationToken ct);
@@ -312,7 +318,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         };
         try
         {
-            var j = Json.Parse(codex.Enabled ? await codex.JsonAsync(CodexSystem, prompt, jpeg, CodexSuggestSchema, ct)
+            var j = Json.Parse(codex.Enabled ? await codex.BatchJsonAsync(CodexSystem, prompt, [jpeg], CodexSuggestSchema, ct)
                 : deepseek.Enabled ? await DeepSeekJsonAsync(jpeg, prompt, SuggestSchema, ct)
                 : GeminiClient.CandidateText(await gemini.GenerateAsync(body, ct)));
             if (j is null) return null;

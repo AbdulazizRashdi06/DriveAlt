@@ -1,0 +1,48 @@
+diff --git a/deploy/codex/gateway.mjs b/deploy/codex/gateway.mjs
+index 4028551..b52bc29 100644
+--- a/deploy/codex/gateway.mjs
++++ b/deploy/codex/gateway.mjs
+@@ -8,7 +8,7 @@ import { join } from 'node:path'
+ import { pathToFileURL } from 'node:url'
+ 
+ // Models callers may pick (Zarqa uses gpt-6-luna; DriveAlt reads pages with gpt-6.1-sol).
+-const MODELS = new Set((process.env.CODEX_MODELS || 'gpt-6-luna,gpt-6.1-sol').split(',').map(m => m.trim()).filter(Boolean))
++const MODELS = new Set((process.env.CODEX_MODELS || 'gpt-6-luna,gpt-6.1-sol,gpt-6.1-terra').split(',').map(m => m.trim()).filter(Boolean))
+ const TIMEOUT_MS = Number(process.env.CODEX_TIMEOUT_MS || 240000)
+ 
+ /** Codex reports plan limits as an error event; only this yes/no leaves the gateway, never the text. */
+@@ -19,20 +19,22 @@ export function parseChat(body) {
+   const system = body.messages[0].content, parts = body.messages[1].content
+   const schema = body.response_format?.json_schema?.schema
+   if (typeof system !== 'string' || !Array.isArray(parts) || !schema || schema.type !== 'object') throw new Error('Structured input required')
++  const reasoningEffort = body.reasoning_effort ?? 'medium'
++  if (!['low', 'medium', 'high'].includes(reasoningEffort)) throw new Error('Invalid reasoning effort')
+   const text = [], images = []
+   for (const part of parts) {
+     if (part.type === 'text' && typeof part.text === 'string') text.push(part.text)
+     else if (part.type === 'image_url') {
+       const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(part.image_url?.url ?? '')
+-      if (!match || images.length >= 4) throw new Error('Only up to four inline PNG/JPEG images are accepted')
++      if (!match || images.length >= 8) throw new Error('Only up to eight inline PNG/JPEG images are accepted')
+       images.push({ extension: match[1] === 'jpeg' ? 'jpg' : 'png', bytes: Buffer.from(match[2], 'base64') })
+     } else throw new Error('Unsupported content')
+   }
+   if (!text.length) throw new Error('Text required')
+-  return { model: body.model, system, text: text.join('\n'), images, schema }
++  return { model: body.model, reasoningEffort, system, text: text.join('\n'), images, schema }
+ }
+ 
+-export async function runCodex({ model, system, text, images, schema }) {
++export async function runCodex({ model, reasoningEffort = 'medium', system, text, images, schema }) {
+   const dir = await mkdtemp(join(tmpdir(), 'zarqa-review-'))
+   try {
+     const output = join(dir, 'answer.json'), schemaFile = join(dir, 'schema.json')
+@@ -40,7 +42,7 @@ export async function runCodex({ model, system, text, images, schema }) {
+     const args = ['exec', '--skip-git-repo-check', '--ephemeral', '--ignore-user-config', '--ignore-rules', '-s', 'read-only', '-C', dir, '-m', model, '--json', '--output-schema', schemaFile, '-o', output]
+     // Report text is untrusted. Reviews have no shell, browsing, apps, hooks or agents.
+     for (const feature of ['shell_tool', 'unified_exec', 'apps', 'multi_agent', 'goals', 'hooks', 'remote_plugin', 'shell_snapshot']) args.push('--disable', feature)
+-    args.push('-c', 'web_search="disabled"', '-c', 'model_reasoning_effort="medium"')
++    args.push('-c', 'web_search="disabled"', '-c', `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`)
+     for (const [i, image] of images.entries()) {
+       const file = join(dir, `photo-${i}.${image.extension}`)
+       await writeFile(file, image.bytes, { mode: 0o600 })

@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/drive-scan-speed`, based on docs merge `60090bf` (PR #33); live code `56bd76b` |
-| Updated | 2026-10-29, by Codex (Drive listing delay fix; Terra workflow pending) |
+| Branch / base | `codex/terra-upload-batches`, based on `555fb7e` / PR #34 (must merge after #34); live code `56bd76b` |
+| Updated | 2026-10-29, by Codex (Terra-low batching implementation; production unchanged) |
 | Purpose of this update | Record PR #32 reader/sharing/duplicate-check deployment, fixes to both reader regressions, and verified CI/production evidence; preserve separate Terra data issues. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
@@ -18,6 +18,10 @@
 
 **In one line:** PR #32 is merged as `56bd76b585e6540bdd25645760b2a640dc37efa0`; full CI passed (67 backend / 20 frontend tests). Features #5–#7 and both reader fixes are deployed. Run `40826986882` passed test/build/deploy; public health and home return HTTP 200, and HTML references the new `index-CvtCAUQw.js` bundle (matching the locally tested build). Last independently queried production SQL (2026-10-29, before PR #32): 400 ready / 2 reading / 1 failed files, 9,666 extracted / 7 unread pages, jobs 484 done / 2 queued / 1 failed, Drive sync 2 enabled / 118 folders. SSH is refused from the current network, so these counts are dated. Separate issues remain: 322 Terra slide pages have empty extracted text and 42 producer review flags remain.
 ## 2. State of the world
+
+**Terra workflow implementation (Codex, 2026-10-29, not deployed):** `codex/terra-upload-batches` adds up-to-eight-image Terra-low batches to the Codex-enabled processing path, using existing PDF text as a transcription aid, pixel coordinates validated against each actual image, page-order/count validation, compact nonduplicated model text, model/effort/dimension provenance and per-batch checkpoints. All page results are structurally validated before any batch is applied. Slide/notes text is retained without requiring question regions. Quota/login/configuration errors pause; other errors do not trigger offline extraction in the batch path. Producer review flags leave pages unread, expose them in Inspect, and stop retries until an uploader edits them; retry then reuses corrected/completed pages. No schema/vector model change or historical reprocessing. Focused backend tests pass 44/44; two new scripted-DB lifecycle tests await CI. A reviewable `deploy/codex-terra-batches.patch` upgrades the shared gateway from four to eight images, enables validated request-specific reasoning, and adds Terra to its default allow-list. Patch applies to a temporary copy of the unchanged gateway SHA256 `5da0c724e36f45626f438728030eb357e02c7a45163425c8ad9562bbcc3f607f`; 11 gateway tests pass there with the explicit model allow-list including Terra. Actual VPS Terra access and latency remain unknown; no model call was made. Do not deploy the app before the gateway patch/configuration is approved and applied to only the codex service.
+
+**Drive scan fix PR #34:** full CI run `40830064132` passed (test job `123301975566`); not merged/deployed. Root workspace retains unrelated untracked `external-prep/` untouched. A separate managed worktree `stale-chunk-recovery` holds the urgent browser-script recovery fix, based on the same PR #34 so its handoff must merge after that PR and preserve both sets of facts.
 
 **Drive scan performance fix, 2026-10-29 (Codex, `codex/drive-scan-speed`, not deployed):** scanner previously listed all folders serially using the import HTTP client's ten-minute timeout (`DriveSync.cs` and `DriveImporter.ListFolderAsync`). It now lists at most six folders concurrently with a 20-second timeout per listing, keeping all EF operations, downloads, current-switch checks and import commits serial. One slow folder produces its existing safe retryable error and does not prevent siblings being checked. The panel reports checked/known folders and imported groups while running. Unit tests verify overlap/bound/order, slow-folder isolation and scan cancellation (3/3 pass); frontend suite 7 files / 21 tests and TypeScript pass. Full DB CI pending. No live scan or import was triggered; production remains PR #32. PR #33 docs reconciliation is already merged (`60090bf`), contrary to the older pending language below.
 
@@ -243,6 +247,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **Remaining drift:** gateway merge/configuration status needs verification (open thread 3). README's model table is current, but its deploy steps, secret table and offline-mode wording need review (`README.md`, sections Stack and Deploy on the Zarqa VPS). The former Caddy source drift is fixed in Git and local Zarqa; later deployment verification remains open.
 
 ## 3. What was done
+
+**2026-10-29, Codex — Terra batch path prepared:** implemented the external workflow for ordinary uploads/Drive imports on the VPS path, with compact eight-page Terra-low extraction, structural validation, checkpoints and review holds. Added scripted request/validation tests and two lifecycle DB regressions. Gateway patch tested in a temporary copy; sibling Zarqa checkout, production gateway, auth files, secrets and held jobs were not changed. Live model test/merge/deploy not performed.
 
 **2026-10-29, Codex:** prepared a bounded-concurrency Drive folder-listing fix and progress UI after the owner reported the Checking Drive screen takes ages. Source and focused local tests pass; no VPS mutation or deployment. Separately investigating the owner's requested Terra-low batch workflow for future uploads.
 
@@ -477,6 +483,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **Variables:** `UPLOADERS=24-0161`, `PUBLIC_URL`, `CODEX_BASE_URL=http://codex:8090/v1`. The ChatGPT login lives in the VPS volume `zarqa_codex_auth`.
 
 ## 7. Open threads
+
+**Active, Codex (`codex/terra-upload-batches`, depends on PR #34):** finish full CI for new batch lifecycle tests and publish reviewable PR. Gateway patch is a separate deployment prerequisite; obtain owner approval before applying it/rebuilding the shared codex container or running model calls. Also finish the stale-chunk hotfix in the attached worktree; the owner screenshot's retired FileView script returned HTTP 404, while public health remains 200. Suggested immediate workaround: Ctrl+Shift+R. No new deployment is authorized yet.
 
 **Active, Codex:** `codex/drive-scan-speed` fixes sequential folder-listing delays; full CI and owner merge/deploy approval remain. Terra-low workflow for future uploads is next, in a separate branch/PR. Gateway source currently accepts only four images and forces medium effort; eight-image Terra-low requests require a reviewed gateway update before deployment. SSH remains unavailable from this network. Do not restart the shared gateway or run paid test calls without approval.
 
