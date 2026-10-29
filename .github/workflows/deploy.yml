@@ -156,6 +156,10 @@ jobs:
             ServerAliveInterval 30
           EOF
 
+      - name: Prepare Terra batch gateway
+        if: vars.CODEX_BASE_URL != ''
+        run: bash deploy/ensure-terra-gateway.sh vps
+
       - name: Write .env from secrets
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
