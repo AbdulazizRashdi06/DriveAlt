@@ -9,7 +9,7 @@
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `codex/year1-resume-handoff`, based on docs PR #38 merge `4022f98a117c40dc0e023f0fe650caf783989afb`; deployed code remains `69211bd0ad695df8806da3ba512319fd81c01252` |
-| Updated | 2026-10-29, by Codex (Year 1 Terra restarted; PDF/photo counts corrected) |
+| Updated | 2026-10-29, by Codex (Year 1 full preparation and conditional import authorized) |
 
 | Purpose of this update | Deploy the owner-approved PR #34 combination: Terra-low batches and safe retries, bounded Drive discovery with a progress bar, and retired-script recovery; retain separate historic data issues. |
 
@@ -19,6 +19,8 @@
 
 **In one line:** Live app is `69211bd0ad695df8806da3ba512319fd81c01252` (PRs #34/#37). Run `40878875382` passed tests/build/gateway/app deployment; Terra-low readiness passed and public health/home/new JS returned HTTP 200 with HTML no-cache. The Drive progress bar and browser recovery are live. A Terra-low subagent is preparing Year 1 locally; no Year 1 app import has occurred.
 ## 2. State of the world
+
+**Owner's current completion/import gate (2026-10-29):** finish all Year 1 preparation, then independently inspect **15 randomly selected pages**, then upload only if all 15 pass. This supersedes earlier prompt-only/local-only authorization for the parent: the Terra worker remains local-only, while the parent may perform the website import after the gate passes and correct Year 1 mapping is prepared. Do not select the sample before the finished corpus is frozen, substitute hand-picked pages, interpret inspected/flagged pages as finished, or rerun a failed draw until convenient pages pass. Fix the failure and its affected category before a fresh recorded random check. Ordinary structural/completeness checks cover all artifacts before sampling; original answers stay visible, and no answer text is written. No import has occurred and the 15-page gate has not run.
 
 **Year 1 restart and workload correction (2026-10-29):** `collaboration.list_agents` returned only the parent; the former `/root/terra_year1` worker was no longer active. The owner requested restarting Terra and a time estimate. Spawned `/root/terra_year1_resume` explicitly with `model=gpt-6.1-terra`, `reasoning_effort=low`, `fork_turns=none`; the worker acknowledged resuming the existing run. This supersedes the older active-agent/session claims below. Local `worklist.json` has 20,175 source-page/image entries; `deduplicated-worklist.json` has 19,602 content/page entries, 117 inspected (87 flagged) and 19,485 pending. These are **not all scanned images**. Worklist representations contain 178 standalone photos/images: 131 source images, 13 sniffed images and 34 decoded HEIC representations. Joining full Drive ID/page to saved `batch-*.json` gives 34 inspected photos (all flagged), 144 unreviewed. These are worklist entries before photo-content deduplication. Parent previously mislabeled the PDF-inclusive total as images requiring visual review; that statement was incorrect. The resumed worker is auditing native text versus scans and prioritizing pending photos in batches of up to eight. Native assessment/solution text remains an aid, never blindly indexed. No finished-all-material ETA is verified yet.
 
@@ -283,6 +285,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-29, Codex — full preparation and sample gate:** instructed `/root/terra_year1_resume` to finish the complete canonical Year 1 corpus, reconcile old incomplete pages, use native text efficiently and retain scanned/layout queues. Corrected the worker's blanket flagging of solution-only images: genuinely answer-only material may retain intact imagery with empty text/regions, while legible questions need actual wording/crops. Parent owns the independent random-15 review and the subsequently authorized import; neither is complete.
+
 **2026-10-29, Codex — restarted Year 1 preparation:** verified the old agent was absent, resumed the existing checkpoint with a new explicitly selected Terra-low subagent, separated standalone-photo counts from PDF totals, and requested a native-text/scanned-page workload audit plus measured photo-batch throughput. Preserved all prior batches, originals and Year 2 artifacts. Website import remains pending artifact quality and separate Year 1 mapping.
 
 **2026-10-29, Codex — deployment completed and Year 1 delegated:** merged PR #34 under the owner's deployment authorization; corrected its pre-write LF checksum failure in PR #37; verified full CI, shared Terra-low readiness, app deployment, public health, HTML cache behavior and new JS markers. The progress bar, resumable batches/Retry/Inspect and browser recovery are live. Spawned the explicitly requested Terra-low Year 1 subagent; it repaired the downloader and is extracting locally with saved review flags. No Year 1 app import was performed.
@@ -434,6 +438,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-29, superseding preparation-only scope:** “let terra finish it all AND THEN CHECK RANDOMLY 15 pages THEN upload if all 15 are good.” Complete both Year 1 semesters; after preparation, the parent independently checks a recorded random set of 15 and uploads if all pass. This condition authorizes the required Year 1 mapping/import work after validation, without a second permission question. Keep Year 2 mappings, existing data and held processing jobs intact.
+
 - **2026-10-29, Year 1 restart:** owner said “estimate time to add all to website and let terra start.” Restart local Terra-low preparation immediately and estimate the whole path through validated website import; this is not a claim that the existing Year 2 mapping can accept Year 1. No new paid-provider fallback, source deletion or implicit release of historical held jobs.
 
 - **2026-10-29, latest Year 1 clarification:** “just summon a sub agent” explicitly authorizes a Terra-low subagent to continue the existing external Year 1 checkpoint, repair the downloader and process pages. It does not authorize a Year 1 production import, source deletion, paid API fallback or live course remapping. Preparation is now running, superseding the earlier prompt-only status.
@@ -545,6 +551,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **Variables:** `UPLOADERS=24-0161`, `PUBLIC_URL`, `CODEX_BASE_URL=http://codex:8090/v1`. The ChatGPT login lives in the VPS volume `zarqa_codex_auth`.
 
 ## 7. Open threads
+
+**Conditional Year 1 website import, Codex parent:** wait for Terra's actual complete canonical corpus, run whole-corpus structural/completeness checks, draw and independently check 15 random pages against originals and crops/text, and import only after all pass. Prepare correct Year 1 course/study-year mapping rather than using existing Year 2 identities. This is now owner-authorized subject to that condition; no sample/import has run. Worker must preserve resumable checkpoints on a real quota/source blocker.
 
 **Active Year 1 preparation, Terra-low `/root/terra_year1_resume`:** resumes the saved run; old `/root/terra_year1` is inactive. Audit native-text/scanned workload and time a photo batch before estimating completion; continue pending photos in groups of up to eight. Preserve partial work and answer-text policy. Exact listing completeness remains unverified and must not block validated available files. Report unfinished, failed and review-flagged pages honestly. No app import or deployment by the worker. Parent owns future mapping/import preparation, `codex/year1-resume-handoff`.
 
