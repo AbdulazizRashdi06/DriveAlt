@@ -100,9 +100,9 @@ function UploadRow({ file, courses, onChange }: { file: FileDto; courses: Course
           <button className="candy c-green sm" type="button" disabled={busy || file.courseId === null}
             onClick={() => void act(() => api.post(`/api/files/${file.id}/process`))}>Process</button>
         )}
-        {file.status === 'ready' && <Link className="candy c-white sm" to={`/inspect/${file.id}`}>Inspect</Link>}
+        {(file.status === 'ready' || (file.status === 'failed' && file.pageCount > 0)) && <Link className="candy c-white sm" to={`/inspect/${file.id}`}>Inspect</Link>}
         {file.status === 'failed' && (
-          <button className="candy c-white sm" type="button" disabled={busy} onClick={() => void act(() => api.post(`/api/files/${file.id}/reprocess`))}>
+          <button className="candy c-white sm" type="button" disabled={busy} onClick={() => void act(() => api.post(`/api/files/${file.id}/process`))}>
             <IconRefresh size={16} />Retry
           </button>
         )}

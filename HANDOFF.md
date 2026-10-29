@@ -11,7 +11,7 @@
 | Branch / base | `codex/drive-scan-speed`, integrating PRs #35 and #36 for one approved rollout; based on `60090bf`, live code still `56bd76b` |
 | Updated | 2026-10-29, by Codex (approved combined deployment with live progress bar) |
 
-| Purpose of this update | Record PR #32 reader/sharing/duplicate-check deployment, fixes to both reader regressions, and verified CI/production evidence; preserve separate Terra data issues. |
+| Purpose of this update | Deploy the owner-approved PR #34 combination: Terra-low batches and safe retries, bounded Drive discovery with a progress bar, and retired-script recovery; retain separate historic data issues. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -19,6 +19,8 @@
 
 **In one line:** PR #32 is merged as `56bd76b585e6540bdd25645760b2a640dc37efa0`; full CI passed (67 backend / 20 frontend tests). Features #5–#7 and both reader fixes are deployed. Run `40826986882` passed test/build/deploy; public health and home return HTTP 200, and HTML references the new `index-CvtCAUQw.js` bundle (matching the locally tested build). Last independently queried production SQL (2026-10-29, before PR #32): 400 ready / 2 reading / 1 failed files, 9,666 extracted / 7 unread pages, jobs 484 done / 2 queued / 1 failed, Drive sync 2 enabled / 118 folders. SSH is refused from the current network, so these counts are dated. Separate issues remain: 322 Terra slide pages have empty extracted text and 42 producer review flags remain.
 ## 2. State of the world
+
+**Retry UI correction before rollout (Codex, 2026-10-29):** failed-file Retry previously called destructive `/reprocess`, which would discard completed batches and uploader fixes. It now calls resumable `/process`, and failed files with pages expose Inspect. A new frontend regression covers both. TypeScript and frontend 8 suites / 26 tests pass. Combined CI also passed on `1e13a87` (run `40834631479`, test job `123316419310`); this final UI change needs its own CI pass before the already-authorized merge. No production changes yet.
 
 **Final local verification before authorized rollout (Codex, 2026-10-29):** combined TypeScript/Vite build passed; frontend 8 suites / 25 tests passed. `BASE_URL=http://127.0.0.1:5184 node e2e/drive-sync.mjs` passed desktop/phone with the live 1-of-3 progress bar; screenshots inspected (`drivealt-sync-NRdBMg` in local temp). Its wait spans the five-second polling boundary rather than racing it. `e2e/features-567.mjs` also passed both viewports (`drivealt-567-4syYAg` in local temp). Original independent CI already passed for all three feature heads; final combined CI must pass before PR #34 merges. PRs #35/#36 are now merged into the parent feature branch and closed; only PR #34 targets main. No production mutation has happened yet.
 
@@ -554,8 +556,8 @@ Local Git (PowerShell):
 ```powershell
 git fetch -q
 git status --short --branch
-git merge-base --is-ancestor 18a6b605ec768a54c83fde6583e90db0f7afb2f5 origin/main
-# Expect exit 0: main contains PR #32 and all earlier deployment fixes.
+git merge-base --is-ancestor 1e13a87ec9b5833e14ee893f8db7b5df90c4349c origin/main
+# After successful PR #34 merge expect exit 0; until then the rollout is still pending.
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
 # Last code merge/image tag after successful deployment: 56bd76b585e6540bdd25645760b2a640dc37efa0 (PR #32, run 40826986882).
 # Later docs-only merges must not change the running image.
