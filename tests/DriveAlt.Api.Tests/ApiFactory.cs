@@ -28,6 +28,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), "drivealt-test-" + Guid.NewGuid().ToString("N")[..8]);
     public ScriptedChatModel ChatModel { get; } = new();
     public ScriptedDrive Drive { get; } = new();
+    public OfflineTestMaterialAi Material { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -35,7 +36,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             services.Configure<DeepSeekOptions>(o => { o.ApiKey = "test-only"; o.BaseUrl = "https://chat.invalid"; });
             services.RemoveAll<IMaterialAi>();
-            services.AddScoped<IMaterialAi, OfflineTestMaterialAi>();
+            services.AddSingleton<IMaterialAi>(Material);
             services.AddHttpClient<DeepSeekClient>().ConfigurePrimaryHttpMessageHandler(() => ChatModel);
             services.Configure<GoogleOptions>(o => o.ApiKey = "test-only");
             services.AddHttpClient<DriveImporter>().ConfigurePrimaryHttpMessageHandler(() => Drive);

@@ -44,7 +44,7 @@ public static class InspectEndpoints
             return Results.Ok(new
             {
                 file = FileEndpoints.ToDto(f),
-                pages = f.Pages.Where(p => p.Extracted).OrderBy(p => p.Number).Select(p => ToDto(p, f)),
+                pages = f.Pages.Where(p => p.Extracted || p.Error != null).OrderBy(p => p.Number).Select(p => ToDto(p, f)),
             });
         });
 
@@ -102,6 +102,8 @@ public static class InspectEndpoints
 
             page.EditedAt = DateTime.UtcNow;
             page.EditedById = http.User.RequiredUserId();
+            page.Extracted = true;
+            page.Error = null;
             IndexText.Refresh(file, page);
             JobQueue.Enqueue(db, file.Id, JobKinds.Reembed, page.Id);
             await db.SaveChangesAsync(ct);

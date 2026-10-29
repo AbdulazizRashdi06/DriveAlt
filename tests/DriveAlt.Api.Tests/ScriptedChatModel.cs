@@ -48,6 +48,11 @@ public sealed class ScriptedChatModel : HttpMessageHandler
 public sealed class OfflineTestMaterialAi : IMaterialAi
 {
     public bool Online => false;
+    public Func<IReadOnlyList<PageReadInput>, CancellationToken, Task<IReadOnlyList<PageExtraction>>>? BatchHandler { get; set; }
+    public bool UsesBatchExtraction => BatchHandler is not null;
+    public int ExtractionBatchSize => 8;
+    public Task<IReadOnlyList<PageExtraction>> ExtractBatchAsync(IReadOnlyList<PageReadInput> pages, IReadOnlyList<Course> courses, CancellationToken ct) =>
+        BatchHandler!(pages, ct);
     public Task<PageExtraction> ExtractPageAsync(byte[] jpeg, FileContext ctx, string? embeddedText, IReadOnlyList<Course> courses, CancellationToken ct) =>
         Task.FromResult(MaterialAi.Offline(ctx, embeddedText));
     public Task<FileSuggestion?> SuggestAsync(byte[] jpeg, string fileName, string? embeddedText, IReadOnlyList<Course> courses, CancellationToken ct) =>
