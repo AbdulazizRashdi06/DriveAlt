@@ -141,6 +141,7 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
                         // ImportAsync may have attached entities before a failed save. Do not save partial imports here.
                         db.ChangeTracker.Clear();
                         folder = await db.DriveSyncFolders.SingleAsync(f => f.Id == entry.Id, ct);
+                        folder.CheckedAt = DateTime.UtcNow;
                         folder.Error = "Couldn't read or import this folder. Check sharing and download access; it will retry next scan.";
                         state = await db.DriveSyncStates.SingleAsync(s => s.Id == 1, ct);
                     }
