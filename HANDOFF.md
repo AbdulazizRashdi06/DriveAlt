@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/drive-scan-speed`, based on docs merge `60090bf` (PR #33); live code `56bd76b` |
-| Updated | 2026-10-29, by Codex (Drive listing delay fix; Terra workflow pending) |
+| Branch / base | `codex/stale-chunk-recovery`, based on `555fb7e` / PR #34; must merge after #34 |
+| Updated | 2026-10-29, by Codex (retired reader-script recovery fix) |
 | Purpose of this update | Record PR #32 reader/sharing/duplicate-check deployment, fixes to both reader regressions, and verified CI/production evidence; preserve separate Terra data issues. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
@@ -18,6 +18,8 @@
 
 **In one line:** PR #32 is merged as `56bd76b585e6540bdd25645760b2a640dc37efa0`; full CI passed (67 backend / 20 frontend tests). Features #5–#7 and both reader fixes are deployed. Run `40826986882` passed test/build/deploy; public health and home return HTTP 200, and HTML references the new `index-CvtCAUQw.js` bundle (matching the locally tested build). Last independently queried production SQL (2026-10-29, before PR #32): 400 ready / 2 reading / 1 failed files, 9,666 extracted / 7 unread pages, jobs 484 done / 2 queued / 1 failed, Drive sync 2 enabled / 118 folders. SSH is refused from the current network, so these counts are dated. Separate issues remain: 322 Terra slide pages have empty extracted text and 42 producer review flags remain.
 ## 2. State of the world
+
+**Retired script recovery fix (Codex, 2026-10-29, not deployed):** owner screenshot requests `/assets/FileView-D_WLom67.js`; independent HEAD request returns HTTP 404 while `/` and health are 200. The browser still has an older bundle referring to a retired lazy module. Immediate workaround is Ctrl+Shift+R. `codex/stale-chunk-recovery` loads the now-small FileView component eagerly (PDF.js remains dynamic), revalidates HTML with Cache-Control no-cache, handles Vite preload errors with a once-per-build reload, and supplies a friendly route error/reload screen for persistent failures. Automatic reload is bounded using sessionStorage; blocked storage leaves the error visible instead of looping. Frontend TypeScript, 8 suites / 24 tests and Vite production build pass; 33 selected backend unit tests pass after package restore. Desktop/phone `e2e/features-567.mjs` passes on localhost 5183. Build emits no separate FileView chunk (main JS 496.19 kB / 150.10 kB gzip). No deploy or VPS change. Full CI pending. PR #34 scan fix already passed full CI (`40830064132`); merge this fix after #34 and retain the parallel Terra facts when resolving handoff conflicts.
 
 **Drive scan performance fix, 2026-10-29 (Codex, `codex/drive-scan-speed`, not deployed):** scanner previously listed all folders serially using the import HTTP client's ten-minute timeout (`DriveSync.cs` and `DriveImporter.ListFolderAsync`). It now lists at most six folders concurrently with a 20-second timeout per listing, keeping all EF operations, downloads, current-switch checks and import commits serial. One slow folder produces its existing safe retryable error and does not prevent siblings being checked. The panel reports checked/known folders and imported groups while running. Unit tests verify overlap/bound/order, slow-folder isolation and scan cancellation (3/3 pass); frontend suite 7 files / 21 tests and TypeScript pass. Full DB CI pending. No live scan or import was triggered; production remains PR #32. PR #33 docs reconciliation is already merged (`60090bf`), contrary to the older pending language below.
 
@@ -243,6 +245,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **Remaining drift:** gateway merge/configuration status needs verification (open thread 3). README's model table is current, but its deploy steps, secret table and offline-mode wording need review (`README.md`, sections Stack and Deploy on the Zarqa VPS). The former Caddy source drift is fixed in Git and local Zarqa; later deployment verification remains open.
 
 ## 3. What was done
+
+**2026-10-29, Codex — browser recovery fix prepared:** verified the exact missing lazy module from the owner's screenshot returns 404. Added HTML revalidation, eager file reader loading, one-time dynamic-import recovery and a readable route error. Local regression/build/browser checks pass. The Terra workflow is implemented independently on `codex/terra-upload-batches` with gateway update and CI still required; do not lose those facts when merging this handoff.
 
 **2026-10-29, Codex:** prepared a bounded-concurrency Drive folder-listing fix and progress UI after the owner reported the Checking Drive screen takes ages. Source and focused local tests pass; no VPS mutation or deployment. Separately investigating the owner's requested Terra-low batch workflow for future uploads.
 
@@ -477,6 +481,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **Variables:** `UPLOADERS=24-0161`, `PUBLIC_URL`, `CODEX_BASE_URL=http://codex:8090/v1`. The ChatGPT login lives in the VPS volume `zarqa_codex_auth`.
 
 ## 7. Open threads
+
+**Active, Codex (`codex/stale-chunk-recovery`, depends on PR #34):** publish this tested browser recovery fix and await owner merge/deploy approval. Parallel `codex/terra-upload-batches` carries Terra-low processing plus a reviewable gateway patch; it also depends on PR #34. Preserve both branches' handoff facts and do not merge/deploy Terra before its shared-gateway prerequisite is approved. Production remains `56bd76b`.
 
 **Active, Codex:** `codex/drive-scan-speed` fixes sequential folder-listing delays; full CI and owner merge/deploy approval remain. Terra-low workflow for future uploads is next, in a separate branch/PR. Gateway source currently accepts only four images and forces medium effort; eight-image Terra-low requests require a reviewed gateway update before deployment. SSH remains unavailable from this network. Do not restart the shared gateway or run paid test calls without approval.
 

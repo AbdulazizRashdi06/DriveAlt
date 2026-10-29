@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react'
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiError } from './lib/api'
 import { createBrowserRouter, Navigate, RouterProvider, Outlet } from 'react-router'
@@ -11,8 +10,13 @@ import { Saved } from './screens/Saved'
 import { Upload } from './screens/Upload'
 import { Inspect } from './screens/Inspect'
 import { Admin } from './screens/Admin'
+import { FileView } from './screens/FileView'
 
-const FileView = lazy(() => import('./screens/FileView').then(m => ({ default: m.FileView })))
+function RouteError() {
+  return <main className="page-main"><h1 className="disp">This page couldn’t load</h1>
+    <p>Reload the app to try again. Your saved files and chats will stay available.</p>
+    <button className="candy" type="button" onClick={() => window.location.reload()}>Reload app</button></main>
+}
 
 const queryClient: QueryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -33,6 +37,7 @@ function Root() {
 const router = createBrowserRouter([
   {
     element: <Root />,
+    errorElement: <RouteError />,
     children: [
       { path: '/login', element: <Login /> },
       {
@@ -43,7 +48,7 @@ const router = createBrowserRouter([
           { path: '/chat/:id', element: <Chat /> },
           { path: '/browse', element: <Browse /> },
           { path: '/browse/:slug', element: <Browse /> },
-          { path: '/files/:id', element: <Suspense fallback={<div className="skeleton" style={{ margin: 32, height: 400 }} />}><FileView /></Suspense> },
+          { path: '/files/:id', element: <FileView /> },
           { path: '/saved', element: <Saved /> },
           { path: '/upload', element: <RequireUploader><Upload /></RequireUploader> },
           { path: '/inspect', element: <RequireUploader><Inspect /></RequireUploader> },
