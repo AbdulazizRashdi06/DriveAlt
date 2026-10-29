@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/handoff-terra-live`, based on deployed PR #37 merge `69211bd0ad695df8806da3ba512319fd81c01252` (includes PR #34) |
-| Updated | 2026-10-29, by Codex (deployment verified; Year 1 preparation delegated) |
+| Branch / base | `codex/year1-resume-handoff`, based on docs PR #38 merge `4022f98a117c40dc0e023f0fe650caf783989afb`; deployed code remains `69211bd0ad695df8806da3ba512319fd81c01252` |
+| Updated | 2026-10-29, by Codex (Year 1 Terra restarted; PDF/photo counts corrected) |
 
 | Purpose of this update | Deploy the owner-approved PR #34 combination: Terra-low batches and safe retries, bounded Drive discovery with a progress bar, and retired-script recovery; retain separate historic data issues. |
 
@@ -19,6 +19,12 @@
 
 **In one line:** Live app is `69211bd0ad695df8806da3ba512319fd81c01252` (PRs #34/#37). Run `40878875382` passed tests/build/gateway/app deployment; Terra-low readiness passed and public health/home/new JS returned HTTP 200 with HTML no-cache. The Drive progress bar and browser recovery are live. A Terra-low subagent is preparing Year 1 locally; no Year 1 app import has occurred.
 ## 2. State of the world
+
+**Year 1 restart and workload correction (2026-10-29):** `collaboration.list_agents` returned only the parent; the former `/root/terra_year1` worker was no longer active. The owner requested restarting Terra and a time estimate. Spawned `/root/terra_year1_resume` explicitly with `model=gpt-6.1-terra`, `reasoning_effort=low`, `fork_turns=none`; the worker acknowledged resuming the existing run. This supersedes the older active-agent/session claims below. Local `worklist.json` has 20,175 source-page/image entries; `deduplicated-worklist.json` has 19,602 content/page entries, 117 inspected (87 flagged) and 19,485 pending. These are **not all scanned images**. Worklist representations contain 178 standalone photos/images: 131 source images, 13 sniffed images and 34 decoded HEIC representations. Joining full Drive ID/page to saved `batch-*.json` gives 34 inspected photos (all flagged), 144 unreviewed. These are worklist entries before photo-content deduplication. Parent previously mislabeled the PDF-inclusive total as images requiring visual review; that statement was incorrect. The resumed worker is auditing native text versus scans and prioritizing pending photos in batches of up to eight. Native assessment/solution text remains an aid, never blindly indexed. No finished-all-material ETA is verified yet.
+
+**Year 1 audit follow-up:** Calculus accounts for 11,806 source pages across 155 files, including 11,469 under `Slides & ex with solution` (2023/2024 collections). File-hash deduplication leaves 11,783 Calculus pages. Worker independently verified PDF page counts of 808, 563, 547, 539 and two 519-page files; `calculus-lecture-audit.json` records extraction comparisons, which do not establish visual duplication. `workload-audit.json` is now saved. A 24-PDF sample found extractable text on 69 of 70 sampled pages; this does not prove answer safety. Initial resumed photo batches were mostly marked incomplete; parent instructed the worker to finish legible question wording/crops rather than equate viewing or blanket flags with extraction. Timed view/flag batches are unsuitable for a finished-material ETA.
+
+**Resume verification for this restart:** feature ancestor and local Zarqa Caddy ancestor checks returned exit 0; last main code SHA remains `69211bd0ad695df8806da3ba512319fd81c01252`; GitHub connector open-PR search returned only #21. Public health HTTP 200 `{"ok":true}`. Read-only SSH succeeded: live image has that SHA and gateway hash prefix is `ef0e322e17be2943`. No VPS writes or Year 1 import occurred. App year/course mapping is still required: `Data/Seeder.cs` loads `year2.json`, and `Import/DriveImporter.cs:133-161` maps into existing courses.
 
 **Deployment verified (Codex, 2026-10-29):** live image `69211bd0ad695df8806da3ba512319fd81c01252` is PR #37's corrective merge, containing PR #34's combined feature/fix rollout. PR #37 CI run `40878587154` passed, including the byte-exact gateway patch regression. Main run `40878875382` passed test (`123464728673`), image build (`123464728796`) and deploy (`123465524352`). Deploy logs: `Terra low readiness passed` at 13:10:45 UTC; `Terra batch gateway installed; existing models and process limit preserved`; `DriveAlt is up` at 13:11:50; Caddy already routes the host; public URL is up. Independent public checks: health HTTP 200 `{"ok":true}`, home HTTP 200 with `Cache-Control: no-cache`, `/assets/index-CYLOzs77.js` and `/assets/index-BJ3aP7vm.css`; new JS returned 200 and contains both `Drive folder scan progress` and the one-time recovery marker. Full tests: 84 backend / 26 frontend; TypeScript/Vite/Bash validation and 3 real-patch mocked HTTP/parser contracts pass. Prior failed run `40842751426` stopped before server writes because of a Windows CRLF checksum; PR #37 corrects LF handling and verifies exact patch bytes in CI.
 
@@ -277,6 +283,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-29, Codex — restarted Year 1 preparation:** verified the old agent was absent, resumed the existing checkpoint with a new explicitly selected Terra-low subagent, separated standalone-photo counts from PDF totals, and requested a native-text/scanned-page workload audit plus measured photo-batch throughput. Preserved all prior batches, originals and Year 2 artifacts. Website import remains pending artifact quality and separate Year 1 mapping.
+
 **2026-10-29, Codex — deployment completed and Year 1 delegated:** merged PR #34 under the owner's deployment authorization; corrected its pre-write LF checksum failure in PR #37; verified full CI, shared Terra-low readiness, app deployment, public health, HTML cache behavior and new JS markers. The progress bar, resumable batches/Retry/Inspect and browser recovery are live. Spawned the explicitly requested Terra-low Year 1 subagent; it repaired the downloader and is extracting locally with saved review flags. No Year 1 app import was performed.
 
 **2026-10-29, Codex — deployment checksum repair:** corrected the cross-platform target hash and made its patch/HTTP validation reproducible in CI; no VPS changes from the failed run. Also delivered the requested Year 1 preparation prompt as a local artifact while keeping this deployment task active.
@@ -426,6 +434,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-29, Year 1 restart:** owner said “estimate time to add all to website and let terra start.” Restart local Terra-low preparation immediately and estimate the whole path through validated website import; this is not a claim that the existing Year 2 mapping can accept Year 1. No new paid-provider fallback, source deletion or implicit release of historical held jobs.
+
 - **2026-10-29, latest Year 1 clarification:** “just summon a sub agent” explicitly authorizes a Terra-low subagent to continue the existing external Year 1 checkpoint, repair the downloader and process pages. It does not authorize a Year 1 production import, source deletion, paid API fallback or live course remapping. Preparation is now running, superseding the earlier prompt-only status.
 
 - **2026-10-29:** owner requested a Year 1 Terra prompt. This expands external preparation scope to Year 1, but does not authorize a Year 1 app import, course remapping or releasing old held jobs. The prompt was delivered without starting a model worker.
@@ -479,6 +489,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 5. Judgment calls (made without asking)
 
+- **2026-10-29, workload:** audit native PDF text before assigning all PDF pages to vision. Character count alone does not establish answer safety or reliable layout. Preserve separate text, visual, flagged and deferred queues; count content aliases only once for processing while retaining source identities. Photo-first preparation proceeds while the audit runs.
+
 - **Database:** DriveAlt has its **own Postgres** container, not Zarqa's, so the apps don't share data or migrations.
 - **Creating `main`:** `main` was started at the first commit, so PR #1 had something to merge into.
 - **Caddy:** the block has no CSP, unlike Zarqa's, because the SPA's needs weren't audited. Response streaming is on.
@@ -492,6 +504,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-28, Codex:** as explicitly directed, model text is passed through unchanged and the old server leak filter is removed. The no-written-answers instruction remains in the model prompt; compliance therefore relies on the model. This is a material change from the previous server guardrail and is not yet verified with live DeepSeek.
 
 ## 6. File inventory
+
+**Year 1 local run:** `C:/Users/abdul/DriveAlt-Year1-local/runs/2026-10-29-terra-continuation/{worklist,deduplicated-worklist,validation-report}.json` and `batch-*.json` are checkpoints, not import-ready certification. `/root/terra_year1_resume` owns new local preparation; do not overlap its writes. New workload audit is requested but not yet verified.
 
 **PR #34 combined additions:** `Ai/MaterialAi.Batches.cs`, batch contracts/options/client and pipeline/Inspect/job integration; `deploy/codex-terra-batches.patch`, `ensure-terra-gateway.sh` and mocked contract test; deployment workflow gateway preparation/Bash syntax check; `web/src/lib/chunkRecovery.{ts,test.ts}`, eager FileView and readable route fallback, HTML revalidation; bounded Drive listing helper/tests and progress bar with UI/browser tests. No DB migration or embedding-model change.
 
@@ -532,7 +546,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Active Year 1 preparation, Terra-low `/root/terra_year1`:** continue local downloads/extraction from `C:/Users/abdul/DriveAlt-Year1-local`; preserve partial work and answer-text policy. Exact listing completeness remains unverified and must not block processing validated available files. Report unfinished, failed and review-flagged pages honestly. No app import or deployment. Parent Codex has completed the separate server rollout.
+**Active Year 1 preparation, Terra-low `/root/terra_year1_resume`:** resumes the saved run; old `/root/terra_year1` is inactive. Audit native-text/scanned workload and time a photo batch before estimating completion; continue pending photos in groups of up to eight. Preserve partial work and answer-text policy. Exact listing completeness remains unverified and must not block validated available files. Report unfinished, failed and review-flagged pages honestly. No app import or deployment by the worker. Parent owns future mapping/import preparation, `codex/year1-resume-handoff`.
 
 **PRs #34–#37 completed:** #35 and #36 merged into #34's feature branch, #34 merged into main, and corrective #37 deployed successfully as `69211bd`. This documentation-only reconciliation must merge with `[skip ci]` to avoid another restart.
 **Reader review findings resolved in PR #32:** `FileEndpoints` now projects current-user page/region bookmark status, and the reader cards consume it. `FileView` keys its reader subtree by file ID, resetting filters, PDF state and controls during file changes. Frontend regressions and a user-isolation DB regression pass in full CI. The following review entry is the original pre-fix evidence.
@@ -559,7 +573,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current:** server rollout is complete (run `40878875382`); merge this docs-only reconciliation with `[skip ci]`. Continue the local Year 1 Terra-low worker and checkpointing. Before any Year 1 app import, review the finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the updated gateway source and its model/PID override. Do not rerun old papers or release held jobs implicitly.
+**Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
 
 **Completed documentation, Codex (PR #33 merged `60090bf` with `[skip ci]`):** PR #32 passed full CI (run `40826739134`, test job `123291392748`: 67 backend / 20 frontend) and merged under owner authorization. Main deploy run `40826986882` passed test/build/deploy. Public health and home returned HTTP 200 and served the new bundle. Merge this docs-only reconciliation with `[skip ci]` so it does not restart processing. Preserve PR #21 and unrelated `external-prep/` files.
 
