@@ -135,6 +135,17 @@ if (importMode)
 
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
+// Revalidate the app shell after deploys so it cannot keep requesting retired hashed JavaScript chunks.
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        if (context.Response.ContentType?.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) == true)
+            context.Response.Headers.CacheControl = "no-cache";
+        return Task.CompletedTask;
+    });
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRateLimiter();
