@@ -8,17 +8,33 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/handoff-folder-sync-deploy`, based on deployed merge `0e44df7` |
-| Updated | 2026-10-28, by Codex; full Year 2 database inventory at 06:03 UTC (10:03 Muscat) |
-| Purpose of this update | Record the owner-authorized deployment of PR #29. Live folder sync is paused with no folders selected. |
+| Branch / base | `codex/reader-fixes-deploy`, based on deployed merge `bd3366c` (PR #31); includes Antigravity feature work |
+| Updated | 2026-10-29, by Codex (reader regressions fixed; deployment authorized) |
+| Purpose of this update | Finish and validate the approved Instant Page-Strip Reader (#5), Deep-Link Sharing (#6) and Pre-Upload Duplicate Detection (#7) on `feat/reader-share-dupcheck`, and record the reconciled 2026-10-29 production snapshot (`bd3366c`) and Terra slide empty-text defect. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
-**PR #20 is deployed:** main contains `a920112`; the latest deployed code is PR #29 (`0e44df7`). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
+**PR #31 is deployed:** `main` contains `bd3366c97c9740719509ca9fa69ec7ecf8bed48b` (chat sidebar scroll fix). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** PR #29 is deployed as image `0e44df7`; tests/build/deploy succeeded and public health returns 200. The live uploader panel shows auto-sync paused, no selected/discovered folders and no completed scan. DriveAlt uses DNS-only for campus access. **Both Year 2 semesters are already registered: 403 files across 14 courses, with 9,673 pages** (224 Semester 1 files; 179 Semester 2 files). Added files and completed processing are different counts: 212 files are ready, 190 are reading with their jobs explicitly held for Semester 2/ITS, and one empty document failed. Semester 1 without ITS has zero unread pages. PR #21 awaits the owner's merge decision.
+**In one line:** Live image is `bd3366c` (PR #31) and public `/api/health` returns 200; TCP BBR + `fq` packet pacing is persisted on the VPS (`/etc/sysctl.d/99-bbr.conf`, `/etc/modules-load.d/bbr.conf`). Production SQL shows **400 ready, 2 reading, 1 failed files (403 total across 14 courses, 9,673 pages: 9,666 extracted / 7 unread)**, jobs **484 done, 2 queued, 1 failed**, and **2 enabled of 118** Drive sync folders. On `feat/reader-share-dupcheck`, Features #5 (Instant Page-Strip Reader), #6 (Deep-Link Sharing via `?ref=`) and #7 (Pre-Upload SHA-256 + Fuzzy Duplicate Check) are complete and validated locally, with the two reader regressions fixed on `codex/reader-fixes-deploy`; owner authorized merge/deploy on 2026-10-29. Deployment confirmation is pending. Separate open data defect: 322 Terra-imported slide pages without question regions have empty `text` while marked `extracted`, and 42 producer review flags remain.
 
 ## 2. State of the world
+
+**2026-10-29, Codex deployment preparation:** owner requested “so you ficed every thinf ? then deploy”. The initial review had not fixed code; both reader regressions are now fixed on `codex/reader-fixes-deploy`, carrying Antigravity's uncommitted feature work without pushing to its branch. `/api/files/{id}` projects user-scoped bookmark status for pages and question regions in the existing detail request; reader cards use that state. The reader is keyed by route file ID so topic/PDF/toggle/select state resets across file navigation. No schema migration or extra model call is needed. `npx tsc -b` and Vite build passed; `npm test -- --run` passed 7 suites / 20 tests, including saved-question unsave, saved-page zoom, and switching to an untagged file. Backend unit filter (Codex/DeepSeek/Mapping/Sniff) passed 36/36 with a successful rebuild. Desktop and phone `e2e/features-567.mjs` passed including saved-state checks; screenshots were inspected. New database integration test verifies per-user bookmark isolation and independent page/question saved state; execution awaits PR CI (local DB unavailable). `git diff --check` passed. Public health returned HTTP 200; SSH resume reads were refused by the network, so the older production SQL/image snapshot below was not refreshed. Deployment is pending, not yet claimed successful.
+
+**Features #5, #6 and #7 completed on `feat/reader-share-dupcheck`, 2026-10-29 (Antigravity):**
+- **#5 Instant Page-Strip Reader (`web/src/screens/FileView.tsx`, `src/DriveAlt.Api/Files/FileEndpoints.cs`):** `GET /api/files/{id}` includes question region boxes (`PageRegionDto`) on each page thumb. `FileView.tsx` renders pre-rendered page images (`/api/media/pages/{pageId}?v=...`) with a sticky Jump-to-page selector, `Show/Hide questions (N)` toggle, topic filter chips, clickable `.doc-qbox` overlays that open `Viewer`, and per-page Zoom / Copy link / Report buttons. `pdfjs-dist` is dynamically imported only inside `PdfDoc` when `pages.length === 0`, reducing `FileView.js` to `9.87 kB` (`3.57 kB` gzip). `FileEndpoints.ServeImage` (`MediaCacheControl`) sets `Cache-Control: private, max-age=604800, immutable` on completed versioned media (`?v=`) and `Cache-Control: private, no-cache` whenever a temporary fallback image is served so fallbacks always revalidate once the crop/thumb is generated.
+- **#6 Deep-Link Sharing (`src/DriveAlt.Api/Browse/BrowseEndpoints.cs`, `web/src/lib/app.tsx`, `web/src/ui/Viewer.tsx`, `web/src/ui/ResultCard.tsx`):** `GET /api/cards?refs=...` hydrates up to 24 `r:` / `p:` refs. `AppProvider` watches `?ref=` and hydrates/opens `Viewer` once authenticated (`openedRef` is marked only after the async request resolves, surviving React `StrictMode` double-invocation and login/session refresh), stripping `?ref=` on close. `Viewer` and `ResultCard` include `Copy link` buttons, and slide/page cards use `thumbUrl` for card previews.
+- **#7 Pre-Upload Duplicate Detection (`src/DriveAlt.Api/Files/Heuristics.cs`, `src/DriveAlt.Api/Files/FileEndpoints.cs`, `web/src/screens/Upload.tsx`):** `POST /api/uploads/check` checks client-computed `SHA-256` hashes (`exact`) and `Heuristics.CanonicalTitle` (`similar`). `CanonicalTitle` strips only known file extensions (preserving decimal chapter numbers like `Chapter 2.1 - Introduction to Trees` on extensionless titles) and strips trailing `(N)` copy suffixes only when not preceded by an assessment/lecture/part noun (`DS Quiz (1)` and `DS Quiz (2)` stay distinct). Exact matches are skipped before uploading bytes; fuzzy matches show a non-blocking warning card with `View existing`, `Upload anyway`, and `Skip`.
+- **Validation (2026-10-29, Antigravity):**
+  - `dotnet build DriveAlt.slnx --no-restore` → `Build succeeded. 0 Warning(s), 0 Error(s)`.
+  - `dotnet test tests/DriveAlt.Api.Tests --no-build --filter "FullyQualifiedName~CodexTests|FullyQualifiedName~DeepSeekTests|FullyQualifiedName~MappingTests|FullyQualifiedName~SniffTests"` → `Passed! - Failed: 0, Passed: 36, Skipped: 0, Total: 36`.
+  - `cd web && npx tsc -b` → passed (0 errors).
+  - `cd web && npx vitest run --pool=threads` → `7 passed (7)` suites, `20 passed (20)` tests (including `Features567.test.tsx` covering `StrictMode` + login refresh for `?ref=`, `FileView` reader/question boxes, and `Upload` exact/similar preflight).
+  - `cd web && npx vite build --outDir ../.ci-web` → passed (`FileView` chunk `9.87 kB` / `3.57 kB` gzip).
+  - Playwright desktop (`1440x1000`) and phone (`390x844`) stand-in API checks (`node e2e/features-567.mjs` and `node e2e/reports.mjs`) → passed with zero page errors and zero horizontal overflow.
+
+**Current reconciliation, 2026-10-29 (Codex, read-only review):** the live image is `bd3366c97c9740719509ca9fa69ec7ecf8bed48b` (PR #31), and public `/api/health` returned HTTP 200. Read-only SQL returned `9666 extracted / 7 unread`, `400 ready / 2 reading / 1 failed`, jobs `484 done / 2 queued / 1 failed`, and `2 enabled / 118` Drive sync folders. These supersede older 2026-10-28 status counts below. On 2026-10-28, following the owner's instruction to check five and deploy, the external Terra run imported 576 crop pages across 63 files; 12 fully read files were queued to finish and 42 producer-flagged pages were included. Current `/data/terra-low-20261028` holds the imported package. The five inspected samples are not a comprehensive quality review. The import supplies empty page text for pages with no question regions: 322 of its 479 slide results have no regions, so their slide content was not transcribed. Not every page has an embedding.
 
 **Drive sync deployed (2026-10-28, Codex):** owner explicitly requested deployment. PR #29 merged as `0e44df7a71001d7c02553303672c2349d687ab9a`; run `40662469965` passed test (`122728624891`), build (`122728624606`) and deploy (`122729967049`). Normal public `curl /api/health` returned `{`"ok`":true}`, `HTTP=200 ip=173.249.40.122`. In the authenticated production uploader page `/admin`, Google Drive sync loaded successfully with master switch off, Discover folders available, no discovered folders, and no completed scan. Admin stats still show 212 ready, 190 processing, one failed, 9,673 pages and 1,105 question crops. No discovery, import, paid AI call or held-job release was triggered by Codex. Direct post-deploy SQL/image inspection remains unknown because SSH is refused from the campus network. The successful live settings response verifies the new sync schema is accessible.
 
@@ -225,6 +241,16 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-29, Codex — fixes following Antigravity review:** fixed lost bookmark state and topic-filter leakage between file routes; added regression coverage and carried forward Features #5–#7 for the owner's authorized deployment. Previous Codex review entry in section 7 records the original reproductions; those two findings are now resolved in source. Full CI and deployment evidence will be recorded after GitHub finishes.
+
+**2026-10-29, Antigravity — Instant Page-Strip Reader (#5), Deep-Link Sharing (#6) and Pre-Upload Duplicate Detection (#7) (`feat/reader-share-dupcheck`):**
+- Implemented the approved plan for Features #5, #6 and #7 and resolved all three Codex review items (`app.tsx` `cards` state + StrictMode/session-refresh `openedRef` timing, `FileEndpoints.MediaCacheControl` `private, no-cache` fallback revalidation vs `immutable` versioned media, and `Heuristics.CanonicalTitle` preservation of decimal chapter titles and numbered assessments).
+- Added backend unit tests in `tests/DriveAlt.Api.Tests/MappingTests.cs`, frontend unit tests in `web/src/screens/Features567.test.tsx` and `web/src/ui/ResultCard.test.tsx`, and desktop/phone Playwright smoke coverage in `web/e2e/features-567.mjs`. All checks passed locally; no merge, deploy, VPS mutation or paid API call was performed in this continuation.
+
+**2026-10-28, Antigravity — chat sidebar scroll fix (PR #31, deployed `bd3366c`) and VPS TCP BBR + `fq` tuning:**
+- Completed and deployed PR #31 (`fix/chat-sidebar-scroll` → `bd3366c97c9740719509ca9fa69ec7ecf8bed48b`, run `40707004568`) so `.chat-side` stays sticky within the viewport and `.hist-list` scrolls independently; verified with `web/e2e/chat-history.mjs`.
+- Enabled TCP BBR + `fq` packet pacing on the VPS host and `zarqa-caddy-1` network namespace (`/etc/sysctl.d/99-bbr.conf`, `/etc/modules-load.d/bbr.conf`) after diagnosing high-RTT `cubic` throughput collapse on direct DNS-only connections to Germany.
+
 **2026-10-28, Codex — deployed PR #29:** after the owner said “deploy”, verified the PR head checks passed, merged it normally and waited for GitHub test/build/deploy success. Confirmed public health and authenticated production settings. Sync remains paused with all folders off. Update this deployment record via a docs-only PR merged with `[skip ci]`; the running image stays `0e44df7`.
 
 **2026-10-28, Codex — Drive folder sync (PR #29):** per-folder controls and paused master switch, five-minute polling, existing-source/photo deduplication, and explicit discovery while paused. New folders are off; only direct files in selected folders import. Original source edits/deletions do not replace/delete imported material. Database integration cases use a scripted Drive, not real downloads or paid AI. Owner-authorized DNS-only change is verified above.
@@ -350,6 +376,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-29:** owner authorized fixing the reviewed bugs and merging/deploying the reader, sharing and duplicate-preflight changes. Other open data/gateway issues remain separate tasks.
+
 - **2026-10-28:** owner authorized merge/deployment of PR #29 by saying “deploy”. Sync stays paused; deployment does not authorize importing files or releasing held jobs.
 
 - **2026-10-28, sync clarification:** folder switches import only newly added Drive files. Enabling Semester 2 later must NOT release its existing held jobs. The global switch and every folder start off; no live sync was enabled by Codex.
@@ -409,6 +437,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | current |
 | `HANDOFF.md` | This page | reconciled with 2026-10-28 read-only checks |
+| `src/DriveAlt.Api/Files/{FileEndpoints,Heuristics}.cs`, `src/DriveAlt.Api/Browse/BrowseEndpoints.cs` | Page regions on `/api/files/{id}`, `/api/uploads/check`, `/api/cards`, fallback-safe `MediaCacheControl`, decimal/assessment-safe `CanonicalTitle` | on `feat/reader-share-dupcheck`; 36 backend unit tests pass |
+| `web/src/screens/{FileView,Upload,Features567.test}.tsx`, `web/src/ui/{Viewer,ResultCard}.tsx`, `web/src/lib/app.tsx`, `web/e2e/features-567.mjs` | Instant page-strip reader (#5), `?ref=` deep-link sharing (#6) and duplicate preflight UI (#7) | on `feat/reader-share-dupcheck`; 20 frontend unit tests + desktop/phone Playwright smoke pass |
 | `src/DriveAlt.Api/Reports/ReportEndpoints.cs`, report entity/config and `20261028062003_MaterialReports` | Student reporting and uploader review, with report-only schema migration | deployed in PR #27 |
 | `web/src/ui/{ReportButton,ReportsInbox}.tsx`, viewer/file/admin integration | Reporting dialog and review inbox | 11 frontend tests; desktop/phone stand-in API smoke passed |
 | `web/e2e/reports.mjs`, `tests/DriveAlt.Api.Tests/ApiTests.cs` | Browser report smoke and three report integration cases | browser passed locally; all DB cases passed in CI run `40645271789` |
@@ -438,9 +468,13 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**2026-10-29, Codex review of completed Antigravity work:** independent `npx tsc -b` passed; frontend tests passed 7 suites / 20 tests; backend Codex/DeepSeek/Mapping/Sniff filter passed 36 tests; `BASE_URL=http://127.0.0.1:5182 node e2e/features-567.mjs` passed desktop and phone. Two additional browser reproductions exposed remaining issues: (1) `FileView.tsx:120,133` constructs cards with `saved:false`, so an already-bookmarked question shows Save rather than Saved in the reader's Viewer; backend hydration can return saved=true, but reader cards bypass it. (2) `FileView.tsx:146,153` retains the selected topic on direct client-side file-route changes; switching to a file without that topic rendered zero images and “0 OF 2 PAGES” with no matching topic chip to clear. Reset per-file filter state and hydrate bookmark status before merging. Reproduction scripts were executed in memory against mocked APIs; no source test or application code was changed in this review. Vite test server was local only. The earlier undefined-items and fallback-immutable-cache findings are fixed in the reviewed source. No merge/deploy/VPS change was performed.
+
 **PR #29 deployed:** the five-minute scanner and per-folder controls are live, with master switch off and no selected folders. Enabling folders later imports new files only; existing held jobs stay held. No real discovery/import was run by Codex.
 
-0. **Reports and chat deployed (PRs #25–#28):** GitHub deployment passed; direct post-deploy database verification remains unknown because the university network refuses SSH. PR #29 deployed opt-in Drive sync; no live scanning has started.
+0. **Deployment authorized, Codex on `codex/reader-fixes-deploy`:** carry forward Antigravity Features #5–#7 plus bookmark hydration and per-file reader-state fixes. Local verification passed; open PR, wait for full CI, merge, and verify GitHub deployment/public health. No data imports or held-job release are part of this deployment.
+0b. **Terra crop-only import empty slide text & producer flags (2026-10-28/29):** the external Terra import (`/data/terra-low-20261028`, 576 crop pages across 63 files) marked 322 slide pages that had no question regions as `extracted` while leaving their `pages.text` empty, omitting that slide content from text/keyword search. Forty-two producer-flagged pages also remain for review. Needs a separate targeted remediation task (do not conflate with `feat/reader-share-dupcheck`).
+0c. **Reports, chat, Drive sync, and chat sidebar scroll deployed (PRs #25–#31):** live image is `bd3366c97c9740719509ca9fa69ec7ecf8bed48b` (PR #31). Drive sync has 2 of 118 folders enabled.
 0a. **PR #27:** full-file results and AI-authored chat with prewritten button follow-ups are deployed. PR #21 overlaps `ChatService.cs` and contains canned pick text rejected by the owner; preserve typed-course selection when reconciling. No other agent branch was modified.
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. It modifies `ChatService.cs` and writes a canned pick line, which conflicts with the owner's newer AI-written-replies decision. Coordinate/reconcile with the chat feature before either overlapping change is merged; do not edit or push to Claude's branch. Owner approval is required to merge.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
@@ -453,6 +487,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
+
+**Active, Codex (`codex/reader-fixes-deploy`):** local checks complete. Publish one PR for Antigravity Features #5–#7 and reader fixes, wait for full CI (including new DB regression), merge under the owner's 2026-10-29 deployment authorization, then verify the main run and public health. Deployment status must remain pending until confirmed; preserve PR #21 and unrelated `external-prep/` files.
 
 **Ready for owner review — Codex, PR #29:** local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Full CI run `40661496361` on `83e7b26` passed: `Failed: 0, Passed: 51, Skipped: 0, Total: 51`, including two scripted-Drive/database cases, and frontend `16 passed`. `node e2e/drive-sync.mjs` passed on desktop and phone using a stand-in API; both screenshots were visually inspected after controls were styled. The final code head `d2be664` also passed full CI run `40661879269` (test job `122726648712`); this includes the disabled-folder assertion, original-name preservation and styled controls. Subsequent commits only record results/owner decisions. Docker is unavailable locally. No live import or paid AI call was made. Owner-authorized deployment is complete (run `40662469965`). Next: the owner can discover folders while paused, select desired folders and enable sync; Semester 2/ITS should stay off until explicitly selected.
 
@@ -480,7 +516,7 @@ git status --short --branch
 git merge-base --is-ancestor b1461cc origin/main
 # Expect exit 0: main contains PR #22, including PR #20.
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
-# Last deployed code merge/image tag: 0e44df7a71001d7c02553303672c2349d687ab9a (GitHub deploy run 40662469965).
+# Last deployed code merge/image tag: bd3366c97c9740719509ca9fa69ec7ecf8bed48b (PR #31, GitHub deploy run 40707004568).
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
@@ -508,10 +544,10 @@ docker compose --env-file generated.env --env-file .env exec -T db psql -U drive
   -c "select state, count(*), count(*) filter (where error like 'Held:%') held, count(*) filter (where error like 'Paused:%') paused from jobs group by state order by state" \
   -c "select c.slug, count(*) filter (where not p.extracted) unread from pages p join files f on f.id=p.file_id join courses c on c.id=f.course_id where c.semester=1 and c.slug <> 'its' group by c.slug order by c.slug" \
   -c "select label, count(*) from regions group by label order by 1"
-# Last verified 2026-10-28: messages has more/options; ready 212, reading 190,
-# failed 1; read_ok 5665, read_offline 0; done jobs 296, failed 1,
-# queued 190 (all held, none paused); every in-scope unread count 0;
-# question regions 1105, no other labels.
+# Last verified 2026-10-29: live image bd3366c97c9740719509ca9fa69ec7ecf8bed48b;
+# files: ready 400, reading 2, failed 1; pages: extracted 9666, unread 7
+# (note: 322 Terra-imported slide pages without regions have empty text, and not every page has an embedding);
+# jobs: done 484, queued 2, failed 1; Drive sync folders: 2 enabled of 118.
 # After the owner merges/deploys the chat feature, messages also has more_commentary;
 # after the report feature, to_regclass('public.material_reports') returns material_reports.
 # After PR #29, drive_sync_states has id=1, enabled=false, scan_requested=false (until the owner changes it).

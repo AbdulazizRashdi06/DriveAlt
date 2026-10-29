@@ -17,7 +17,14 @@ public sealed record FileDto(
     int? CourseId, string? CourseSlug, string? CourseName, string? CourseColor, string MaterialType, int? Year, string? AssessmentLabel,
     string? Folder, string[] Guessed, DateTime CreatedAt, string? ThumbUrl, int Parts);
 
-public sealed record PageThumbDto(Guid Id, int Number, string Kind, string ThumbUrl, string PageUrl, string[] Tags, int Questions, int Width, int Height);
+public sealed record PageRegionDto(Guid Id, string? QuestionNumber, float X, float Y, float W, float H, bool Saved = false);
+
+public sealed record PageThumbDto(Guid Id, int Number, string Kind, string ThumbUrl, string PageUrl, string[] Tags, int Questions, int Width, int Height,
+    IReadOnlyList<PageRegionDto>? Regions = null, bool Saved = false);
+
+public sealed record UploadCheckItem(string FileName, long SizeBytes, string Sha256, int? CourseId = null);
+public sealed record UploadCheckRequest(List<UploadCheckItem> Items);
+public sealed record UploadCheckResult(int Index, string Kind, FileDto? Existing);
 
 public sealed record FilePatch(int? CourseId, string? MaterialType, int? Year, string? AssessmentLabel, string? Folder, string? Title, bool ClearYear = false);
 
@@ -68,6 +75,52 @@ public static class FileEndpoints
         }).WithMetadata(new RequestSizeLimitAttribute(1024L * 1024 * 1024))
           .WithFormOptions(multipartBodyLengthLimit: 1024L * 1024 * 1024);
 
+        up.MapPost("/uploads/check", async (UploadCheckRequest req, AppDb db, CancellationToken ct) =>
+        {
+            var items = req.Items ?? [];
+            if (items.Count == 0) return Results.Ok(Array.Empty<UploadCheckResult>());
+
+            var courses = await db.Courses.AsNoTracking().ToListAsync(ct);
+            var hashes = items.Select(x => (x.Sha256 ?? "").Trim().ToLowerInvariant()).Where(h => h.Length > 0).Distinct().ToList();
+            var byHash = hashes.Count == 0
+                ? new Dictionary<string, DocFile>()
+                : (await db.Files.AsNoTracking().Include(f => f.Course).Where(f => hashes.Contains(f.Sha256)).ToListAsync(ct))
+                    .GroupBy(f => f.Sha256).ToDictionary(g => g.Key, g => g.First());
+
+            var allExisting = await db.Files.AsNoTracking().Include(f => f.Course)
+                .OrderByDescending(f => f.CreatedAt)
+                .ToListAsync(ct);
+
+            var results = new List<UploadCheckResult>(items.Count);
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                var h = (item.Sha256 ?? "").Trim().ToLowerInvariant();
+                if (h.Length > 0 && byHash.TryGetValue(h, out var exact))
+                {
+                    results.Add(new UploadCheckResult(i, "exact", ToDto(exact)));
+                    continue;
+                }
+
+                var norm = Heuristics.CanonicalTitle(item.FileName);
+                if (norm.Length == 0)
+                {
+                    results.Add(new UploadCheckResult(i, "none", null));
+                    continue;
+                }
+
+                var guessedCourseId = item.CourseId ?? Heuristics.FromPath(item.FileName, courses).Course?.Id;
+                var similar = allExisting.FirstOrDefault(f =>
+                    (guessedCourseId is null || f.CourseId is null || f.CourseId == guessedCourseId) &&
+                    (Heuristics.CanonicalTitle(f.Title) == norm || Heuristics.CanonicalTitle(f.OriginalName) == norm));
+
+                results.Add(similar is not null
+                    ? new UploadCheckResult(i, "similar", ToDto(similar))
+                    : new UploadCheckResult(i, "none", null));
+            }
+            return Results.Ok(results);
+        });
+
         up.MapGet("/uploads", async (HttpContext http, AppDb db, bool? all, CancellationToken ct) =>
         {
             var uid = http.User.RequiredUserId();
@@ -79,7 +132,7 @@ public static class FileEndpoints
 
         up.MapPatch("/files/{id:guid}", async (Guid id, FilePatch patch, AppDb db, CancellationToken ct) =>
         {
-            var f = await db.Files.Include(x => x.Course).Include(x => x.Pages).ThenInclude(p => p.Regions).FirstOrDefaultAsync(x => x.Id == id, ct);
+            var f = await db.Files.Include(x => x.Course).Include(x => x.Pages).ThenInclude(p => p.Regions).AsSplitQuery().FirstOrDefaultAsync(x => x.Id == id, ct);
             if (f is null) return Results.NotFound();
             var guessed = f.Guessed.ToHashSet();
             if (patch.CourseId is { } cid)
@@ -140,7 +193,7 @@ public static class FileEndpoints
 
         up.MapDelete("/files/{id:guid}", async (Guid id, AppDb db, Storage storage, CancellationToken ct) =>
         {
-            var f = await db.Files.Include(x => x.Pages).ThenInclude(p => p.Regions).FirstOrDefaultAsync(x => x.Id == id, ct);
+            var f = await db.Files.Include(x => x.Pages).ThenInclude(p => p.Regions).AsSplitQuery().FirstOrDefaultAsync(x => x.Id == id, ct);
             if (f is null) return Results.NotFound();
             var regionIds = f.Pages.SelectMany(p => p.Regions).Select(r => r.Id).ToList();
             await db.Jobs.Where(j => j.FileId == id).ExecuteDeleteAsync(ct);
@@ -153,12 +206,22 @@ public static class FileEndpoints
         // ---------- read side (all signed-in users) ----------
         var g = app.MapGroup("/api").RequireAuthorization();
 
-        g.MapGet("/files/{id:guid}", async (Guid id, AppDb db, CancellationToken ct) =>
+        g.MapGet("/files/{id:guid}", async (Guid id, HttpContext http, AppDb db, CancellationToken ct) =>
         {
+            var uid = http.User.RequiredUserId();
             var f = await db.Files.AsNoTracking().Include(x => x.Course).FirstOrDefaultAsync(x => x.Id == id, ct);
             if (f is null) return Results.NotFound();
             var pages = await db.Pages.AsNoTracking().Where(p => p.FileId == id).OrderBy(p => p.Number)
-                .Select(p => new { p.Id, p.Number, p.Kind, p.Tags, p.Width, p.Height, p.EditedAt, Questions = p.Regions.Count(r => r.Label == RegionLabels.Question) })
+                .Select(p => new
+                {
+                    p.Id, p.Number, p.Kind, p.Tags, p.Width, p.Height, p.EditedAt,
+                    Saved = db.Bookmarks.Any(b => b.UserId == uid && b.PageId == p.Id && b.RegionId == null),
+                    Regions = p.Regions.Where(r => r.Label == RegionLabels.Question)
+                        .OrderBy(r => r.Y).ThenBy(r => r.X)
+                        .Select(r => new PageRegionDto(r.Id, r.QuestionNumber, r.X, r.Y, r.W, r.H,
+                            db.Bookmarks.Any(b => b.UserId == uid && b.RegionId == r.Id)))
+                        .ToList(),
+                })
                 .ToListAsync(ct);
             var ready = FileStatuses.Visible.Contains(f.Status) && pages.Count > 0;
             return Results.Ok(new
@@ -169,7 +232,7 @@ public static class FileEndpoints
                     {
                         var v = (p.EditedAt ?? f.UpdatedAt).Ticks.ToString("x");
                         return new PageThumbDto(p.Id, p.Number, p.Kind, $"/api/media/thumbs/{p.Id}?v={v}", $"/api/media/pages/{p.Id}?v={v}",
-                            p.Tags, p.Questions, p.Width, p.Height);
+                            p.Tags, p.Regions.Count, p.Width, p.Height, p.Regions, p.Saved);
                     }).ToList()
                     : [],
             });
@@ -199,21 +262,21 @@ public static class FileEndpoints
         });
 
         // ---------- media ----------
-        g.MapGet("/media/pages/{pageId:guid}", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
+        g.MapGet("/media/pages/{pageId:guid}", async (Guid pageId, HttpContext http, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var p = await db.Pages.AsNoTracking().Where(x => x.Id == pageId).Select(x => new { x.FileId, x.Number }).FirstOrDefaultAsync(ct);
-            return p is null ? Results.NotFound() : ServeImage(storage.PageImage(p.FileId, p.Number));
+            return p is null ? Results.NotFound() : ServeImage(http, storage.PageImage(p.FileId, p.Number));
         });
 
-        g.MapGet("/media/thumbs/{pageId:guid}", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
+        g.MapGet("/media/thumbs/{pageId:guid}", async (Guid pageId, HttpContext http, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var p = await db.Pages.AsNoTracking().Where(x => x.Id == pageId).Select(x => new { x.FileId, x.Number }).FirstOrDefaultAsync(ct);
-            return p is null ? Results.NotFound() : ServeImage(storage.Thumb(p.FileId, p.Number), storage.PageImage(p.FileId, p.Number));
+            return p is null ? Results.NotFound() : ServeImage(http, storage.Thumb(p.FileId, p.Number), storage.PageImage(p.FileId, p.Number));
         });
 
-        g.MapGet("/media/files/{fileId:guid}/thumb", (Guid fileId, Storage storage) => ServeImage(storage.Thumb(fileId, 1), storage.PageImage(fileId, 1)));
+        g.MapGet("/media/files/{fileId:guid}/thumb", (Guid fileId, HttpContext http, Storage storage) => ServeImage(http, storage.Thumb(fileId, 1), storage.PageImage(fileId, 1)));
 
-        g.MapGet("/media/crops/{regionId:guid}", async (Guid regionId, bool? download, AppDb db, Storage storage, CancellationToken ct) =>
+        g.MapGet("/media/crops/{regionId:guid}", async (Guid regionId, bool? download, HttpContext http, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var r = await db.Regions.AsNoTracking().Where(x => x.Id == regionId && (x.Label == RegionLabels.Question || x.Label == RegionLabels.Answer))
                 .Select(x => new { x.QuestionNumber, x.Label, x.Page!.Number, x.Page.FileId, x.Page.File!.Title }).FirstOrDefaultAsync(ct);
@@ -224,21 +287,31 @@ public static class FileEndpoints
                     ? Results.File(path, "image/jpeg", Storage.SafeName($"{r.Title} p{r.Number}{(r.QuestionNumber is null ? "" : " Q" + r.QuestionNumber)}{(r.Label == RegionLabels.Answer ? " answer" : "")}.jpg"))
                     : Results.NotFound();
             // A box from a re-read that isn't cropped yet: show its whole page meanwhile.
-            return ServeImage(path, storage.PageImage(r.FileId, r.Number));
+            return ServeImage(http, path, storage.PageImage(r.FileId, r.Number));
         });
 
         // Same render, kept as its own route for the uploader comparison view.
-        up.MapGet("/media/pages/{pageId:guid}/original", async (Guid pageId, AppDb db, Storage storage, CancellationToken ct) =>
+        up.MapGet("/media/pages/{pageId:guid}/original", async (Guid pageId, HttpContext http, AppDb db, Storage storage, CancellationToken ct) =>
         {
             var p = await db.Pages.AsNoTracking().Where(x => x.Id == pageId).Select(x => new { x.FileId, x.Number }).FirstOrDefaultAsync(ct);
-            return p is null ? Results.NotFound() : ServeImage(storage.PageImage(p.FileId, p.Number));
+            return p is null ? Results.NotFound() : ServeImage(http, storage.PageImage(p.FileId, p.Number));
         });
     }
 
-    private static IResult ServeImage(string path, string? fallback = null)
+    public static string? MediaCacheControl(bool hasVersion, bool usedFallback) =>
+        usedFallback ? "private, no-cache" : hasVersion ? "private, max-age=604800, immutable" : null;
+
+    private static IResult ServeImage(HttpContext http, string path, string? fallback = null)
     {
-        if (!File.Exists(path) && fallback is not null) path = fallback;
+        var usedFallback = false;
+        if (!File.Exists(path) && fallback is not null)
+        {
+            path = fallback;
+            usedFallback = true;
+        }
         if (!File.Exists(path)) return Results.NotFound();
+        if (MediaCacheControl(http.Request.Query.ContainsKey("v"), usedFallback) is { } cc)
+            http.Response.Headers.CacheControl = cc;
         return Results.File(path, "image/jpeg", enableRangeProcessing: false,
             lastModified: File.GetLastWriteTimeUtc(path));
     }

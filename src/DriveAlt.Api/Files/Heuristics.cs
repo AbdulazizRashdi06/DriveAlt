@@ -108,4 +108,39 @@ public static partial class Heuristics
         if (t.StartsWith("Copy of ", StringComparison.OrdinalIgnoreCase)) t = t[8..];
         return string.IsNullOrWhiteSpace(t) ? name : t;
     }
+
+    [GeneratedRegex(@"\.(?:pdf|pptx?|docx?|jpe?g|png|webp|gif|heic|heif)$", RegexOptions.IgnoreCase)]
+    private static partial Regex KnownExtensionPattern();
+
+    [GeneratedRegex(@"(?:\s*[-–—]?\s*copy(?:\s*\(\d+\))?)+$", RegexOptions.IgnoreCase)]
+    private static partial Regex ExplicitCopySuffixPattern();
+
+    [GeneratedRegex(@"^(?<stem>.*?)\s*\(\d+\)$")]
+    private static partial Regex TrailingParenNumberPattern();
+
+    [GeneratedRegex(@"\b(?:midterm|mid|final|quiz|test|exercise|exercises|lab|tutorial|assignment|sheet|part|ch|chapter|lec|lecture|week|section|sec|hw|homework|paper)$", RegexOptions.IgnoreCase)]
+    private static partial Regex AssessmentOrPartTailPattern();
+
+    [GeneratedRegex(@"[^a-z0-9]+")]
+    private static partial Regex NonAlnumPattern();
+
+    /// <summary>Normalized title key for fuzzy duplicate detection (ignores copy suffixes, punctuation and case).</summary>
+    public static string CanonicalTitle(string nameOrTitle)
+    {
+        var leaf = nameOrTitle.Replace('\\', '/').Split('/')[^1].Trim();
+        if (LooksLikePhoto(leaf)) return "";
+        var baseName = KnownExtensionPattern().Replace(leaf, "");
+        var t = baseName.Replace('_', ' ').Trim();
+        while (t.StartsWith("Copy of ", StringComparison.OrdinalIgnoreCase)) t = t[8..].TrimStart();
+        t = ExplicitCopySuffixPattern().Replace(t, "").Trim();
+        if (TrailingParenNumberPattern().Match(t) is { Success: true } m)
+        {
+            var stem = m.Groups["stem"].Value.Trim();
+            if (stem.Length > 0 && !AssessmentOrPartTailPattern().IsMatch(stem))
+                t = stem;
+        }
+        t = ExplicitCopySuffixPattern().Replace(t, "").Trim();
+        var norm = NonAlnumPattern().Replace(t.ToLowerInvariant(), " ").Trim();
+        return norm.Length < 4 ? "" : norm;
+    }
 }

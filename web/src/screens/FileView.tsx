@@ -1,16 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import * as pdfjs from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { api, TYPE_SINGULAR, type FileDto, type PageThumb } from '../lib/api'
+import { api, count, TYPE_SINGULAR, type FileDto, type PageRegion, type PageThumb, type ResultCard } from '../lib/api'
 import { useApp } from '../lib/app'
-import { IconBack, IconDownload } from '../ui/Icons'
+import { IconBack, IconClose, IconDownload, IconExpand, IconShare } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
 import { ReportButton, type ReportTarget } from '../ui/ReportButton'
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+import { copyShareLink } from '../ui/Viewer'
 
 /** Renders one PDF page when it scrolls near the viewport. */
 function PdfPage({ doc, number, width, target }: { doc: PDFDocumentProxy; number: number; width: number; target?: ReportTarget }) {
@@ -74,9 +71,16 @@ function PdfDoc({ url, startPage, onPageCount, pages, title }: { url: string; st
   const scrolled = useRef(false)
 
   useEffect(() => {
-    const task = pdfjs.getDocument({ url, withCredentials: true })
-    task.promise.then(d => { setDoc(d); onPageCount(d.numPages) }, e => setError(String(e?.message ?? e)))
-    return () => { void task.destroy() }
+    let cancelled = false
+    let destroy: (() => void) | null = null
+    void Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]).then(([pdfjs, w]) => {
+      if (cancelled) return
+      pdfjs.GlobalWorkerOptions.workerSrc = w.default
+      const task = pdfjs.getDocument({ url, withCredentials: true })
+      destroy = () => { void task.destroy() }
+      task.promise.then(d => { if (!cancelled) { setDoc(d); onPageCount(d.numPages) } }, e => { if (!cancelled) setError(String(e?.message ?? e)) })
+    })
+    return () => { cancelled = true; destroy?.() }
   }, [url, onPageCount])
 
   useEffect(() => {
@@ -105,23 +109,72 @@ function PdfDoc({ url, startPage, onPageCount, pages, title }: { url: string; st
   )
 }
 
+function toPageCard(file: FileDto, p: PageThumb): ResultCard {
+  const pageUrl = p.pageUrl ?? `/api/files/${file.id}/view?part=${p.number}`
+  const thumbUrl = p.thumbUrl ?? pageUrl
+  return {
+    ref: `p:${p.id}`, kind: p.kind === 'slide' ? 'slide' : 'page', imageUrl: pageUrl, pageImageUrl: pageUrl, thumbUrl,
+    fileId: file.id, pageId: p.id, regionId: null, fileTitle: file.title, fileName: file.originalName, sourceKind: file.sourceKind,
+    courseSlug: file.courseSlug ?? '', courseName: file.courseName ?? '', courseColor: file.courseColor ?? '#FF6B2C', semester: 0,
+    materialType: file.materialType, year: file.year, assessmentLabel: file.assessmentLabel, pageNumber: p.number, pageCount: file.pageCount,
+    questionNumber: null, tags: p.tags ?? [], box: null, width: p.width, height: p.height, saved: p.saved ?? false, answerRef: null, answerImageUrl: null,
+  }
+}
+
+function toQuestionCard(file: FileDto, p: PageThumb, r: PageRegion): ResultCard {
+  const pageUrl = p.pageUrl ?? `/api/files/${file.id}/view?part=${p.number}`
+  const thumbUrl = p.thumbUrl ?? pageUrl
+  const v = pageUrl.includes('?v=') ? `?v=${pageUrl.split('?v=')[1]}` : ''
+  return {
+    ref: `r:${r.id}`, kind: 'question', imageUrl: `/api/media/crops/${r.id}${v}`, pageImageUrl: pageUrl, thumbUrl,
+    fileId: file.id, pageId: p.id, regionId: r.id, fileTitle: file.title, fileName: file.originalName, sourceKind: file.sourceKind,
+    courseSlug: file.courseSlug ?? '', courseName: file.courseName ?? '', courseColor: file.courseColor ?? '#FF6B2C', semester: 0,
+    materialType: file.materialType, year: file.year, assessmentLabel: file.assessmentLabel, pageNumber: p.number, pageCount: file.pageCount,
+    questionNumber: r.questionNumber, tags: p.tags ?? [], box: { x: r.x, y: r.y, w: r.w, h: r.h }, width: p.width, height: p.height, saved: r.saved ?? false,
+    answerRef: null, answerImageUrl: null,
+  }
+}
+
 /** "Open original": the untouched file (it may contain answers — the bot just never repeats them). */
 export function FileView() {
   const { id } = useParams()
+  // Filters, PDF state and the jump selector belong to one file, including history navigation.
+  return <FileReader key={id} />
+}
+
+function FileReader() {
+  const { id } = useParams()
   const [params] = useSearchParams()
   const nav = useNavigate()
-  const { me } = useApp()
+  const { me, openViewer, toast } = useApp()
   const startPage = Math.max(1, Number(params.get('page') ?? 1) || 1)
   const [pageCount, setPageCount] = useState<number | null>(null)
+  const [tag, setTag] = useState<string | null>(null)
+  const [showQuestions, setShowQuestions] = useState(true)
   const q = useQuery({ queryKey: ['file', id], queryFn: () => api.get<{ file: FileDto; pages: PageThumb[] }>(`/api/files/${id}`) })
   const file = q.data?.file
+  const pages = q.data?.pages ?? []
+
+  const tags = useMemo(() => [...new Set(pages.flatMap(p => p.tags ?? []))].slice(0, 14), [pages])
+  const shownPages = useMemo(() => (tag ? pages.filter(p => (p.tags ?? []).includes(tag)) : pages), [pages, tag])
+  const pageCards = useMemo(() => (file ? shownPages.map(p => toPageCard(file, p)) : []), [file, shownPages])
+  const questionCards = useMemo(
+    () => (file ? pages.flatMap(p => (p.regions ?? []).map(r => toQuestionCard(file, p, r))) : []),
+    [file, pages],
+  )
+  const totalQuestions = useMemo(() => pages.reduce((sum, p) => sum + (p.regions?.length ?? p.questions ?? 0), 0), [pages])
 
   useEffect(() => {
-    if (file?.sourceKind !== 'images') return
+    if (!file || startPage <= 1 || (pages.length === 0 && file.sourceKind !== 'images')) return
     requestAnimationFrame(() => document.getElementById(`page-${startPage}`)?.scrollIntoView({ block: 'start' }))
-  }, [file?.sourceKind, startPage])
+  }, [file, pages.length, startPage])
 
   if (q.isError) return <div className="empty"><Mascot size={84} />That file is gone or never existed.</div>
+
+  const jumpToPage = (n: number) => {
+    if (tag && !shownPages.some(p => p.number === n)) setTag(null)
+    requestAnimationFrame(() => document.getElementById(`page-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   return (
     <main className="page-main doc-main">
@@ -132,7 +185,7 @@ export function FileView() {
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
             <div className="lbl ellipsis">
-              {file ? [file.courseName, TYPE_SINGULAR[file.materialType], file.year, `${pageCount ?? file.pageCount} pages`].filter(Boolean).join(' · ') : 'Loading…'}
+              {file ? [file.courseName, TYPE_SINGULAR[file.materialType], file.year, `${pageCount ?? (pages.length || file.pageCount)} pages`].filter(Boolean).join(' · ') : 'Loading…'}
             </div>
             <h1 className="disp ellipsis" style={{ margin: 0, fontSize: 32, lineHeight: 1.05 }} title={file?.title}>{file?.title ?? ' '}</h1>
           </div>
@@ -146,21 +199,98 @@ export function FileView() {
         )}
       </div>
 
-      {file && file.sourceKind === 'images' && (
+      {file && pages.length > 0 && (
+        <>
+          <div className="doc-toolbar">
+            <label className="lbl" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              Jump to
+              <select className="sel" aria-label="Jump to page" defaultValue={String(startPage)} onChange={e => jumpToPage(Number(e.target.value))}
+                style={{ minWidth: 120, minHeight: 38, padding: '0 34px 0 14px', fontSize: 14 }}>
+                {pages.map(p => <option key={p.id} value={p.number}>Page {p.number}{p.questions > 0 ? ` (${p.questions} Q)` : ''}</option>)}
+              </select>
+            </label>
+            {totalQuestions > 0 && (questionCards.length > 0) && (
+              <button className={`chip ${showQuestions ? 'on' : ''}`} type="button" aria-pressed={showQuestions} onClick={() => setShowQuestions(s => !s)}>
+                {showQuestions ? `Hide questions (${questionCards.length})` : `Show questions (${questionCards.length})`}
+              </button>
+            )}
+            {tags.length > 0 && (
+              <div className="chip-row" style={{ flex: 1, minWidth: 200 }}>
+                <span className="lbl" style={{ marginRight: 4 }}>Topics</span>
+                {tags.map(t => (
+                  <button key={t} className={`chip ${tag === t ? 'on' : ''}`} type="button" aria-pressed={tag === t} onClick={() => setTag(tag === t ? null : t)}>
+                    {t}{tag === t && <IconClose size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
+            <span className="lbl" style={{ marginLeft: 'auto' }}>
+              {tag ? `${shownPages.length} of ${count(pages.length, 'page')}` : count(pages.length, 'page')}
+            </span>
+          </div>
+
+          <div className="doc-pages">
+            {shownPages.map((page, idx) => {
+              const card = pageCards[idx]
+              const regions = showQuestions ? (page.regions ?? []) : []
+              return (
+                <div key={page.id} style={{ width: '100%', maxWidth: 1100 }}>
+                  <div id={`page-${page.number}`} className="doc-page" style={{ aspectRatio: `${page.width} / ${page.height}` }}>
+                    <img src={page.pageUrl ?? `/api/files/${file.id}/view?part=${page.number}`} alt={`Page ${page.number} of ${file.title}`} width={page.width} height={page.height}
+                      loading={Math.abs(page.number - startPage) < 3 ? 'eager' : 'lazy'} />
+                    {regions.map(r => {
+                      const qLabel = r.questionNumber ? `Q${r.questionNumber.replace(/^q/i, '')}` : 'Question'
+                      return (
+                        <button key={r.id} type="button" className="reg r-question doc-qbox"
+                          aria-label={`Open ${qLabel} on page ${page.number}`}
+                          title={`Click to view or share ${qLabel}`}
+                          style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }}
+                          onClick={() => {
+                            const qIdx = questionCards.findIndex(c => c.ref === `r:${r.id}`)
+                            if (qIdx >= 0) openViewer(questionCards, qIdx)
+                          }}>
+                          <span>{qLabel}</span>
+                        </button>
+                      )
+                    })}
+                    <span className="doc-num">{page.number}</span>
+                  </div>
+                  <div className="doc-page-actions">
+                    {(page.tags ?? []).length > 0 && (
+                      <span className="lbl ellipsis" style={{ marginRight: 'auto', textTransform: 'none', letterSpacing: 0 }}>
+                        {(page.tags ?? []).join(' · ')}
+                      </span>
+                    )}
+                    <button className="candy c-white sm" type="button" aria-label={`Zoom page ${page.number}`} onClick={() => openViewer(pageCards, idx)}>
+                      <IconExpand size={15} />Zoom
+                    </button>
+                    <button className="candy c-white sm" type="button" aria-label={`Copy link to page ${page.number}`} onClick={() => void copyShareLink(card, toast)}>
+                      <IconShare size={15} />Copy link
+                    </button>
+                    <ReportButton target={{ ref: `p:${page.id}`, fileTitle: file.title, pageNumber: page.number }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {file && pages.length === 0 && file.sourceKind === 'images' && (
         <div className="doc-pages">
-          {Array.from({ length: file.parts }, (_, i) => {
-            const page = q.data?.pages.find(p => p.number === i + 1)
-            return <div key={i}>
+          {Array.from({ length: file.parts }, (_, i) => (
+            <div key={i} style={{ width: '100%', maxWidth: 1100 }}>
               <div id={`page-${i + 1}`} className="doc-page">
                 <img src={`/api/files/${file.id}/view?part=${i + 1}`} alt={`Photo ${i + 1} of ${file.title}`} loading={Math.abs(i + 1 - startPage) < 3 ? 'eager' : 'lazy'} />
                 <span className="doc-num">{i + 1}</span>
               </div>
-              {page && <div className="doc-page-actions"><ReportButton target={{ ref: `p:${page.id}`, fileTitle: file.title, pageNumber: page.number }} /></div>}
             </div>
-          })}
+          ))}
         </div>
       )}
-      {file && file.sourceKind !== 'images' && <PdfDoc url={`/api/files/${file.id}/view`} startPage={startPage} onPageCount={setPageCount} pages={q.data?.pages ?? []} title={file.title} />}
+      {file && pages.length === 0 && file.sourceKind !== 'images' && (
+        <PdfDoc url={`/api/files/${file.id}/view`} startPage={startPage} onPageCount={setPageCount} pages={pages} title={file.title} />
+      )}
     </main>
   )
 }

@@ -382,6 +382,34 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task File_reader_returns_page_and_question_bookmarks_for_only_the_signed_in_user()
+    {
+        var owner = await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8879");
+        var (pageId, regionId) = await ReportMaterialAsync();
+        Guid fileId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            fileId = (await db.Pages.FindAsync(pageId))!.FileId;
+        }
+        (await student.PostAsJsonAsync("/api/bookmarks", new { @ref = $"p:{pageId}" })).EnsureSuccessStatusCode();
+        (await student.PostAsJsonAsync("/api/bookmarks", new { @ref = $"r:{regionId}" })).EnsureSuccessStatusCode();
+        foreach (var (client, expected) in new[] { (student, true), (owner, false) })
+        {
+            var detail = await client.GetFromJsonAsync<JsonObject>($"/api/files/{fileId}");
+            var page = Assert.Single(detail!["pages"]!.AsArray());
+            Assert.Equal(expected, page!["saved"]!.GetValue<bool>());
+            var region = Assert.Single(page["regions"]!.AsArray());
+            Assert.Equal(expected, region!["saved"]!.GetValue<bool>());
+        }
+        (await student.DeleteAsync($"/api/bookmarks/r:{regionId}")).EnsureSuccessStatusCode();
+        var after = await student.GetFromJsonAsync<JsonObject>($"/api/files/{fileId}");
+        Assert.True(after!["pages"]![0]!["saved"]!.GetValue<bool>());
+        Assert.False(after["pages"]![0]!["regions"]![0]!["saved"]!.GetValue<bool>());
+    }
+
+    [Fact]
     public async Task Student_reports_have_an_hourly_limit_without_counting_duplicate_submissions()
     {
         await app.SignInAsync(ApiFactory.Uploader);

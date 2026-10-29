@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, count, formatBytes, TYPE_ORDER, TYPE_SINGULAR, type Course, type FileDto } from '../lib/api'
+import { api, count, formatBytes, TYPE_ORDER, TYPE_SINGULAR, type Course, type FileDto, type UploadCheckItem, type UploadCheckResult } from '../lib/api'
 import { useApp } from '../lib/app'
 import { FileBadge } from './Browse'
 import { IconCamera, IconRefresh, IconTrash } from '../ui/Icons'
@@ -133,12 +133,25 @@ function uploadWithProgress(form: FormData, onProgress: (pct: number) => void) {
   })
 }
 
+async function sha256Hex(file: File): Promise<string> {
+  try {
+    if (!globalThis.crypto?.subtle) return ''
+    const buf = await file.arrayBuffer()
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', buf)
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
+  } catch {
+    return ''
+  }
+}
+
 export function Upload() {
   const { toast } = useApp()
   const qc = useQueryClient()
   const [over, setOver] = useState(false)
   const [combine, setCombine] = useState(false)
   const [progress, setProgress] = useState<number | null>(null)
+  const [exactMatches, setExactMatches] = useState<{ fileName: string; existing: FileDto }[]>([])
+  const [pendingSimilar, setPendingSimilar] = useState<{ file: File; existing: FileDto }[]>([])
   const pick = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
 
@@ -150,11 +163,42 @@ export function Upload() {
   })
   const refresh = () => void qc.invalidateQueries({ queryKey: ['uploads'] })
 
-  const send = async (files: File[]) => {
+  const send = async (files: File[], force = false) => {
     if (files.length === 0) return
+    let toUpload = files
+    if (!force && !(combine && files.length > 1)) {
+      try {
+        const items: UploadCheckItem[] = await Promise.all(files.map(async f => ({
+          fileName: f.name,
+          sizeBytes: f.size,
+          sha256: await sha256Hex(f),
+        })))
+        const checks = await api.post<UploadCheckResult[]>('/api/uploads/check', { items })
+        const nextExact: { fileName: string; existing: FileDto }[] = []
+        const nextSimilar: { file: File; existing: FileDto }[] = []
+        const passed: File[] = []
+        for (let i = 0; i < files.length; i++) {
+          const chk = checks.find(c => c.index === i)
+          if (chk?.kind === 'exact' && chk.existing) nextExact.push({ fileName: files[i].name, existing: chk.existing })
+          else if (chk?.kind === 'similar' && chk.existing) nextSimilar.push({ file: files[i], existing: chk.existing })
+          else passed.push(files[i])
+        }
+        if (nextExact.length > 0) setExactMatches(prev => [...nextExact, ...prev])
+        if (nextSimilar.length > 0) setPendingSimilar(prev => [...nextSimilar, ...prev])
+        toUpload = passed
+        if (toUpload.length === 0) {
+          if (nextExact.length > 0 && nextSimilar.length === 0) toast(`${count(nextExact.length, 'file')} already in the drive.`)
+          else if (nextSimilar.length > 0) toast('Check the duplicate warning below before uploading.')
+          return
+        }
+      } catch {
+        // If pre-check fails, fall back to normal upload.
+      }
+    }
+
     const form = new FormData()
-    files.forEach(f => form.append('files', f))
-    if (combine && files.length > 1) form.append('combine', 'true')
+    toUpload.forEach(f => form.append('files', f))
+    if (combine && toUpload.length > 1) form.append('combine', 'true')
     setProgress(0)
     try {
       const res = await uploadWithProgress(form, setProgress)
@@ -206,6 +250,46 @@ export function Upload() {
         <input ref={pick} type="file" multiple accept={ACCEPT} className="sr" onChange={onPick} tabIndex={-1} aria-hidden="true" />
         <input ref={camera} type="file" accept="image/*" capture="environment" className="sr" onChange={onPick} tabIndex={-1} aria-hidden="true" />
       </div>
+
+      {(pendingSimilar.length > 0 || exactMatches.length > 0) && (
+        <section aria-label="Duplicate warnings" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {pendingSimilar.map((p, idx) => (
+            <div key={`${p.file.name}-${idx}`} className="dup-card similar" role="region" aria-label={`Possible duplicate: ${p.file.name}`}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 260px', minWidth: 0 }}>
+                <span className="lbl" style={{ color: '#9B2C5E' }}>Possible duplicate</span>
+                <b className="ellipsis">“{p.file.name}” looks like “{p.existing.title}”</b>
+                <span style={{ font: "700 13px/1.3 'Nunito', sans-serif", color: '#7A5A3A' }}>
+                  {[p.existing.courseName, TYPE_SINGULAR[p.existing.materialType], p.existing.year, p.existing.pageCount ? count(p.existing.pageCount, 'page') : null].filter(Boolean).join(' · ')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Link className="candy c-white sm" to={`/files/${p.existing.id}`}>View existing</Link>
+                <button className="candy c-green sm" type="button" onClick={() => {
+                  setPendingSimilar(list => list.filter((_, i) => i !== idx))
+                  void send([p.file], true)
+                }}>Upload anyway</button>
+                <button className="candy c-cream sm" type="button" onClick={() => setPendingSimilar(list => list.filter((_, i) => i !== idx))}>Skip</button>
+              </div>
+            </div>
+          ))}
+          {exactMatches.map((m, idx) => (
+            <div key={`${m.fileName}-${idx}`} className="dup-card exact" role="region" aria-label={`Already in drive: ${m.fileName}`}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 260px', minWidth: 0 }}>
+                <span className="lbl" style={{ color: '#1E8F64' }}>Already in the drive · Skipped upload</span>
+                <b className="ellipsis">“{m.fileName}” is identical to “{m.existing.title}”</b>
+                <span style={{ font: "700 13px/1.3 'Nunito', sans-serif", color: '#7A5A3A' }}>
+                  {[m.existing.courseName, TYPE_SINGULAR[m.existing.materialType], m.existing.year].filter(Boolean).join(' · ')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Link className="candy c-white sm" to={`/files/${m.existing.id}`}>Open file</Link>
+                {m.existing.status === 'ready' && <Link className="candy c-cream sm" to={`/inspect/${m.existing.id}`}>Inspect</Link>}
+                <button className="candy c-cream sm" type="button" onClick={() => setExactMatches(list => list.filter((_, i) => i !== idx))}>Dismiss</button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section aria-labelledby="proc" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
