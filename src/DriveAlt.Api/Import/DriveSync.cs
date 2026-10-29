@@ -10,6 +10,28 @@ namespace DriveAlt.Api.Import;
 public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<DriveSyncService> log)
 {
     private const long LockId = 738129405;
+    internal const int ListingConcurrency = 6;
+
+    internal sealed record FolderListing(List<DriveImporter.DriveItem>? Items, Exception? Error);
+
+    internal static async Task<FolderListing[]> ListFoldersAsync(IReadOnlyList<string> ids,
+        Func<string, CancellationToken, Task<List<DriveImporter.DriveItem>>> list, CancellationToken ct,
+        TimeSpan? folderTimeout = null)
+    {
+        using var gate = new SemaphoreSlim(ListingConcurrency);
+        return await Task.WhenAll(ids.Select(async id =>
+        {
+            await gate.WaitAsync(ct);
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(folderTimeout ?? TimeSpan.FromSeconds(20));
+                try { return new FolderListing(await list(id, timeout.Token), null); }
+                catch (Exception e) when (!ct.IsCancellationRequested) { return new FolderListing(null, e); }
+            }
+            finally { gate.Release(); }
+        }));
+    }
 
     public async Task<DriveSyncState> StateAsync(CancellationToken ct)
     {
@@ -46,71 +68,85 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
             var queue = new Queue<(string Id, string? Parent, string Name, string[] Segments)>();
             queue.Enqueue((DriveImporter.Year2FolderId, null, "Year 2 Drive", []));
             var failed = false;
-            while (queue.TryDequeue(out var entry))
+            while (queue.Count > 0)
             {
                 ct.ThrowIfCancellationRequested();
-                if (!visited.Add(entry.Id)) continue;
-                if (visited.Count > 2000 || entry.Segments.Length > 20)
-                    throw new InvalidOperationException("Drive folder limit reached.");
-                var folder = await db.DriveSyncFolders.FindAsync([entry.Id], ct);
-                if (folder is null)
+                var entries = new List<(string Id, string? Parent, string Name, string[] Segments)>();
+                while (entries.Count < ListingConcurrency && queue.TryDequeue(out var next))
                 {
-                    folder = new DriveSyncFolder { Id = entry.Id, Name = entry.Name };
-                    db.DriveSyncFolders.Add(folder);
+                    if (!visited.Add(next.Id)) continue;
+                    if (visited.Count > 2000 || next.Segments.Length > 20)
+                        throw new InvalidOperationException("Drive folder limit reached.");
+                    entries.Add(next);
                 }
-                folder.Name = entry.Name;
-                folder.ParentId = entry.Parent;
-                folder.Segments = entry.Segments;
-                folder.Available = true;
-                folder.Error = null;
-                await db.SaveChangesAsync(ct);
-                try
+                // Only HTTP listings run concurrently. The scoped DbContext, imports and switch checks remain serial.
+                var listings = await ListFoldersAsync(entries.Select(e => e.Id).ToList(), importer.ListFolderAsync, ct);
+                for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
                 {
-                    var items = await importer.ListFolderAsync(entry.Id, ct);
-                    folder.CheckedAt = DateTime.UtcNow;
-                    foreach (var child in items.Where(i => i.Kind == "folder").OrderBy(i => i.Name))
-                        queue.Enqueue((child.Id, entry.Id, child.Name, [.. entry.Segments, child.Name.Trim()]));
-                    var fresh = items.Where(i => DriveImporter.CanImport(i) && !seenFiles.Contains(i.Id))
-                        .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
-                    var photos = fresh.Where(i => DocumentConverter.IsImage(i.Name)).ToList();
-                    var batches = fresh.Except(photos).Select(i => new List<DriveImporter.DriveItem> { i }).ToList();
-                    if (photos.Count > 0) batches.Add(photos);
-                    foreach (var batch in batches)
+                    var entry = entries[entryIndex];
+                    var folder = await db.DriveSyncFolders.FindAsync([entry.Id], ct);
+                    if (folder is null)
                     {
-                        // Read current switches immediately before starting each download, without stale tracked values.
-                        var on = await db.DriveSyncStates.AsNoTracking().Where(s => s.Id == 1 && s.Enabled)
-                            .Select(s => s.UploaderId).FirstOrDefaultAsync(ct);
-                        if (on is not { } uploader || !await db.Users.AnyAsync(u => u.Id == uploader && u.Role == Roles.Uploader, ct)
-                            || !await db.DriveSyncFolders.AsNoTracking().AnyAsync(f => f.Id == folder.Id && f.Enabled, ct)) break;
-                        var fileId = await importer.ImportNewAsync(batch, entry.Segments, uploader, ct);
-                        if (fileId is null)
-                        {
-                            folder.Error = "No matching course for this folder. Move material under a recognised course folder.";
-                            failed = true;
-                            break;
-                        }
-                        foreach (var item in batch)
-                        {
-                            db.DriveSyncItems.Add(new DriveSyncItem { Id = item.Id, FolderId = folder.Id, FileId = fileId.Value });
-                            seenFiles.Add(item.Id);
-                        }
-                        state.Imported++;
-                        await db.SaveChangesAsync(ct);
+                        folder = new DriveSyncFolder { Id = entry.Id, Name = entry.Name };
+                        db.DriveSyncFolders.Add(folder);
                     }
+                    folder.Name = entry.Name;
+                    folder.ParentId = entry.Parent;
+                    folder.Segments = entry.Segments;
+                    folder.Available = true;
+                    folder.Error = null;
+                    await db.SaveChangesAsync(ct);
+                    try
+                    {
+                        var listing = listings[entryIndex];
+                        if (listing.Error is { } error) throw error;
+                        var items = listing.Items!;
+                        folder.CheckedAt = DateTime.UtcNow;
+                        foreach (var child in items.Where(i => i.Kind == "folder").OrderBy(i => i.Name))
+                            queue.Enqueue((child.Id, entry.Id, child.Name, [.. entry.Segments, child.Name.Trim()]));
+                        var fresh = items.Where(i => DriveImporter.CanImport(i) && !seenFiles.Contains(i.Id))
+                            .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                        var photos = fresh.Where(i => DocumentConverter.IsImage(i.Name)).ToList();
+                        var batches = fresh.Except(photos).Select(i => new List<DriveImporter.DriveItem> { i }).ToList();
+                        if (photos.Count > 0) batches.Add(photos);
+                        foreach (var batch in batches)
+                        {
+                            // Read current switches immediately before starting each download, without stale tracked values.
+                            var on = await db.DriveSyncStates.AsNoTracking().Where(s => s.Id == 1 && s.Enabled)
+                                .Select(s => s.UploaderId).FirstOrDefaultAsync(ct);
+                            if (on is not { } uploader || !await db.Users.AnyAsync(u => u.Id == uploader && u.Role == Roles.Uploader, ct)
+                                || !await db.DriveSyncFolders.AsNoTracking().AnyAsync(f => f.Id == folder.Id && f.Enabled, ct)) break;
+                            var fileId = await importer.ImportNewAsync(batch, entry.Segments, uploader, ct);
+                            if (fileId is null)
+                            {
+                                folder.Error = "No matching course for this folder. Move material under a recognised course folder.";
+                                failed = true;
+                                break;
+                            }
+                            foreach (var item in batch)
+                            {
+                                db.DriveSyncItems.Add(new DriveSyncItem { Id = item.Id, FolderId = folder.Id, FileId = fileId.Value });
+                                seenFiles.Add(item.Id);
+                            }
+                            state.Imported++;
+                            await db.SaveChangesAsync(ct);
+                        }
+                    }
+                    catch (Exception e) when (e is not OperationCanceledException)
+                    {
+                        // Never persist request URLs: a Google API key can be present in an exception message.
+                        log.LogWarning("Drive sync failed in folder {Folder}; exception type {Type}", folder.Id, e.GetType().Name);
+                        folder.Error = "Couldn't read or import this folder. Check sharing and download access; it will retry next scan.";
+                        failed = true;
+                        // ImportAsync may have attached entities before a failed save. Do not save partial imports here.
+                        db.ChangeTracker.Clear();
+                        folder = await db.DriveSyncFolders.SingleAsync(f => f.Id == entry.Id, ct);
+                        folder.CheckedAt = DateTime.UtcNow;
+                        folder.Error = "Couldn't read or import this folder. Check sharing and download access; it will retry next scan.";
+                        state = await db.DriveSyncStates.SingleAsync(s => s.Id == 1, ct);
+                    }
+                    await db.SaveChangesAsync(ct);
                 }
-                catch (Exception e) when (e is not OperationCanceledException)
-                {
-                    // Never persist request URLs: a Google API key can be present in an exception message.
-                    log.LogWarning("Drive sync failed in folder {Folder}; exception type {Type}", folder.Id, e.GetType().Name);
-                    folder.Error = "Couldn't read or import this folder. Check sharing and download access; it will retry next scan.";
-                    failed = true;
-                    // ImportAsync may have attached entities before a failed save. Do not save partial imports here.
-                    db.ChangeTracker.Clear();
-                    folder = await db.DriveSyncFolders.SingleAsync(f => f.Id == entry.Id, ct);
-                    folder.Error = "Couldn't read or import this folder. Check sharing and download access; it will retry next scan.";
-                    state = await db.DriveSyncStates.SingleAsync(s => s.Id == 1, ct);
-                }
-                await db.SaveChangesAsync(ct);
             }
             if (!failed)
                 await db.DriveSyncFolders.Where(f => !visited.Contains(f.Id)).ExecuteUpdateAsync(s => s.SetProperty(f => f.Available, false), ct);

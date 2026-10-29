@@ -23,6 +23,10 @@ export function DriveSyncPanel() {
   }
   const s = sync.data
   const scanning = !!s && (s.scanRequested || (!!s.startedAt && !s.finishedAt && Date.now() - new Date(s.startedAt).getTime() < 15 * 60 * 1000))
+  const known = s?.folders.filter(f => f.available) ?? []
+  const checked = s?.startedAt ? known.filter(f => f.checkedAt && new Date(f.checkedAt) >= new Date(s.startedAt!)).length : 0
+  const queued = !!s?.scanRequested && (!s.startedAt || !!s.finishedAt)
+  const progress = `${checked} of ${known.length} known folders checked · ${s?.imported ?? 0} file groups imported`
   return <section className="drive-sync" aria-labelledby="drive-sync-heading">
     <div className="drive-sync-head">
       <div><h2 className="disp" id="drive-sync-heading">Google Drive sync</h2>
@@ -35,8 +39,13 @@ export function DriveSyncPanel() {
       <button type="button" className="candy c-blue sm" disabled={busy || scanning || !s} onClick={() => void change('/api/admin/drive-sync/scan')}>
         {scanning ? 'Checking Drive…' : s?.enabled ? 'Sync now' : 'Discover folders'}
       </button>
-      <span>{s?.finishedAt ? `Last checked ${new Date(s.finishedAt).toLocaleString()} · ${s.imported} file groups imported` : 'No completed scan yet'}</span>
+      <span role="status">{scanning
+        ? queued ? 'Scan queued…' : progress
+        : s?.finishedAt ? `Last checked ${new Date(s.finishedAt).toLocaleString()} · ${s.imported} file groups imported` : 'No completed scan yet'}</span>
     </div>
+    {s && (scanning || s.startedAt) && <progress className="drive-sync-progress" aria-label="Drive folder scan progress"
+      aria-valuetext={queued ? 'Scan queued' : progress} max={known.length || 1}
+      value={queued || known.length === 0 ? undefined : checked} />}
     {sync.isError && <p role="alert">Couldn’t load Drive sync settings. Please try again.</p>}
     {s?.error && <p role="alert">{s.error}</p>}
     {s && s.folders.length === 0 && <p>Discover folders first, select the ones you want, then turn on automatic sync. Discovery while paused only lists folders.</p>}

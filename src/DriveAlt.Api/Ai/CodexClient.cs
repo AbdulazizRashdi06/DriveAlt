@@ -22,26 +22,39 @@ public sealed class AiUnavailableException(string message) : Exception(message)
 
 /// <summary>
 /// Client for the Zarqa stack's private Codex gateway: one system and one user message (text plus up to four inline
-/// images) and a strict JSON schema in, the JSON answer out.
+/// images for legacy calls, up to eight for Terra batches) and a strict JSON schema in, the JSON answer out.
 /// </summary>
 public sealed class CodexClient(HttpClient http, IOptions<CodexOptions> opts, ILogger<CodexClient> log)
 {
     private CodexOptions O => opts.Value;
 
     public bool Enabled => O.Enabled;
+    public int BatchSize => Math.Clamp(O.BatchSize, 1, 8);
+    public string BatchModel => O.BatchModel;
+    public string BatchReasoningEffort => O.BatchReasoningEffort;
 
     /// <summary>Returns the answer JSON as text (the gateway has already checked it against the schema).</summary>
-    public async Task<string> JsonAsync(string system, string text, byte[] jpeg, JsonObject schema, CancellationToken ct)
+    public Task<string> JsonAsync(string system, string text, byte[] jpeg, JsonObject schema, CancellationToken ct) =>
+        RequestAsync(system, text, [jpeg], schema, O.Model, null, ct);
+
+    public Task<string> BatchJsonAsync(string system, string text, IReadOnlyList<byte[]> images, JsonObject schema, CancellationToken ct) =>
+        RequestAsync(system, text, images, schema, O.BatchModel, O.BatchReasoningEffort, ct);
+
+    private async Task<string> RequestAsync(string system, string text, IReadOnlyList<byte[]> images, JsonObject schema,
+        string model, string? effort, CancellationToken ct)
     {
+        if (images.Count is < 1 or > 8) throw new ArgumentOutOfRangeException(nameof(images));
+        var content = new JsonArray(DeepSeekClient.TextPart(text));
+        foreach (var jpeg in images) content.Add(DeepSeekClient.ImagePart(jpeg));
         var body = new JsonObject
         {
-            ["model"] = O.Model,
+            ["model"] = model,
             ["messages"] = new JsonArray(
                 new JsonObject { ["role"] = "system", ["content"] = system },
                 new JsonObject
                 {
                     ["role"] = "user",
-                    ["content"] = new JsonArray(DeepSeekClient.TextPart(text), DeepSeekClient.ImagePart(jpeg)),
+                    ["content"] = content,
                 }),
             ["response_format"] = new JsonObject
             {
@@ -49,6 +62,7 @@ public sealed class CodexClient(HttpClient http, IOptions<CodexOptions> opts, IL
                 ["json_schema"] = new JsonObject { ["name"] = "page", ["schema"] = schema.DeepClone() },
             },
         };
+        if (effort is not null) body["reasoning_effort"] = effort;
         var payload = body.ToJsonString();
         for (var attempt = 1; ; attempt++)
         {

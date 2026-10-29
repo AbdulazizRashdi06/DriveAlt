@@ -116,6 +116,22 @@ afterEach(() => {
 })
 
 describe('Features #5, #6, and #7', () => {
+  it('lets uploaders inspect a flagged file and retry without discarding completed pages', async () => {
+    vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
+      if (path === '/api/auth/me') return studentMe
+      if (path === '/api/config') return { name: 'DriveAlt', emailDomain: '@student.gutech.edu.om', aiOnline: true }
+      if (path.startsWith('/api/uploads')) return [{ ...sampleFile, status: 'failed', error: 'Terra review required on page 1' }]
+      return []
+    })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <AppProvider><Upload /></AppProvider></QueryClientProvider></MemoryRouter>)
+    const retry = await screen.findByRole('button', { name: 'Retry' })
+    expect(screen.getByRole('link', { name: 'Inspect' }).getAttribute('href')).toBe('/inspect/file-1')
+    fireEvent.click(retry)
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/files/file-1/process'))
+    expect(post).not.toHaveBeenCalledWith('/api/files/file-1/reprocess')
+  })
   it('renders pre-rendered page images, topic filters, and interactive question boxes in FileView (#5)', async () => {
     vi.spyOn(api, 'get').mockImplementation(async (path: string) => {
       if (path === '/api/auth/me') return studentMe

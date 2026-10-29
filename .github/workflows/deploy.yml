@@ -66,6 +66,8 @@ jobs:
         env:
           DRIVEALT_TEST_PG: Host=localhost;Username=postgres;Password=postgres;Database=postgres
         run: dotnet test
+      - name: Validate gateway deployment script
+        run: bash -n deploy/ensure-terra-gateway.sh
       - name: Frontend tests and build
         working-directory: web
         run: npm ci && npm test && npx tsc -b && npx vite build --outDir ../.ci-web
@@ -156,6 +158,10 @@ jobs:
             ServerAliveInterval 30
           EOF
 
+      - name: Prepare Terra batch gateway
+        if: vars.CODEX_BASE_URL != ''
+        run: bash deploy/ensure-terra-gateway.sh vps
+
       - name: Write .env from secrets
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -165,6 +171,9 @@ jobs:
           DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
           CODEX_BASE_URL: ${{ vars.CODEX_BASE_URL }}
           CODEX_MODEL: ${{ vars.CODEX_MODEL }}
+          CODEX_BATCH_MODEL: ${{ vars.CODEX_BATCH_MODEL }}
+          CODEX_BATCH_REASONING_EFFORT: ${{ vars.CODEX_BATCH_REASONING_EFFORT }}
+          CODEX_BATCH_SIZE: ${{ vars.CODEX_BATCH_SIZE }}
           UPLOADERS: ${{ vars.UPLOADERS }}
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
           APP_PORT: ${{ vars.APP_PORT }}
@@ -188,6 +197,9 @@ jobs:
             echo "DeepSeek__Model=${DEEPSEEK_MODEL:-deepseek-chat}"
             echo "Codex__BaseUrl=${CODEX_BASE_URL:-}"
             echo "Codex__Model=${CODEX_MODEL:-gpt-6.1-sol}"
+            echo "Codex__BatchModel=${CODEX_BATCH_MODEL:-gpt-6.1-terra}"
+            echo "Codex__BatchReasoningEffort=${CODEX_BATCH_REASONING_EFFORT:-low}"
+            echo "Codex__BatchSize=${CODEX_BATCH_SIZE:-8}"
             echo "Google__ApiKey=$GOOGLE_API_KEY"
           } > deploy.env
 

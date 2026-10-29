@@ -64,6 +64,10 @@ public sealed class CodexOptions
     /// <summary>e.g. http://codex:8090/v1 on the zarqa_default network.</summary>
     public string BaseUrl { get; set; } = "";
     public string Model { get; set; } = "gpt-6.1-sol";
+    /// <summary>Batch extraction is separate from the legacy single-page/suggestion model.</summary>
+    public string BatchModel { get; set; } = "gpt-6.1-terra";
+    public string BatchReasoningEffort { get; set; } = "low";
+    public int BatchSize { get; set; } = 8;
 
     /// <summary>How long a file waits before retrying after the plan's usage limit (or a lost login) stopped it.</summary>
     public int PauseMinutes { get; set; } = 20;
