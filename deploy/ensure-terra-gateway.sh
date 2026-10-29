@@ -4,7 +4,7 @@ set -euo pipefail
 host="${1:-vps}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 before=5da0c724e36f45626f438728030eb357e02c7a45163425c8ad9562bbcc3f607f
-after=e3fa4d37dc1404baf6bb754dabc5f3d789db826818356ed95212fc0c3e3f9eaf
+after=ef0e322e17be2943b78e1fe65abb919b6d64bbb7dbf698d6fb379d884a49aef3
 scratch="$(mktemp -d /tmp/drivealt-terra.XXXXXX)"
 mkdir -p "$scratch/deploy/codex"
 scp "$host:/opt/zarqa/deploy/codex/gateway.mjs" "$scratch/deploy/codex/gateway.mjs"
@@ -15,10 +15,15 @@ if [[ "$current" != "$before" && "$current" != "$after" ]]; then
 fi
 if [[ "$current" == "$before" ]]; then
   git -C "$scratch" init -q
+  git -C "$scratch" config core.autocrlf false
   git -C "$scratch" apply --check "$script_dir/codex-terra-batches.patch"
   git -C "$scratch" apply "$script_dir/codex-terra-batches.patch"
 fi
-test "$(sha256sum "$scratch/deploy/codex/gateway.mjs" | cut -d' ' -f1)" = "$after"
+patched_hash="$(sha256sum "$scratch/deploy/codex/gateway.mjs" | cut -d' ' -f1)"
+if [[ "$patched_hash" != "$after" ]]; then
+  echo "Patched gateway checksum mismatch: expected $after, got $patched_hash" >&2
+  exit 1
+fi
 CODEX_GATEWAY_MODULE="$scratch/deploy/codex/gateway.mjs" CODEX_MODELS=gpt-6-luna,gpt-6.1-sol,gpt-6.1-terra \
   node --test "$script_dir/codex-terra-gateway.test.mjs"
 scp "$scratch/deploy/codex/gateway.mjs" "$host:drivealt/gateway.terra-staged.mjs"

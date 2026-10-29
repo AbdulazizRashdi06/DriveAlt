@@ -1,2 +1,4 @@
 # Unified-diff context has significant single-space blank lines; preserve the patch verbatim.
 /deploy/codex-terra-batches.patch -text -whitespace
+/deploy/ensure-terra-gateway.sh text eol=lf
+/tests/fixtures/codex-gateway-before.mjs -text

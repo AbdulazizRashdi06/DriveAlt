@@ -8,8 +8,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/drive-scan-speed`, integrating PRs #35 and #36 for one approved rollout; based on `60090bf`, live code still `56bd76b` |
-| Updated | 2026-10-29, by Codex (approved combined deployment with live progress bar) |
+| Branch / base | `codex/terra-gateway-checksum`, based on PR #34 merge `b6fb6d7ab65e268526e146d44b8391b8bc5b910b` |
+| Updated | 2026-10-29, by Codex (PR #34 rollout verification) |
 
 | Purpose of this update | Deploy the owner-approved PR #34 combination: Terra-low batches and safe retries, bounded Drive discovery with a progress bar, and retired-script recovery; retain separate historic data issues. |
 
@@ -17,8 +17,24 @@
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** PR #32 is merged as `56bd76b585e6540bdd25645760b2a640dc37efa0`; full CI passed (67 backend / 20 frontend tests). Features #5–#7 and both reader fixes are deployed. Run `40826986882` passed test/build/deploy; public health and home return HTTP 200, and HTML references the new `index-CvtCAUQw.js` bundle (matching the locally tested build). Last independently queried production SQL (2026-10-29, before PR #32): 400 ready / 2 reading / 1 failed files, 9,666 extracted / 7 unread pages, jobs 484 done / 2 queued / 1 failed, Drive sync 2 enabled / 118 folders. SSH is refused from the current network, so these counts are dated. Separate issues remain: 322 Terra slide pages have empty extracted text and 42 producer review flags remain.
+**In one line:** PR #34 is merged and passes 84 backend / 26 frontend tests, but deploy run `40842751426` failed before any server write at its patched-gateway checksum assertion. Live app remains the previously confirmed `56bd76b`. This branch corrects LF/CRLF checksum handling and adds a reproducible patch/hash/HTTP-contract regression; deployment authorization remains active.
 ## 2. State of the world
+
+**Deployment failure diagnosed and corrected locally (2026-10-29, Codex):** run `40842751426`, deploy job `123343948800`, stopped in Prepare Terra batch gateway at 08:34:30 UTC before contract-test output, staged upload, server configuration or app .env changes. The old target checksum was from a Windows CRLF temporary copy (`e3fa4d...`); applying the same patch with LF produces `ef0e322e17be2943b78e1fe65abb919b6d64bbb7dbf698d6fb379d884a49aef3`. Set scratch Git autocrlf=false, pin the shell script to LF, correct the target hash and report mismatch hashes explicitly. Added a byte-exact baseline fixture and end-to-end patch/hash/HTTP-contract test, now part of CI. `node deploy/test-terra-gateway-patch.mjs` passes locally: baseline/target checksums match and all 3 contracts pass. No live gateway/model success is claimed. The already-authorized rollout continues through a corrective PR; no new approval is needed.
+
+**Year 1 prompt requested, 2026-10-29:** owner asked for a Terra prompt for the same workflow on Year 1. Created `C:/Users/abdul/DriveAlt-local/YEAR1-TERRA-PROMPT.md` (local artifact, not committed) with the known parent Drive link, Year 1 discovery, Terra-low/eight-image batches, disjoint optional workers, checkpoints, answer-text exclusion, searchable slide text, validation and review-only output. Actual Year 1 folder ID/inventory remain unknown. No producer was launched, downloaded material or imported anything; Year 1 app/course mapping is a separate step. Year 2 artifacts are preserved.
+
+**PR #34 merged, production verification pending (Codex, 2026-10-29):** owner authorized deployment by saying “deepploy” and then requested the visible Drive scan progress bar. Merge/image candidate `b6fb6d7ab65e268526e146d44b8391b8bc5b910b` contains final feature head `d0ba1e3e74cc95134de0529d3567adde89864ae6`. PR CI run `40842519848`, test job `123342086381`, passed: `Failed: 0, Passed: 84, Skipped: 0, Total: 84`, frontend 8 suites / 26 tests, TypeScript/build and Bash syntax. Main run `40842751426` is in progress. Until it succeeds, the previous confirmed live image remains `56bd76b`. No final live gateway/model/HTML result is claimed yet.
+
+**New behavior:** Codex-enabled uploads and Drive imports use up to eight `gpt-6.1-terra` image pages per low-effort request, with existing PDF text as an aid, exact page-order/count/dimension validation, generous pixel crops and persistent batch checkpoints. Questions appear once in model output; readable slides without regions keep their text. Flags hold unread pages for Inspect; Retry resumes `/process` and preserves corrected/completed pages. Gemini embeddings/chat stay unchanged. Folder listings run up to six concurrently with 20-second per-folder timeouts. The panel shows an accessible live known-folder progress bar and imported-group count. FileView loads eagerly; HTML revalidates; remaining dynamic imports get a one-time reload and a readable failure screen.
+
+**Gateway rollout:** `deploy/ensure-terra-gateway.sh` is executed by GitHub Actions because the laptop network refuses SSH. It accepts only the reviewed old/new source hashes, tests the patched parser/HTTP contract before server writes, backs up source and remembers the prior image, retains existing model allowances plus Terra and the live PID limit in `/opt/zarqa/deploy/drivealt-terra.override.yml`, rebuilds only codex, and tests a tiny Terra-low request through the existing subscription. It restores source/image if verification fails. Later DriveAlt deployments skip rebuilding when the live code/model allowance match. No auth files/volume are opened. Future Zarqa deployments must retain this source/override; the historical gateway configuration-drift thread remains relevant.
+
+**Verification limits/data:** desktop/phone mocked-API progress and reader/sharing/upload checks passed; screenshots were inspected. Current production SQL/bookmark/UI interaction after this rollout remains unknown until checked. Last SQL before PR #32: 400 ready / 2 reading / 1 failed files, 9,666 extracted / 7 unread pages, jobs 484 done / 2 queued / 1 failed, 2 enabled / 118 Drive folders. The owner's newer screenshot shows master sync on; Codex did not change switches, import source material, or release held jobs. The 322 old Terra slide pages with empty text and 42 producer flags are separate unresolved historical data work. This rollout does not reprocess them.
+
+<details>
+<summary>Earlier snapshots and implementation evidence (historical; superseded by the current rollout status above)</summary>
+
 
 **Retry UI correction before rollout (Codex, 2026-10-29):** failed-file Retry previously called destructive `/reprocess`, which would discard completed batches and uploader fixes. It now calls resumable `/process`, and failed files with pages expose Inspect. A new frontend regression covers both. TypeScript and frontend 8 suites / 26 tests pass. Combined CI also passed on `1e13a87` (run `40834631479`, test job `123316419310`); this final UI change needs its own CI pass before the already-authorized merge. No production changes yet.
 
@@ -259,7 +275,14 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 **Remaining drift:** gateway merge/configuration status needs verification (open thread 3). README's model table is current, but its deploy steps, secret table and offline-mode wording need review (`README.md`, sections Stack and Deploy on the Zarqa VPS). The former Caddy source drift is fixed in Git and local Zarqa; later deployment verification remains open.
 
+
+</details>
+
 ## 3. What was done
+
+**2026-10-29, Codex — deployment checksum repair:** corrected the cross-platform target hash and made its patch/HTTP validation reproducible in CI; no VPS changes from the failed run. Also delivered the requested Year 1 preparation prompt as a local artifact while keeping this deployment task active.
+
+**2026-10-29, Codex — PR #34 merged under owner approval:** combined child PRs #35/#36 into the parent rollout, retaining both handoff histories. Final CI passed (84 backend / 26 frontend), progress bar and safe Retry were included, and the main run is performing gateway/app deployment. Record its final outcome below before closing this task; no success claim yet.
 
 **2026-10-29, Codex — Terra batch path prepared:** implemented the external workflow for ordinary uploads/Drive imports on the VPS path, with compact eight-page Terra-low extraction, structural validation, checkpoints and review holds. Added scripted request/validation tests and two lifecycle DB regressions. Gateway patch tested in a temporary copy; sibling Zarqa checkout, production gateway, auth files, secrets and held jobs were not changed. Live model test/merge/deploy not performed.
 
@@ -403,6 +426,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-23 19:15, Codex:** read-only monitoring confirmed 249 successful page reads with zero offline pages. Diagnosed five paused files as gateway 503 login checks; signed-in health subsequently returned true. Two importer failures were connection errors. Import still runs; retries are deferred until it exits. No restarts or VPS changes were made. Detailed safe observations are stored in the chat workspace `work/import-monitor/observations.jsonl`.
 
 ## 4. User decisions
+
+- **2026-10-29:** owner requested a Year 1 Terra prompt. This expands external preparation scope to Year 1, but does not authorize a Year 1 app import, course remapping or releasing old held jobs. The prompt was delivered without starting a model worker.
 
 - **2026-10-29:** owner authorized deployment (“deepploy”) of the prepared scan, Terra and browser fixes, then requested the visible Drive scan progress line/bar before rollout. No further approval is needed for these changes or their required gateway update.
 
