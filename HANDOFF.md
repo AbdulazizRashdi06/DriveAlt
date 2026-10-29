@@ -9,7 +9,7 @@
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
 | Branch / base | `codex/year1-resume-handoff`, based on docs PR #38 merge `4022f98a117c40dc0e023f0fe650caf783989afb`; deployed code remains `69211bd0ad695df8806da3ba512319fd81c01252` |
-| Updated | 2026-10-29, by Codex (Year 1 full preparation and conditional import authorized) |
+| Updated | 2026-10-29, by Codex (Year 1 preparation split across three Terra workers) |
 
 | Purpose of this update | Deploy the owner-approved PR #34 combination: Terra-low batches and safe retries, bounded Drive discovery with a progress bar, and retired-script recovery; retain separate historic data issues. |
 
@@ -19,6 +19,8 @@
 
 **In one line:** Live app is `69211bd0ad695df8806da3ba512319fd81c01252` (PRs #34/#37). Run `40878875382` passed tests/build/gateway/app deployment; Terra-low readiness passed and public health/home/new JS returned HTTP 200 with HTML no-cache. The Drive progress bar and browser recovery are live. A Terra-low subagent is preparing Year 1 locally; no Year 1 app import has occurred.
 ## 2. State of the world
+
+**Year 1 parallel workers (2026-10-29):** owner requested five additional subagents. The session permits four contexts including the parent, so only three subagents can operate simultaneously. `/root/terra_year1_resume` now owns standalone photos, legacy visual-result repair, sparse/scanned-page queues and final canonical reconciliation. `/root/year1_calculus_native` owns PDF/conversion pages with any original source path containing `/calculus/`, writing only `workers/year1_calculus_native/`. An attempted second new spawn hit `agent thread limit reached` because the old `/root/terra_batch8` was pending initialization; its old test was interrupted and that Terra worker was reassigned to all other PDF/conversion pages, writing only `workers/year1_other_native/`. No standalone images belong to either native partition. Native workers use separate queue/output checkpoints and sequential Terra-low CLI requests; no paid fallback. Calculus reports 11,783 content/page items and an active native driver. Phase-one selection/flags are not full extraction completion. This replaces the earlier single-worker arrangement.
 
 **Owner's current completion/import gate (2026-10-29):** finish all Year 1 preparation, then independently inspect **15 randomly selected pages**, then upload only if all 15 pass. This supersedes earlier prompt-only/local-only authorization for the parent: the Terra worker remains local-only, while the parent may perform the website import after the gate passes and correct Year 1 mapping is prepared. Do not select the sample before the finished corpus is frozen, substitute hand-picked pages, interpret inspected/flagged pages as finished, or rerun a failed draw until convenient pages pass. Fix the failure and its affected category before a fresh recorded random check. Ordinary structural/completeness checks cover all artifacts before sampling; original answers stay visible, and no answer text is written. No import has occurred and the 15-page gate has not run.
 
@@ -285,6 +287,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-29, Codex — parallel preparation:** started the additional Calculus Terra-low worker and reassigned an existing Terra worker to the non-Calculus partition after the session rejected another spawn. Coordinator stopped its native driver after an atomic checkpoint to avoid duplicate processing and shared its native selection/verification driver with the partition workers. The owner's requested five additional concurrent workers exceed this session's capacity; three Terra workers total is the supported arrangement. Final random-15 validation/import condition is unchanged.
+
 **2026-10-29, Codex — full preparation and sample gate:** instructed `/root/terra_year1_resume` to finish the complete canonical Year 1 corpus, reconcile old incomplete pages, use native text efficiently and retain scanned/layout queues. Corrected the worker's blanket flagging of solution-only images: genuinely answer-only material may retain intact imagery with empty text/regions, while legible questions need actual wording/crops. Parent owns the independent random-15 review and the subsequently authorized import; neither is complete.
 
 **2026-10-29, Codex — restarted Year 1 preparation:** verified the old agent was absent, resumed the existing checkpoint with a new explicitly selected Terra-low subagent, separated standalone-photo counts from PDF totals, and requested a native-text/scanned-page workload audit plus measured photo-batch throughput. Preserved all prior batches, originals and Year 2 artifacts. Website import remains pending artifact quality and separate Year 1 mapping.
@@ -438,6 +442,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-29, preparation concurrency:** “add 5 more sub agents to finish faster.” Use the available concurrent Terra-low workers with disjoint partitions; session capacity limits execution to three subagents plus parent. This supersedes the temporary single-worker constraint. Do not duplicate pages, bypass usage limits or use paid provider fallbacks.
+
 - **2026-10-29, superseding preparation-only scope:** “let terra finish it all AND THEN CHECK RANDOMLY 15 pages THEN upload if all 15 are good.” Complete both Year 1 semesters; after preparation, the parent independently checks a recorded random set of 15 and uploads if all pass. This condition authorizes the required Year 1 mapping/import work after validation, without a second permission question. Keep Year 2 mappings, existing data and held processing jobs intact.
 
 - **2026-10-29, Year 1 restart:** owner said “estimate time to add all to website and let terra start.” Restart local Terra-low preparation immediately and estimate the whole path through validated website import; this is not a claim that the existing Year 2 mapping can accept Year 1. No new paid-provider fallback, source deletion or implicit release of historical held jobs.
@@ -551,6 +557,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **Variables:** `UPLOADERS=24-0161`, `PUBLIC_URL`, `CODEX_BASE_URL=http://codex:8090/v1`. The ChatGPT login lives in the VPS volume `zarqa_codex_auth`.
 
 ## 7. Open threads
+
+**Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
 **Conditional Year 1 website import, Codex parent:** wait for Terra's actual complete canonical corpus, run whole-corpus structural/completeness checks, draw and independently check 15 random pages against originals and crops/text, and import only after all pass. Prepare correct Year 1 course/study-year mapping rather than using existing Year 2 identities. This is now owner-authorized subject to that condition; no sample/import has run. Worker must preserve resumable checkpoints on a real quota/source blocker.
 
