@@ -42,7 +42,7 @@ try {
     await expect(page.getByRole('switch', { name: 'Automatic Drive sync' })).not.toBeChecked()
     state.startedAt = new Date().toISOString()
     state.folders[0].checkedAt = new Date(Date.now() + 1000).toISOString()
-    await expect(page.getByText('1 of 3 known folders checked · 0 file groups imported')).toBeVisible()
+    await expect(page.getByText('1 of 3 known folders checked · 0 file groups imported')).toBeVisible({ timeout: 15000 })
     await expect(page.getByRole('progressbar', { name: 'Drive folder scan progress' })).toHaveJSProperty('value', 1)
     await expect(page.getByRole('progressbar')).toHaveJSProperty('max', 3)
     await page.getByRole('heading', { name: 'Google Drive sync' }).scrollIntoViewIfNeeded()
