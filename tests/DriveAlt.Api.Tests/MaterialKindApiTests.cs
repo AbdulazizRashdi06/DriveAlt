@@ -92,12 +92,16 @@ public partial class ApiTests
         app.ChatModel.EnqueueTool("reply", KindReply(declaration, includeQuestion
             ? [ResultRefs.Page(f.Slide), ResultRefs.File(f.Deck, 2), ResultRefs.Region(f.Crop)]
             : [ResultRefs.Page(f.Slide), ResultRefs.File(f.Deck, 2)]));
+        // Every picked ref filtered out of a declared kind: the model's line described those refs, so a new one is written.
+        var allDropped = declaration == "questions" && !includeQuestion;
+        if (allDropped) app.ChatModel.EnqueueText("Nothing of that kind yet. Want me to look another way?");
         var reply = await SendAsync(student, chat, "questions on " + f.Topic, prepared: true);
         var expected = declaration == "slides" ? ResultRefs.File(f.Deck, 2)
             : declaration == "questions" && includeQuestion ? ResultRefs.Region(f.Crop) : null;
         Assert.Equal(expected is null ? 0 : 1, reply["results"]!.AsArray().Count);
         if (expected is not null) Assert.Equal(expected, reply["results"]![0]!["ref"]!.GetValue<string>());
-        Assert.Equal("No matching questions yet. Want the lecture instead?", reply["text"]!.GetValue<string>());
+        Assert.Equal(allDropped ? "Nothing of that kind yet. Want me to look another way?" : "No matching questions yet. Want the lecture instead?",
+            reply["text"]!.GetValue<string>());
         Assert.Equal(0, reply["moreCount"]!.GetValue<int>());
     }
 
@@ -293,5 +297,113 @@ public partial class ApiTests
         Assert.Contains(ResultRefs.Region(f.Crop), refs);
         Assert.DoesNotContain(ResultRefs.File(f.Deck, 2), refs);
         Assert.Equal(pick ? 1 : 2, refs.Count);
+    }
+
+    private async Task<string> KindChatAsync(KindFixture f, Message? earlier = null)
+    {
+        var student = await app.SignInAsync("25-8894");
+        var chat = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        if (earlier is not null)
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            earlier.ConversationId = Guid.Parse(chat);
+            db.Messages.Add(earlier);
+            await db.SaveChangesAsync();
+        }
+        return chat;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Typed_followups_declared_none_keep_the_kind_already_in_play(bool pick)
+    {
+        var f = await KindMaterialAsync();
+        var chat = await KindChatAsync(f, new Message { Role = "bot", Text = "Earlier questions",
+            Results = [ResultRefs.Region(f.Crop)], More = [ResultRefs.Page(f.Bare)],
+            Options = ChatOption.Write([new() { Label = "Data Structures", Want = "questions", Done = true,
+                Refs = [ResultRefs.Region(f.Crop), ResultRefs.Page(f.Bare)] }]) });
+        var response = KindReply("none");
+        if (pick) response["option"] = 0;
+        else response["show_more"] = true;
+        app.ChatModel.EnqueueTool("reply", response);
+        var reply = await SendAsync(await app.SignInAsync("25-8894"), chat, pick ? "the first one" : "more", prepared: true);
+        var refs = reply["results"]!.AsArray().Select(r => r!["ref"]!.GetValue<string>()).ToList();
+        Assert.Equal(pick ? [ResultRefs.Region(f.Crop), ResultRefs.Page(f.Bare)] : [ResultRefs.Page(f.Bare)], refs);
+    }
+
+    [Fact]
+    public async Task A_typed_pick_for_another_kind_searches_that_option_again()
+    {
+        var f = await KindMaterialAsync();
+        var chat = await KindChatAsync(f, new Message { Role = "bot", Text = "Which course?",
+            Options = ChatOption.Write([new() { Label = "Data Structures", Want = "questions", Done = true, Query = f.Topic,
+                Course = "data-structures", Year = 2028, AssessmentLabel = "Contract fixture", Refs = [ResultRefs.Region(f.Crop)] }]) });
+        var response = KindReply("slides");
+        response["option"] = 0;
+        app.ChatModel.EnqueueTool("reply", response);
+        var reply = await SendAsync(await app.SignInAsync("25-8894"), chat, "the first one, but as slides", prepared: true);
+        var card = Assert.Single(reply["results"]!.AsArray())!;
+        Assert.Equal(ResultRefs.File(f.Deck, 2), card["ref"]!.GetValue<string>());        Assert.Equal(0, app.ChatModel.Pending);
+    }
+
+    [Fact]
+    public async Task A_whole_file_ref_without_its_page_hint_still_shows_that_file()
+    {
+        var f = await KindMaterialAsync();
+        var chat = await KindChatAsync(f);
+        app.ChatModel.EnqueueTool("search_material", SearchKind(f, "slides"));
+        app.ChatModel.EnqueueTool("reply", KindReply("slides", ResultRefs.File(f.Deck)));
+        var reply = await SendAsync(await app.SignInAsync("25-8894"), chat, "slides on " + f.Topic, prepared: true);
+        Assert.Equal(ResultRefs.File(f.Deck, 2), Assert.Single(reply["results"]!.AsArray())!["ref"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("slides", "past_paper", "want=slides")]
+    [InlineData("files", "slides", "want=slides")]
+    [InlineData("questions", "slides", "want=questions never")]
+    public async Task Impossible_kind_and_type_pairs_tell_the_model_why(string want, string type, string message)
+    {
+        var f = await KindMaterialAsync();
+        var chat = await KindChatAsync(f);
+        var args = SearchKind(f, want);
+        args["material_type"] = type;
+        app.ChatModel.EnqueueTool("search_material", args);
+        string? error = null;
+        app.ChatModel.Enqueue(request =>
+        {
+            error = JsonNode.Parse(request["messages"]!.AsArray().Last(m => m?["role"]?.GetValue<string>() == "tool")!["content"]!
+                .GetValue<string>())!["error"]?.GetValue<string>();
+            return ScriptedChatModel.Tool("reply", KindReply("none"));
+        });
+        await SendAsync(await app.SignInAsync("25-8894"), chat, "anything", prepared: true);
+        Assert.Contains(message, error);
+    }
+
+    [Fact]
+    public async Task A_saved_page_hint_that_no_longer_exists_falls_back_to_the_cover()
+    {
+        var f = await KindMaterialAsync();
+        using var scope = app.Services.CreateScope();
+        var cards = scope.ServiceProvider.GetRequiredService<ResultCards>();
+        var card = Assert.Single(await cards.HydrateAsync([ResultRefs.File(f.Deck, 99)], null, default));
+        Assert.Equal(1, card.PageNumber);
+    }
+
+    [Fact]
+    public async Task Show_more_with_nothing_of_the_kind_left_says_so_in_a_new_line()
+    {
+        var f = await KindMaterialAsync();
+        var chat = await KindChatAsync(f, new Message { Role = "bot", Text = "Earlier questions",
+            Results = [ResultRefs.Region(f.Crop)], More = [ResultRefs.Page(f.Slide)] });
+        var response = KindReply("questions");
+        response["commentary"] = "Here are more questions!";
+        response["show_more"] = true;
+        app.ChatModel.EnqueueTool("reply", response);
+        app.ChatModel.EnqueueText("That's all the questions of that kind for now.");
+        var reply = await SendAsync(await app.SignInAsync("25-8894"), chat, "more", prepared: true);
+        Assert.Empty(reply["results"]!.AsArray());
+        Assert.Equal("That's all the questions of that kind for now.", reply["text"]!.GetValue<string>());
     }
 }

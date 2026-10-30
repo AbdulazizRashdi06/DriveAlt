@@ -146,14 +146,18 @@ public sealed partial class ChatService(
             return;
         }
 
-        var refs = (await cards.FilterAsync(reply.Refs.Where(turn.Allowed.Contains), reply.AskedFor, ct)).Take(MaxResults).ToList();
+        var chosen = AllowedRefs(reply.Refs, turn);
+        var refs = (await cards.FilterAsync(chosen, reply.AskedFor, ct)).Take(MaxResults).ToList();
         var refused = reply.Refused;
         // A refusal shows the few questions in play as they are; everything else starts with the best few.
         var shown = refused ? refs : refs.Take(FirstBatch).ToList();
         var held = refused ? [] : refs.Skip(FirstBatch).ToList();
-        var botText = string.IsNullOrWhiteSpace(reply.Commentary)
-            ? await WriteActionAsync(turn, refused ? "explain the no-written-answers rule naturally" : "reply to the request", shown, held.Count, null, ct)
-            : reply.Commentary;
+        // The model wrote its line for the refs it picked. If none of them were the kind asked for, that line would
+        // describe results that aren't shown, so a new one says nothing matched and offers another search.
+        var botText = chosen.Count > 0 && refs.Count == 0 && MaterialWants.IsSearch(reply.AskedFor) ? await WriteActionAsync(turn, NothingOfThatKind(reply.AskedFor), [], 0, null, ct)
+            : string.IsNullOrWhiteSpace(reply.Commentary)
+                ? await WriteActionAsync(turn, refused ? "explain the no-written-answers rule naturally" : "reply to the request", shown, held.Count, null, ct)
+                : reply.Commentary;
 
         var drafts = await EnsureMoreCommentaryAsync(turn, held, reply.MoreCommentary ?? [], ct);
         await SaveBotAsync(convo, userId, botText, shown, held, refused, null, stream, ct, drafts);
@@ -330,21 +334,32 @@ public sealed partial class ChatService(
     private async Task PickAsync(Conversation convo, Guid userId, Message lastBot, int index, string? commentary, Turn turn, ChatStream stream, CancellationToken ct, string? askedFor = null)
     {
         var o = ChatOption.Read(lastBot.Options)[index];
+        // A typed pick ("the first one") may come with asked_for "none": the option's own kind still applies. A different
+        // kind ("the first one, but slides") needs its own search, since the option's results were found for o.Want only.
+        var prepared = true;
+        if (MaterialWants.IsSearch(askedFor) && askedFor != o.Want)
+        {
+            o.Want = askedFor!;
+            prepared = false;
+            if ((await cards.FilterAsync(o.Refs, o.Want, ct)).Count == 0) o.Done = false;
+        }
         if (!o.Done)
         {
             var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
             await stream.Status(new ChatStatus($"Digging through {o.Label}…"));
             o.Refs = (await SearchOptionAsync(o, courses, ct)).ToArray();
         }
-        var refs = (await cards.FilterAsync(o.Refs, askedFor ?? o.Want, ct)).Take(MaxResults).ToList();
+        var refs = (await cards.FilterAsync(o.Refs, o.Want, ct)).Take(MaxResults).ToList();
         foreach (var r in refs) turn.Allowed.Add(r);
         var shown = refs.Take(FirstBatch).ToList();
         var held = refs.Skip(FirstBatch).ToList();
 
-        var line = commentary ?? (refs.Count > 0 ? o.FoundCommentary : o.EmptyCommentary);
+        // The model's line was written before this search; with nothing to show, use the line for an empty result.
+        var line = refs.Count == 0 ? (prepared ? o.EmptyCommentary : null)
+            : commentary ?? (prepared ? o.FoundCommentary : null);
         if (string.IsNullOrWhiteSpace(line))
             line = await WriteActionAsync(turn, "the student selected a clarification option", shown, held.Count, o.Label, ct);
-        var drafts = await EnsureMoreCommentaryAsync(turn, held, o.MoreCommentary, ct);
+        var drafts = await EnsureMoreCommentaryAsync(turn, held, prepared ? o.MoreCommentary : [], ct);
         await SaveBotAsync(convo, userId, line, shown, held, false, null, stream, ct, drafts);
     }
 
@@ -355,15 +370,17 @@ public sealed partial class ChatService(
         var shownKinds = lastBot.Results.Where(kinds.ContainsKey).Select(r => kinds[r]).Distinct().ToList();
         var storedKinds = kinds.Values.Distinct().ToList();
         // A typed follow-up uses the model declaration. A button continues the already-selected results.
-        var want = askedFor ?? (shownKinds.Count == 1 ? shownKinds[0] : storedKinds.Count == 1 ? storedKinds[0] : MaterialWants.None);
+        // "none" (or nothing) from a typed "more" keeps the kind already being shown.
+        var want = MaterialWants.IsSearch(askedFor) ? askedFor!
+            : shownKinds.Count == 1 ? shownKinds[0] : storedKinds.Count == 1 ? storedKinds[0] : MaterialWants.None;
         var refs = await cards.FilterAsync(lastBot.More, want, ct);
         var shown = refs.Take(FirstBatch).ToList();
         var held = refs.Skip(FirstBatch).ToList();
         if (shown.Count == 0)
         {
-            var emptyLine = string.IsNullOrWhiteSpace(modelLine)
-                ? await WriteActionAsync(turn, "the student requested more but there are no held-back results", shown, 0, null, ct)
-                : modelLine;
+            // The model may have written "here are more" before knowing there are none of that kind left.
+            var emptyLine = await WriteActionAsync(turn, lastBot.More.Length > 0 && MaterialWants.IsSearch(want)
+                ? NothingOfThatKind(want) : "the student requested more but there are no held-back results", shown, 0, null, ct);
             await SaveBotAsync(convo, userId, emptyLine, [], [], false, null, stream, ct);
             return;
         }
@@ -379,6 +396,22 @@ public sealed partial class ChatService(
             ? await WriteActionAsync(turn, "the student asked to see more results", shown, held.Count, null, ct)
             : drafts[0];
         await SaveBotAsync(convo, userId, line, shown, held, false, null, stream, ct, drafts.Skip(1).ToArray());
+    }
+
+    private static string NothingOfThatKind(string want) =>
+        $"none of the results found were the kind the student asked for ({want.Replace('_', ' ')}); say so briefly and offer to search another way";
+
+    /// <summary>
+    /// The model's refs that this conversation's searches returned. A whole-file ref may come back without the page hint the
+    /// search gave it ("f:id" for "f:id?page=5"): it still means that file, so it maps to the ref the search returned.
+    /// </summary>
+    private static List<string> AllowedRefs(IEnumerable<string> refs, Turn turn)
+    {
+        var files = turn.Allowed.Where(a => ResultRefs.TryParseFile(a, out _)).GroupBy(a => ResultRefs.TryParseFile(a, out var id) ? id : Guid.Empty)
+            .ToDictionary(g => g.Key, g => g.First());
+        return refs.Select(r => turn.Allowed.Contains(r) ? r
+                : ResultRefs.TryParseFile(r, out var id) && files.TryGetValue(id, out var allowed) ? allowed : null)
+            .OfType<string>().Distinct().ToList();
     }
 
     private async Task<List<string>> SearchOptionAsync(ChatOption o, IReadOnlyList<Course> courses, CancellationToken ct)
@@ -450,7 +483,9 @@ public sealed partial class ChatService(
                Ask about year only when it is needed to resolve the request. Today is {{today:yyyy-MM-dd}}, so last year is
                {{today.Year - 1}}. Don't ask about year or semester when the course alone is enough.
             7. When your last message asked with options and the student answers with one of them, call `reply` with option=<its number>
-               and no new search. When they ask for more of the last results, call `reply` with show_more=true.
+               and no new search. When they ask for more of the last results, call `reply` with show_more=true. In both cases set
+               asked_for to the kind they want: normally the option's or the last results' kind. If they now want another kind
+               ("the first one, but as slides"), set that kind and the app searches the option again for it.
             8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
             9. A correction, greeting, identity statement, or question about your wording is conversation, not automatically a search.
                Respond briefly about the conversation with no result refs. Never claim a search failed if you did not search.
@@ -687,12 +722,20 @@ public sealed partial class ChatService(
     }
 
     /// <summary>Every retry retains the requested kind and all course/type filters.</summary>
+    /// <summary>A want/material_type pair that can never match, explained so the model can search again correctly.</summary>
+    private static string? KindConflict(string want, string? type) => (want, type) switch
+    {
+        (MaterialWants.Slides, not (null or MaterialTypes.Slides)) => $"want=slides returns slide decks only; drop material_type={type}, or use want=files for whole {type} files.",
+        (MaterialWants.Files, MaterialTypes.Slides) => "Slide decks use want=slides, not want=files.",
+        (MaterialWants.Questions, MaterialTypes.Slides or MaterialTypes.Notes) => $"want=questions never returns {type}; use want=slides or want=notes_pages for those, or drop material_type.",
+        _ => null,
+    };
+
     private async Task<(List<SearchHit> Hits, bool Broadened)> SearchWantedAsync(string want, string query, Course? course,
         string? type, int? year, string? label, int limit, CancellationToken ct)
     {
         if (!MaterialWants.IsSearch(want)) return ([], false);
-        if (want == MaterialWants.Slides && type is not (null or MaterialTypes.Slides)) return ([], false);
-        if (want == MaterialWants.Files && type == MaterialTypes.Slides) return ([], false);
+        if (KindConflict(want, type) is not null) return ([], false);
         var q = new SearchQuery(query, course is null ? null : [course.Id],
             want == MaterialWants.Slides ? [MaterialTypes.Slides]
                 : type is not null ? [type] : want == MaterialWants.Files ? MaterialTypes.All.Where(t => t != MaterialTypes.Slides).ToArray() : null,
@@ -722,6 +765,7 @@ public sealed partial class ChatService(
         // Too narrow a year/label: the retry lets the model tell the student what does exist, and ask before showing it.
         var want = args.Str("want");
         if (!MaterialWants.IsSearch(want)) return new JsonObject { ["error"] = "want must name the requested material kind" };
+        if (KindConflict(want!, type) is { } conflict) return new JsonObject { ["error"] = conflict };
         var (hits, broadened) = await SearchWantedAsync(want!, query, course, type, year, label, 16, ct);
 
         var results = new JsonArray();

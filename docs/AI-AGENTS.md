@@ -213,7 +213,11 @@ Return JSON only, following the schema:
 - `want=questions`: question regions, plus assessment pages with no question boxes. Slide/notes pages and crops are excluded. This applies to keywords, vectors, filter-only searches and retries.
 - `want=slides`: one whole `f:` file per slide deck, ranked by its best page. `slide_pages` returns only `p:` slide pages and is reserved for a specific slide request.
 - `want=files`: whole non-slide files, with the requested type/course/year/label filters. `notes_pages` returns only `p:` notes pages.
-- `reply.asked_for` is required and uses those five kinds plus `none`. Real region/page/file metadata determines which refs survive; the model cannot relabel them. Filtering happens before the first batch and held-back count are saved. The model's line is passed through even if all refs are dropped.
+- `reply.asked_for` is required and uses those five kinds plus `none`. Real region/page/file metadata determines which refs survive; the model cannot relabel them. Filtering happens before the first batch and held-back count are saved. The model's line is passed through, except when the model picked refs of a declared kind and every one was dropped: then the reply writer writes a new line saying nothing of that kind matched and offering another search, so the bot never says "here are the slides" over an empty result.
+- Typed picks and "more": `asked_for="none"` (or missing) keeps the option's kind or the kind already shown. A different declared kind filters the option's saved results; if none are of that kind, the option is searched again for it. "Show more" with nothing of the kind left gets a new writer line, not the model's "here are more".
+- A whole-file ref returned without its page hint (`f:id` for `f:id?page=5`) still maps to the file the search returned.
+- Impossible `want`/`material_type` pairs (slides + another type, files + slides, questions + slides/notes) return a tool `error` that says how to search instead, so the model retries rather than reporting nothing found.
+- A saved page hint that no longer exists (pages renumbered by a reprocess) falls back to the cover instead of dropping the card.
 - Offers can appear in text or `ask` chips. An offer does not authorize showing another kind. An unclear kind prompts one chip per meaning, each with its own required `want`.
 - There is no keyword-based intent check. The model chooses search terms, filters and requested kind from the complete conversation in any language. Database kind/ref validation enforces that choice; it does not interpret student text.
 - Old options JSON reads `files:true` as `want=files`; other missing `want` values become `questions`. New writes use `want`. No database migration.
@@ -259,7 +263,9 @@ Hard rules, no exceptions:
    Ask about year only when it is needed to resolve the request. Today is <today>, so last year is
    <last year>. Don't ask about year or semester when the course alone is enough.
 7. When your last message asked with options and the student answers with one of them, call `reply` with option=<its number>
-   and no new search. When they ask for more of the last results, call `reply` with show_more=true.
+   and no new search. When they ask for more of the last results, call `reply` with show_more=true. In both cases set
+   asked_for to the kind they want: normally the option's or the last results' kind. If they now want another kind
+   ("the first one, but as slides"), set that kind and the app searches the option again for it.
 8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
 9. A correction, greeting, identity statement, or question about your wording is conversation, not automatically a search.
    Respond briefly about the conversation with no result refs. Never claim a search failed if you did not search.

@@ -198,7 +198,8 @@ public sealed class ResultCards(AppDb db)
         {
             if (ResultRefs.TryParseFile(r, out var fid, out var number))
             {
-                var coverId = number is { } n ? requestedPages.FirstOrDefault(p => p.FileId == fid && p.Number == n)?.Id ?? Guid.Empty
+                // A saved page hint may outlive a reprocess that renumbered pages: fall back to the cover, keep the card.
+                var coverId = number is { } n ? requestedPages.FirstOrDefault(p => p.FileId == fid && p.Number == n)?.Id ?? covers.GetValueOrDefault(fid)
                     : covers.GetValueOrDefault(fid);
                 if (pages.TryGetValue(coverId, out var first))
                     cards.Add(Build(r, "file", first, null, null, null, false, null));
