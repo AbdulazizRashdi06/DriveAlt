@@ -570,6 +570,34 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Incomplete_clarification_drafts_degrade_instead_of_failing_the_turn()
+    {
+        await app.SignInAsync(ApiFactory.Uploader);
+        var student = await app.SignInAsync("25-8894");
+        await ReportMaterialAsync();
+        var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        JsonObject Option(string label, string course) => new()
+        {
+            ["label"] = label, ["course"] = course, ["query"] = "", ["material_type"] = "other", ["result_kind"] = "files",
+            ["found_commentary"] = "", ["empty_commentary"] = "", ["more_commentary"] = new JsonArray("Only one line."),
+        };
+        // The model leaves the drafts out, adds a blank option, and its repair call returns nothing useful.
+        app.ChatModel.EnqueueTool("ask", new JsonObject
+        {
+            ["question"] = "Which course should I check?",
+            ["options"] = new JsonArray(Option("Data Structures", "data-structures"), Option("Efficient Algorithms", "efficient-algorithms"), Option(" ", "data-structures")),
+        });
+        app.ChatModel.EnqueueText("not json");
+        var ask = await SendAsync(student, chatId, "find full papers for algorithm analysis", prepared: true);
+        Assert.Equal("Which course should I check?", ask["text"]!.GetValue<string>());
+        Assert.Equal(2, ask["options"]!.AsArray().Count);
+        // Picking writes the missing line then.
+        app.ChatModel.EnqueueText("Model wrote the pick reply.");
+        var picked = await SendAsync(student, chatId, "Data Structures", new { option = 0 });
+        Assert.Equal("Model wrote the pick reply.", picked["text"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Model_failures_are_streamed_as_errors_not_fake_bot_answers()
     {
         var student = await app.SignInAsync("25-8894");

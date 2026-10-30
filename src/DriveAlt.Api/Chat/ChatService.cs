@@ -120,7 +120,8 @@ public sealed partial class ChatService(
             : gemini.Enabled ? await RunGeminiAsync(text, history, turn, stream.Status, ct)
             : throw new InvalidOperationException("No chat model is configured.");
 
-        if (reply.Ask is { Options.Count: >= 2 } ask)
+        if (reply.Ask is { } asked && asked with { Options = asked.Options.Where(o => !string.IsNullOrWhiteSpace(o.Label)).ToList() }
+            is { Options.Count: >= 2 } ask)
         {
             await AskAsync(convo, userId, ask, turn, stream, ct);
             return;
@@ -239,11 +240,17 @@ public sealed partial class ChatService(
         var context = ReplyContext(turn);
         context["batches"] = count;
         context["remaining_results"] = held.Count;
-        var raw = await GenerateReplyAsync(ReplyWriterInstructions + " Return JSON with a lines array containing exactly the requested number of distinct short follow-up lines, one per later batch. Each must work for any batch size; do not claim a batch is the last or state a result count.", context, true, ct);
+        string raw;
+        try { raw = await GenerateReplyAsync(ReplyWriterInstructions + " Return JSON with a lines array containing exactly the requested number of distinct short follow-up lines, one per later batch. Each must work for any batch size; do not claim a batch is the last or state a result count.", context, true, ct); }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            log.LogWarning("Follow-up lines weren't prepared; exception type {Type}", e.GetType().Name);
+            raw = "{}";
+        }
         var lines = Lines(Json.Parse(raw)?["lines"]);
-        if (lines.Count < count || lines.Take(count).Any(string.IsNullOrWhiteSpace))
-            throw new InvalidOperationException("The model did not prepare all follow-up replies.");
-        return lines.Take(count).ToList();
+        // Best effort: a line still missing is written when "Show more" is clicked, rather than failing this reply.
+        return Enumerable.Range(0, count).Select(i =>
+            i < lines.Count && !string.IsNullOrWhiteSpace(lines[i]) ? lines[i] : i < proposed.Count ? proposed[i] : "").ToList();
     }
 
     private async Task EnsureOptionCommentaryAsync(Turn turn, List<ChatOption> options, CancellationToken ct)
@@ -252,18 +259,26 @@ public sealed partial class ChatService(
             && o.MoreCommentary.Count >= 3 && o.MoreCommentary.Take(3).All(s => !string.IsNullOrWhiteSpace(s)))) return;
         var context = ReplyContext(turn);
         context["options"] = new JsonArray(options.Select(o => (JsonNode)new JsonObject { ["label"] = o.Label, ["query"] = o.Query }).ToArray());
-        var raw = await GenerateReplyAsync(ReplyWriterInstructions + " Return JSON with an options array in the same order. Each item has found and empty strings for when that option has results or no results yet, and a more array of three short later-batch lines. Do not assume result counts or claim a batch is last.", context, true, ct);
-        if (Json.Parse(raw)?["options"] is not JsonArray generated || generated.Count != options.Count)
-            throw new InvalidOperationException("The model did not prepare the option replies.");
+        JsonArray? generated = null;
+        try
+        {
+            var raw = await GenerateReplyAsync(ReplyWriterInstructions + " Return JSON with an options array in the same order. Each item has found and empty strings for when that option has results or no results yet, and a more array of three short later-batch lines. Do not assume result counts or claim a batch is last.", context, true, ct);
+            generated = Json.Parse(raw)?["options"] as JsonArray;
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            log.LogWarning("Option replies weren't prepared; exception type {Type}", e.GetType().Name);
+        }
+        if (generated is null || generated.Count != options.Count) return;
+        // Best effort: keep every good line; anything still missing is written when the option is picked (PickAsync).
         for (var i = 0; i < options.Count; i++)
         {
             var item = generated[i];
-            options[i].FoundCommentary = RawText(item, "found") ?? "";
-            options[i].EmptyCommentary = RawText(item, "empty") ?? "";
-            options[i].MoreCommentary = Lines(item?["more"]);
-            if (string.IsNullOrWhiteSpace(options[i].FoundCommentary) || string.IsNullOrWhiteSpace(options[i].EmptyCommentary)
-                || options[i].MoreCommentary.Count < 3 || options[i].MoreCommentary.Take(3).Any(string.IsNullOrWhiteSpace))
-                throw new InvalidOperationException("The model returned incomplete option replies.");
+            if (string.IsNullOrWhiteSpace(options[i].FoundCommentary)) options[i].FoundCommentary = RawText(item, "found") ?? "";
+            if (string.IsNullOrWhiteSpace(options[i].EmptyCommentary)) options[i].EmptyCommentary = RawText(item, "empty") ?? "";
+            var more = Lines(item?["more"]);
+            if (more.Count(m => !string.IsNullOrWhiteSpace(m)) > options[i].MoreCommentary.Count(m => !string.IsNullOrWhiteSpace(m)))
+                options[i].MoreCommentary = more;
         }
     }
 
@@ -277,10 +292,10 @@ public sealed partial class ChatService(
     {
         var courses = await db.Courses.AsNoTracking().OrderBy(c => c.Sort).ToListAsync(ct);
         var options = ask.Options.Take(4).ToList();
-        if (string.IsNullOrWhiteSpace(ask.Question) || options.Any(o => string.IsNullOrWhiteSpace(o.Label)))
-            throw new InvalidOperationException("The model returned an incomplete clarification.");
         await EnsureOptionCommentaryAsync(turn, options, ct);
-        var question = ask.Question;
+        var question = string.IsNullOrWhiteSpace(ask.Question)
+            ? await WriteActionAsync(turn, "ask which of these the student means: " + string.Join("; ", options.Select(o => o.Label)), [], 0, null, ct)
+            : ask.Question;
 
         var bot = await SaveBotAsync(convo, userId, question, [], [], false, options, stream, ct);
 
@@ -344,7 +359,10 @@ public sealed partial class ChatService(
         }
         // Current messages have all follow-up lines ready before the button appears. Older messages may need one model call.
         var drafts = await EnsureMoreCommentaryAsync(turn, lastBot.More.ToList(), lastBot.MoreCommentary, ct);
-        await SaveBotAsync(convo, userId, drafts[0], shown, held, false, null, stream, ct, drafts.Skip(1).ToArray());
+        var line = string.IsNullOrWhiteSpace(drafts[0])
+            ? await WriteActionAsync(turn, "the student asked to see more results", shown, held.Count, null, ct)
+            : drafts[0];
+        await SaveBotAsync(convo, userId, line, shown, held, false, null, stream, ct, drafts.Skip(1).ToArray());
     }
 
     private async Task<List<string>> SearchOptionAsync(ChatOption o, IReadOnlyList<Course> courses, CancellationToken ct)
