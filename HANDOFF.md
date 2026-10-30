@@ -541,6 +541,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 6. File inventory
 
+**`docs/AI-AGENTS.md`** (Claude Code, 2026-10-30, owner asked for it): every AI step (suggest, Terra batch reading, gateway wrapper, fallback reader, embeddings, chat tool loop, reply writer) with its trigger, inputs, server checks and the **verbatim prompts and tool schemas** as of `main` 2026-10-30. Regenerate or edit it whenever a prompt in `Chat/ChatService.cs` or `Ai/MaterialAi*.cs` changes.
+
 **Year 1 local run:** `C:/Users/abdul/DriveAlt-Year1-local/runs/2026-10-29-terra-continuation/{worklist,deduplicated-worklist,validation-report}.json` and `batch-*.json` are checkpoints, not import-ready certification. `/root/terra_year1_resume` owns new local preparation; do not overlap its writes. New workload audit is requested but not yet verified.
 
 **PR #34 combined additions:** `Ai/MaterialAi.Batches.cs`, batch contracts/options/client and pipeline/Inspect/job integration; `deploy/codex-terra-batches.patch`, `ensure-terra-gateway.sh` and mocked contract test; deployment workflow gateway preparation/Bash syntax check; `web/src/lib/chunkRecovery.{ts,test.ts}`, eager FileView and readable route fallback, HTML revalidation; bounded Drive listing helper/tests and progress bar with UI/browser tests. No DB migration or embedding-model change.
