@@ -4,7 +4,7 @@
 
 ## 1. Header
 
-**Current update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; full validation runs on GitHub Actions at the owner's request. Root checkout's unrelated dirty AI/deployment files remain untouched. A PR is authorized for CI; merge/deployment are not authorized. Older dated state claims below are historical.
+**Current update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; full validation runs on GitHub Actions at the owner's request. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
 
 | | |
 |---|---|
@@ -22,7 +22,9 @@
 **In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; GitHub CI is pending. No production change is authorized by this task.
 ## 2. State of the world
 
-**Asked-for contract, 2026-10-30 (Codex, not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Clear question/slide vocabulary overrides the model; mixed vocabulary is left to interpretation, and specific-slide requests keep `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
+**Asked-for contract, 2026-10-30 (Codex, [PR #46](https://github.com/AbdulazizRashdi06/DriveAlt/pull/46), not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Clear question/slide vocabulary overrides the model; mixed vocabulary is left to interpretation, and specific-slide requests keep `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
+
+**Online validation:** PR #46 opened on implementation commit `26b0401`; full GitHub Actions CI pending. The thread is registered to the PR and will use T3 monitoring rather than local tests.
 
 **Validation:** prior to the owner's online-only correction, `dotnet build` passed with 0 warnings/errors, `dotnet test --filter 'FullyQualifiedName!~ApiTests'` passed 83/83, `npx tsc -b` passed and `npx vitest run` passed 9 files / 31 tests. Initial full `dotnet test --no-build` failed at fixture initialization: 32 failures / 83 passed, `Failed to connect to 127.0.0.1:5432` (Postgres absent), not API behavior failures. Docker reports `hasNoVirtualization:true`. Native test-tool downloads/extraction under `%TEMP%/drivealt-kind-test-tools` were stopped at the owner's instruction; no local database/server was initialized. Do not continue local test setup or run local tests. Full backend/API, frontend and build validation must run in the PR's GitHub Actions workflow (same method as PR #27/#29). Latest regression addition is not locally rerun. CI status is pending until recorded from the run's real output. `git diff --check` passed. No merge/deploy/live model check has occurred.
 
@@ -315,7 +317,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
-**2026-10-30, Codex ? asked-for material contract:** implemented kind-specific search/tools, database ref enforcement, vocabulary cross-check, durable best-page deck cards and legacy option JSON compatibility. Added scripted-model/API cases for wrong-kind model refs/declarations, empty-filter offers, every search kind, whole-deck best-page history, old file options, saved mixed results and separate ambiguity chips; unit and frontend regressions cover vocabulary/schema/refs/options and full-deck opening. Updated PR #45's AI guide with the actual prompt/schema and validation behavior. Owner directed testing online through GitHub CI; stopped local test preparation. No production writes.
+**2026-10-30, Codex ? asked-for material contract:** implemented kind-specific search/tools, database ref enforcement, vocabulary cross-check, durable best-page deck cards and legacy option JSON compatibility. Added scripted-model/API cases for wrong-kind model refs/declarations, empty-filter offers, every search kind, whole-deck best-page history, old file options, saved mixed results and separate ambiguity chips; unit and frontend regressions cover vocabulary/schema/refs/options and full-deck opening. Updated PR #45's AI guide with the actual prompt/schema and validation behavior. Owner directed testing online through GitHub CI; stopped local test preparation. Opened PR #46 into main to run online CI, stacked on #45. No production writes.
 
 **2026-10-30, Claude Code — review and fixes for PRs #25–#38:** on the owner's "review everything codex … did" then "fix all". Ten findings, all fixed in `claude/review-fixes` (section 2) plus Zarqa PR #7. Built on Codex's open docs PR #39 as AGENTS.md asks.
 
@@ -601,7 +603,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Claim: Codex, `fix/chat-asked-material-kind`:** search/reply/chip/Show-more kind contract, best-slide file cards, regression tests and AI docs. Built on PR #45; leave #21/#44 branches intact. No production writes.
+**Claim: Codex, `fix/chat-asked-material-kind`, PR #46:** search/reply/chip/Show-more kind contract, best-slide file cards, regression tests and AI docs. Built on PR #45; leave #21/#44 branches intact. No production writes.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
@@ -634,7 +636,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current task:** publish this branch/PR and use GitHub Actions for full tests. Inspect/fix CI failures, update this handoff with actual run output, and retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues" and "queues"; those live checks remain pending.
+**Current task:** PR #46 is published; use its GitHub Actions workflow for full tests. Inspect/fix CI failures, update this handoff with actual run output, and retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues" and "queues"; those live checks remain pending.
 
 **Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
 
@@ -658,7 +660,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 Read the whole handoff first. Run independent checks against GitHub and the VPS; dated counts may legitimately improve, but explain discrepancies before further work. Never read secrets or the Codex auth volume.
 
-Local Git (PowerShell):
+Local Git (PowerShell; metadata checks only, no local test setup):
 
 ```powershell
 git fetch -q
@@ -672,7 +674,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
-# Latest open PRs: #21, #44, #45. Re-check rather than assuming this list is fixed.
+# Latest open PRs: #21, #44, #45, #46 (this feature). Re-check rather than assuming this list is fixed.
 # PRs #25–#29 are merged; PR #21 remains open. Later deployment handoff PRs are docs only.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
