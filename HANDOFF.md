@@ -19,10 +19,10 @@
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; full GitHub CI passed on code head `b622787`. No production change is authorized by this task.
+**In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; full GitHub CI passed on corrected code head `43d0ce0`. No production change is authorized by this task.
 ## 2. State of the world
 
-**Vocabulary correction, 2026-10-30 (Codex, PR #46):** owner identified overbroad exercise/lecture keyword overrides. `AskedKind` now treats exercise(s) as questions only without PDF/sheet/file/download words (including plurals), and excludes lecture notes from slide vocabulary. Explicit questions/Q-number vocabulary still wins. Added nine vocabulary cases and three scripted-model API cases proving exercise files and notes pages remain visible. Online CI pending for this correction; do not run local tests. Earlier passing CI below validates the preceding code only.
+**Vocabulary correction, 2026-10-30 (Codex, PR #46):** owner identified overbroad exercise/lecture keyword overrides. `AskedKind` now treats exercise(s) as questions only without PDF/sheet/file/download words (including plurals), and excludes lecture notes from slide vocabulary. Explicit questions/Q-number vocabulary still wins. Added nine vocabulary cases and three scripted-model API cases proving exercise files and notes pages remain visible. Full online run `41070599306`, job `124113429123`, passed on corrected code head `43d0ce0`: `Passed! - Failed: 0, Passed: 128, Skipped: 0, Total: 128`; gateway `3 passed / 0 failed`; frontend `9 passed` files / `31 passed` tests; TypeScript and production build passed. This documentation-only commit records the verified code results and triggers ordinary CI; it changes no tested code. Do not run local tests. No merge/deploy occurred.
 
 **Asked-for contract, 2026-10-30 (Codex, [PR #46](https://github.com/AbdulazizRashdi06/DriveAlt/pull/46), not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Clear question/slide vocabulary overrides the model; mixed vocabulary is left to interpretation, and specific-slide requests keep `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
 
@@ -319,6 +319,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-30, Codex - vocabulary fixes verified online:** run `41070599306` passed all 128 backend/API tests, 31 frontend tests, 3 gateway checks, TypeScript and production build on `43d0ce0`. PR #46 description and handoff now record the corrected code results; no local test runs or production writes.
+
 **2026-10-30, Codex - vocabulary correction:** narrowed the exercise and lecture overrides as requested; retained topic-exercise question behavior and explicit question vocabulary. Updated tests and the AI guide; pushed for online CI. No local tests or production changes.
 
 **2026-10-30, Codex ? online validation complete:** PR #46 code head `b622787` passed run `41069786816`: all 116 backend tests, 3 gateway contracts, 31 frontend tests, TypeScript and production build. Updated the PR description and this handoff with real output; ready for owner review. No local tests resumed and no merge/deploy occurred.
@@ -611,7 +613,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Ready for owner review: Codex, `fix/chat-asked-material-kind`, PR #46:** contract, best-slide file cards, regressions and AI docs are complete; full online validation passed on `b622787`. Built on PR #45; merge #45 first. Leave #21/#44 branches intact. No production writes. Only final documentation CI and owner-controlled merge/deployment remain.
+**Ready for owner review: Codex, `fix/chat-asked-material-kind`, PR #46:** contract, vocabulary corrections, best-slide file cards, regressions and AI docs are complete; full online validation passed on `43d0ce0`. Built on PR #45; merge #45 first. Leave #21/#44 branches intact. No production writes. Only final documentation CI and owner-controlled merge/deployment remain.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
@@ -644,7 +646,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current task:** PR #46 vocabulary correction is awaiting online CI; previous full pass on `b622787` is historical. Hand back for owner review after the corrected head passes. Retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues", "queues", exercise file requests and lecture notes; those live checks remain pending.
+**Current task:** PR #46 corrected code `43d0ce0` passed full online CI (128 backend / 31 frontend / 3 gateway). Only this results-recording documentation commit is newer; hand back for owner review after its routine CI rerun passes. Retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues", "queues", exercise file requests and lecture notes; those live checks remain pending.
 
 **Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
 
