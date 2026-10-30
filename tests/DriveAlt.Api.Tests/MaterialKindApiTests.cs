@@ -25,7 +25,8 @@ public partial class ApiTests
         {
             Title = "Material kind fixture", OriginalName = "fixture.pdf", Sha256 = Guid.NewGuid().ToString(),
             Course = course, UploadedById = owner.Id, Status = FileStatuses.Ready, MaterialType = type,
-            AcademicYear = 2026, AssessmentLabel = "Contract fixture",
+            // Keep these fixtures outside the existing 2026 whole-paper inventory test.
+            AcademicYear = 2028, AssessmentLabel = "Contract fixture",
         };
         Page Page(DocFile file, int number, string kind, string text)
         {
@@ -61,7 +62,7 @@ public partial class ApiTests
     private static JsonObject SearchKind(KindFixture f, string want) => new()
     {
         ["query"] = f.Topic, ["course"] = "data-structures", ["want"] = want,
-        ["year"] = 2026, ["assessment_label"] = "Contract fixture",
+        ["year"] = 2028, ["assessment_label"] = "Contract fixture",
     };
 
     private static JsonObject KindReply(string kind, params string[] refs) => new()
