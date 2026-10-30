@@ -130,7 +130,7 @@ export interface PageThumb {
 export interface UploadCheckItem {
   fileName: string
   sizeBytes: number
-  sha256: string
+  sha256?: string
   courseId?: number | null
 }
 

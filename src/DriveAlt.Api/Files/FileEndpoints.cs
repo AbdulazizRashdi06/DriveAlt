@@ -22,7 +22,7 @@ public sealed record PageRegionDto(Guid Id, string? QuestionNumber, float X, flo
 public sealed record PageThumbDto(Guid Id, int Number, string Kind, string ThumbUrl, string PageUrl, string[] Tags, int Questions, int Width, int Height,
     IReadOnlyList<PageRegionDto>? Regions = null, bool Saved = false);
 
-public sealed record UploadCheckItem(string FileName, long SizeBytes, string Sha256, int? CourseId = null);
+public sealed record UploadCheckItem(string FileName, long SizeBytes, string? Sha256, int? CourseId = null);
 public sealed record UploadCheckRequest(List<UploadCheckItem> Items);
 public sealed record UploadCheckResult(int Index, string Kind, FileDto? Existing);
 
@@ -87,9 +87,11 @@ public static class FileEndpoints
                 : (await db.Files.AsNoTracking().Include(f => f.Course).Where(f => hashes.Contains(f.Sha256)).ToListAsync(ct))
                     .GroupBy(f => f.Sha256).ToDictionary(g => g.Key, g => g.First());
 
-            var allExisting = await db.Files.AsNoTracking().Include(f => f.Course)
-                .OrderByDescending(f => f.CreatedAt)
-                .ToListAsync(ct);
+            // Titles only (not whole rows), canonicalised once per file rather than once per file per item.
+            var titles = (await db.Files.AsNoTracking().OrderByDescending(f => f.CreatedAt)
+                    .Select(f => new { f.Id, f.CourseId, f.Title, f.OriginalName }).ToListAsync(ct))
+                .Select(f => (f.Id, f.CourseId, Title: Heuristics.CanonicalTitle(f.Title), Original: Heuristics.CanonicalTitle(f.OriginalName)))
+                .ToList();
 
             var results = new List<UploadCheckResult>(items.Count);
             for (var i = 0; i < items.Count; i++)
@@ -110,9 +112,11 @@ public static class FileEndpoints
                 }
 
                 var guessedCourseId = item.CourseId ?? Heuristics.FromPath(item.FileName, courses).Course?.Id;
-                var similar = allExisting.FirstOrDefault(f =>
+                var match = titles.FirstOrDefault(f =>
                     (guessedCourseId is null || f.CourseId is null || f.CourseId == guessedCourseId) &&
-                    (Heuristics.CanonicalTitle(f.Title) == norm || Heuristics.CanonicalTitle(f.OriginalName) == norm));
+                    (f.Title == norm || f.Original == norm));
+                var similar = match.Id == Guid.Empty ? null
+                    : await db.Files.AsNoTracking().Include(f => f.Course).FirstOrDefaultAsync(f => f.Id == match.Id, ct);
 
                 results.Add(similar is not null
                     ? new UploadCheckResult(i, "similar", ToDto(similar))

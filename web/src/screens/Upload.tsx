@@ -9,6 +9,7 @@ import { Mascot } from '../ui/Mascot'
 
 const STEPS = ['Splitting pages', 'Reading', 'Tagging topics', 'Cropping', 'Ready']
 const ACCEPT = '.pdf,.pptx,.ppt,.docx,.doc,image/*,.heic,.heif'
+const MAX_HASH_BYTES = 64 * 1024 * 1024
 
 export function Pipeline({ file }: { file: FileDto }) {
   if (file.status === 'uploaded') {
@@ -168,11 +169,10 @@ export function Upload() {
     let toUpload = files
     if (!force && !(combine && files.length > 1)) {
       try {
-        const items: UploadCheckItem[] = await Promise.all(files.map(async f => ({
-          fileName: f.name,
-          sizeBytes: f.size,
-          sha256: await sha256Hex(f),
-        })))
+        // One file in memory at a time, and big files skip the browser hash: the server still catches exact copies.
+        const items: UploadCheckItem[] = []
+        for (const f of files)
+          items.push({ fileName: f.name, sizeBytes: f.size, sha256: f.size <= MAX_HASH_BYTES ? await sha256Hex(f) : undefined })
         const checks = await api.post<UploadCheckResult[]>('/api/uploads/check', { items })
         const nextExact: { fileName: string; existing: FileDto }[] = []
         const nextSimilar: { file: File; existing: FileDto }[] = []
