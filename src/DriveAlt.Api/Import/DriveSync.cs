@@ -256,7 +256,8 @@ public static class DriveSyncEndpoints
         // A folder's own files, listed live from Drive, each marked uploaded (with its app file) or not.
         g.MapGet("/folders/{id}/files", async (string id, AppDb db, DriveImporter importer, ILogger<DriveSyncService> log, CancellationToken ct) =>
         {
-            if (!await db.DriveSyncFolders.AnyAsync(f => f.Id == id, ct)) return Results.NotFound();
+            var folder = await db.DriveSyncFolders.AsNoTracking().FirstOrDefaultAsync(f => f.Id == id, ct);
+            if (folder is null) return Results.NotFound();
             List<DriveImporter.DriveItem> items;
             try
             {
@@ -279,11 +280,20 @@ public static class DriveSyncEndpoints
                          .Select(f => new { f.Id, f.SourceRef }).ToListAsync(ct))
                 foreach (var driveId in f.SourceRef![7..].Split('+'))
                     imported.TryAdd(driveId, f.Id);
-            return Results.Ok(files.Select(f => new
+            // Anything else counts as uploaded when the app has a file with the same name in the same course, however it
+            // got there (uploaded by hand, or a renamed copy). Same name rule as the upload duplicate check.
+            var courses = await db.Courses.AsNoTracking().ToListAsync(ct);
+            var courseId = Heuristics.FromPath(string.Join('/', folder.Segments), courses).Course?.Id;
+            var byName = new Dictionary<string, Guid>();
+            foreach (var f in await db.Files.AsNoTracking().Where(f => courseId == null || f.CourseId == courseId)
+                         .OrderByDescending(f => f.CreatedAt).Select(f => new { f.Id, f.Title, f.OriginalName }).ToListAsync(ct))
+                foreach (var name in new[] { f.Title, f.OriginalName })
+                    if (Heuristics.CanonicalTitle(name) is { Length: > 0 } key) byName.TryAdd(key, f.Id);
+            return Results.Ok(files.Select(f =>
             {
-                f.Id, f.Name,
-                Importable = DriveImporter.CanImport(f),
-                FileId = imported.TryGetValue(f.Id, out var fileId) ? fileId : (Guid?)null,
+                var fileId = imported.TryGetValue(f.Id, out var exact) ? exact
+                    : byName.TryGetValue(Heuristics.CanonicalTitle(f.Name), out var named) ? named : (Guid?)null;
+                return new { f.Id, f.Name, Importable = DriveImporter.CanImport(f), FileId = fileId };
             }));
         });
         g.MapPut("/folders/{id}", async (string id, ToggleBody body, AppDb db, CancellationToken ct) =>
