@@ -4,21 +4,29 @@
 
 ## 1. Header
 
+**Current update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; full validation runs on GitHub Actions at the owner's request. Root checkout's unrelated dirty AI/deployment files remain untouched. A PR is authorized for CI; merge/deployment are not authorized. Older dated state claims below are historical.
+
 | | |
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/drive-sync-tree` from main `76c8530` (PR #40 merge, deployed by run 41049576401). Before that `claude/review-fixes`, stacked on Codex's docs PR #39 (`codex/year1-resume-handoff`, `bb99c7f`), which is based on PR #38 merge `4022f98`; merge #39 first. Deployed code before this PR: `69211bd0ad695df8806da3ba512319fd81c01252` |
-| Updated | 2026-10-30, by Claude Code (review fixes for PRs #25–#38; Zarqa gateway PR). Before that 2026-10-29, by Codex (Year 1 preparation split across three Terra workers) |
+| Branch / base | `fix/chat-asked-material-kind`, based on PR #45 `0c77a80`; main code base `083b6d1`. Merge #45 before this feature PR. |
+| Updated | 2026-10-30, Codex; asked-for material contract and online CI validation |
 
-| Purpose of this update | Deploy the owner-approved PR #34 combination: Terra-low batches and safe retries, bounded Drive discovery with a progress bar, and retired-script recovery; retain separate historic data issues. |
+| Purpose of this update | Enforce requested material kinds in search/replies/options/Show more; open a PR for full GitHub CI. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** Live app is `69211bd0ad695df8806da3ba512319fd81c01252` (PRs #34/#37). Run `40878875382` passed tests/build/gateway/app deployment; Terra-low readiness passed and public health/home/new JS returned HTTP 200 with HTML no-cache. The Drive progress bar and browser recovery are live. A Terra-low subagent is preparing Year 1 locally; no Year 1 app import has occurred.
+**In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; GitHub CI is pending. No production change is authorized by this task.
 ## 2. State of the world
+
+**Asked-for contract, 2026-10-30 (Codex, not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Clear question/slide vocabulary overrides the model; mixed vocabulary is left to interpretation, and specific-slide requests keep `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
+
+**Validation:** prior to the owner's online-only correction, `dotnet build` passed with 0 warnings/errors, `dotnet test --filter 'FullyQualifiedName!~ApiTests'` passed 83/83, `npx tsc -b` passed and `npx vitest run` passed 9 files / 31 tests. Initial full `dotnet test --no-build` failed at fixture initialization: 32 failures / 83 passed, `Failed to connect to 127.0.0.1:5432` (Postgres absent), not API behavior failures. Docker reports `hasNoVirtualization:true`. Native test-tool downloads/extraction under `%TEMP%/drivealt-kind-test-tools` were stopped at the owner's instruction; no local database/server was initialized. Do not continue local test setup or run local tests. Full backend/API, frontend and build validation must run in the PR's GitHub Actions workflow (same method as PR #27/#29). Latest regression addition is not locally rerun. CI status is pending until recorded from the run's real output. `git diff --check` passed. No merge/deploy/live model check has occurred.
+
+**Resume verification, 2026-10-30 (Codex):** fetched main contains `1e13a87` (exit 0); latest first-parent code commit and live `DRIVEALT_IMAGE` both equal `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc`. Read-only SSH: public health `{"ok":true}`, gateway `{"signedIn":true}`, gateway hash prefix `ef0e322e17be2943`. SQL: 400 ready / 2 reading / 1 failed files; 9,666 extracted pages; 484 done / 2 held queued / 1 failed jobs; zero paused jobs; zero unread Semester 1 pages excluding ITS; 2,684 question regions; messages has `more_commentary`. Latest pause-log count unknown (not returned). Local Zarqa ancestor check passed. GitHub connector open-PR search returned #21 (overlapping chat, separate ownership), #44 (Drive UI), #45 (AI docs). `gh` remains unauthenticated. This branch includes #45's docs commit; merge #45 first. Implementation is prepared for online CI; production is unchanged.
 
 **Inspect as a folder tree; unfinished uploads first (Claude Code, 2026-10-30, branch `claude/inspect-tree`; written for after it merges and deploys):** owner: *"inspect page should use the same searching style"* and *"this upload thing need to put the files yet to done up"*. Inspect's file list now opens at **Year 2** with breadcrumbs: Semester › (Semester 1 group: AI / ALL / CS & CYS) › course › type › the file's own folders (`web/src/screens/Inspect.tsx`, `treePath`). The path is kept in `?path=` so Back works. Each folder shows its file count and how many have problems; searching lists matching files from anywhere with their path. `/api/uploads?all=true` now returns up to 10,000 files (was the latest 200, which hid older files from Inspect). Upload's list shows files that aren't `ready` (waiting, processing, failed) above finished ones. Tests: `src/screens/InspectTree.test.tsx` (3 new), frontend 30/30, backend 86/86.
 
@@ -307,6 +315,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-30, Codex ? asked-for material contract:** implemented kind-specific search/tools, database ref enforcement, vocabulary cross-check, durable best-page deck cards and legacy option JSON compatibility. Added scripted-model/API cases for wrong-kind model refs/declarations, empty-filter offers, every search kind, whole-deck best-page history, old file options, saved mixed results and separate ambiguity chips; unit and frontend regressions cover vocabulary/schema/refs/options and full-deck opening. Updated PR #45's AI guide with the actual prompt/schema and validation behavior. Owner directed testing online through GitHub CI; stopped local test preparation. No production writes.
+
 **2026-10-30, Claude Code — review and fixes for PRs #25–#38:** on the owner's "review everything codex … did" then "fix all". Ten findings, all fixed in `claude/review-fixes` (section 2) plus Zarqa PR #7. Built on Codex's open docs PR #39 as AGENTS.md asks.
 
 **2026-10-29, Codex — parallel preparation:** started the additional Calculus Terra-low worker and reassigned an existing Terra worker to the non-Calculus partition after the session rejected another spawn. Coordinator stopped its native driver after an atomic checkpoint to avoid duplicate processing and shared its native selection/verification driver with the partition workers. The owner's requested five additional concurrent workers exceed this session's capacity; three Terra workers total is the supported arrangement. Final random-15 validation/import condition is unchanged.
@@ -464,6 +474,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-30, testing:** "test online no need locally use the old method in the handoff md". Use the PR's GitHub Actions tests with Postgres/pgvector; do not set up/run local tests. This authorizes publishing the feature branch/PR to trigger CI, not merging/deploying.
+- **2026-10-30, material contract:** show only the requested kind; slides mean whole decks except an explicitly specific slide. Offer alternatives without showing them; ask when unclear. Preserve the no-written-answers rules and AI-authored commentary.
+
 - **2026-10-29, preparation concurrency:** “add 5 more sub agents to finish faster.” Use the available concurrent Terra-low workers with disjoint partitions; session capacity limits execution to three subagents plus parent. This supersedes the temporary single-worker constraint. Do not duplicate pages, bypass usage limits or use paid provider fallbacks.
 
 - **2026-10-29, superseding preparation-only scope:** “let terra finish it all AND THEN CHECK RANDOMLY 15 pages THEN upload if all 15 are good.” Complete both Year 1 semesters; after preparation, the parent independently checks a recorded random set of 15 and uploads if all pass. This condition authorizes the required Year 1 mapping/import work after validation, without a second permission question. Keep Year 2 mappings, existing data and held processing jobs intact.
@@ -523,6 +536,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 5. Judgment calls (made without asking)
 
+- **2026-10-30, contract durability:** encode an optional validated page number in whole-file refs instead of a new database column, so best-page opening survives saved history/options. Revalidate stored chip/held refs as well as normal replies. Mixed question/slide vocabulary returns unknown rather than applying arbitrary keyword precedence; explicit specific-slide wording returns `slide_pages`.
+
 - **2026-10-29, native extraction:** question wording is required searchable content; its presence must not automatically make a page incomplete. Index actual visible stems, retain choices/answers visually in complete crops, and exclude answer/working text. Test the corrected geometry/grouping workflow before resuming long selection runs; availability-only and flag-heavy passes cannot be counted as finished material.
 
 - **2026-10-29, workload:** audit native PDF text before assigning all PDF pages to vision. Character count alone does not establish answer safety or reliable layout. Preserve separate text, visual, flagged and deferred queues; count content aliases only once for processing while retaining source identities. Photo-first preparation proceeds while the audit runs.
@@ -540,6 +555,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-28, Codex:** as explicitly directed, model text is passed through unchanged and the old server leak filter is removed. The no-written-answers instruction remains in the model prompt; compliance therefore relies on the model. This is a material change from the previous server guardrail and is not yet verified with live DeepSeek.
 
 ## 6. File inventory
+
+**Asked-for contract:** `Files/MaterialWants.cs`, `Files/Heuristics.cs`, `Chat/ChatService.cs`, `Search/{SearchService,ResultCards}.cs`, `web/src/ui/ResultCard.tsx`; regressions in `MaterialKind{,Api}Tests.cs`, `ApiTests.cs`, `ResultCard.test.tsx`; `docs/AI-AGENTS.md` has the updated chat contract, prompt and tool JSON. No migrations or AI/deployment configuration changes.
 
 **`docs/AI-AGENTS.md`** (Claude Code, 2026-10-30, owner asked for it): every AI step (suggest, Terra batch reading, gateway wrapper, fallback reader, embeddings, chat tool loop, reply writer) with its trigger, inputs, server checks and the **verbatim prompts and tool schemas** as of `main` 2026-10-30. Regenerate or edit it whenever a prompt in `Chat/ChatService.cs` or `Ai/MaterialAi*.cs` changes.
 
@@ -584,6 +601,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**Claim: Codex, `fix/chat-asked-material-kind`:** search/reply/chip/Show-more kind contract, best-slide file cards, regression tests and AI docs. Built on PR #45; leave #21/#44 branches intact. No production writes.
+
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
 **Conditional Year 1 website import, Codex parent:** wait for Terra's actual complete canonical corpus, run whole-corpus structural/completeness checks, draw and independently check 15 random pages against originals and crops/text, and import only after all pass. Prepare correct Year 1 course/study-year mapping rather than using existing Year 2 identities. This is now owner-authorized subject to that condition; no sample/import has run. Worker must preserve resumable checkpoints on a real quota/source blocker.
@@ -615,6 +634,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
+**Current task:** publish this branch/PR and use GitHub Actions for full tests. Inspect/fix CI failures, update this handoff with actual run output, and retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues" and "queues"; those live checks remain pending.
+
 **Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
 
 **Completed documentation, Codex (PR #33 merged `60090bf` with `[skip ci]`):** PR #32 passed full CI (run `40826739134`, test job `123291392748`: 67 backend / 20 frontend) and merged under owner authorization. Main deploy run `40826986882` passed test/build/deploy. Public health and home returned HTTP 200 and served the new bundle. Merge this docs-only reconciliation with `[skip ci]` so it does not restart processing. Preserve PR #21 and unrelated `external-prep/` files.
@@ -645,13 +666,13 @@ git status --short --branch
 git merge-base --is-ancestor 1e13a87ec9b5833e14ee893f8db7b5df90c4349c origin/main
 # Expect exit 0: main contains the PR #34 features and PR #37 corrective rollout.
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
-# Last code merge/image tag: 69211bd0ad695df8806da3ba512319fd81c01252 (PR #37; run 40878875382).
+# Latest verified code/image: 083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc (2026-10-30).
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
-# #25 codex/refresh-handoff-state can appear until merged; afterwards only #21 is expected.
+# Latest open PRs: #21, #44, #45. Re-check rather than assuming this list is fixed.
 # PRs #25–#29 are merged; PR #21 remains open. Later deployment handoff PRs are docs only.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
@@ -673,7 +694,7 @@ docker compose --env-file generated.env --env-file .env exec -T db psql -U drive
   -c "select state, count(*), count(*) filter (where error like 'Held:%') held, count(*) filter (where error like 'Paused:%') paused from jobs group by state order by state" \
   -c "select c.slug, count(*) filter (where not p.extracted) unread from pages p join files f on f.id=p.file_id join courses c on c.id=f.course_id where c.semester=1 and c.slug <> 'its' group by c.slug order by c.slug" \
   -c "select label, count(*) from regions group by label order by 1"
-# Expected image after PR #37: 69211bd0ad695df8806da3ba512319fd81c01252; direct laptop SSH is refused.
+# Latest verified image: 083b6d1; read-only laptop SSH succeeded 2026-10-30.
 # Last SQL verified before PR #32: files ready 400, reading 2, failed 1; pages extracted 9666, unread 7
 # (note: 322 Terra-imported slide pages without regions have empty text, and not every page has an embedding);
 # jobs: done 484, queued 2, failed 1; Drive sync folders: 2 enabled of 118.

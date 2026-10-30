@@ -23,14 +23,14 @@ function FileResultCard({ card, index }: Pick<Props, 'card' | 'index'>) {
       <span className="ellipsis" title={card.courseName}>{card.courseName}</span><span>Full file</span>
     </div>
     <div className="shot-wrap">
-      <Link className="shot" to={`/files/${card.fileId}`} aria-label={`Open full file ${card.fileTitle}`}>
-        <img className="shot-img" src={card.thumbUrl} loading="lazy" alt={`First-page preview of ${card.fileTitle}`} />
+      <Link className="shot" to={originalHref(card)} aria-label={`Open full file ${card.fileTitle}`}>
+        <img className="shot-img" src={card.thumbUrl} loading="lazy" alt={`Page ${card.pageNumber} preview of ${card.fileTitle}`} />
       </Link>
     </div>
     <div className="card-meta" style={{ color: dark ? '#fff' : undefined, overflowWrap: 'anywhere' }}>{card.fileTitle}</div>
     <div className="tags"><span className="tg">{TYPE_SINGULAR[card.materialType]}</span><span className="tg">{card.pageCount} {card.pageCount === 1 ? 'page' : 'pages'}</span>{card.year && <span className="tg">{card.year}</span>}</div>
     <div className="card-actions">
-      <Link className="candy c-white" style={{ flex: 1 }} to={`/files/${card.fileId}`}><IconExternal />Open file</Link>
+      <Link className="candy c-white" style={{ flex: 1 }} to={originalHref(card)}><IconExternal />Open file</Link>
       <a className="candy c-white" style={{ flex: 1 }} href={`/api/files/${card.fileId}/download`} aria-label={`Download full file ${card.fileTitle}`}><IconDownload />Download</a>
     </div>
   </article>

@@ -232,7 +232,9 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         var chatId = (await (await client.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
 
         // A clarifying question as the model's ask leaves it: one option already searched, one still searching.
-        var refs = Enumerable.Range(0, 5).Select(_ => $"r:{Guid.NewGuid()}").ToArray();
+        await app.SignInAsync(ApiFactory.Uploader);
+        var refs = new List<string>();
+        for (var n = 0; n < 5; n++) refs.Add(ResultRefs.Region((await ReportMaterialAsync()).RegionId));
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDb>();
@@ -240,7 +242,7 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
             {
                 ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Already digging in both! Which one did you mean?",
                 Options = DriveAlt.Api.Chat.ChatOption.Write([
-                    new() { Label = "Data Structures", Query = "algorithm analysis", Course = "data-structures", Refs = refs, Done = true,
+                    new() { Label = "Data Structures", Query = "algorithm analysis", Course = "data-structures", Refs = refs.ToArray(), Done = true,
                         FoundCommentary = "AI prepared the Data Structures reply.", EmptyCommentary = "AI prepared an empty Data Structures reply.",
                         MoreCommentary = ["AI prepared the next batch.", "AI prepared another batch.", "AI prepared one more batch."] },
                     new() { Label = "Efficient Algorithms", Query = "zzqx nothing matches this", Course = "efficient-algorithms",
@@ -549,7 +551,7 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
         JsonObject Option(string label, string course) => new()
         {
-            ["label"] = label, ["course"] = course, ["query"] = "", ["material_type"] = "other", ["result_kind"] = "files",
+            ["label"] = label, ["course"] = course, ["query"] = "", ["material_type"] = "other", ["want"] = "files",
             ["found_commentary"] = $"Model prepared results for {label}.",
             ["empty_commentary"] = $"Model prepared no results for {label}.",
             ["more_commentary"] = new JsonArray("Prepared next.", "Prepared another.", "Prepared later."),
@@ -578,7 +580,7 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
         JsonObject Option(string label, string course) => new()
         {
-            ["label"] = label, ["course"] = course, ["query"] = "", ["material_type"] = "other", ["result_kind"] = "files",
+            ["label"] = label, ["course"] = course, ["query"] = "", ["material_type"] = "other", ["want"] = "files",
             ["found_commentary"] = "", ["empty_commentary"] = "", ["more_commentary"] = new JsonArray("Only one line."),
         };
         // The model leaves the drafts out, adds a blank option, and its repair call returns nothing useful.
@@ -616,10 +618,12 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
     {
         var student = await app.SignInAsync("25-8894");
         var chatId = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        await app.SignInAsync(ApiFactory.Uploader);
+        var older = await ReportMaterialAsync();
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDb>();
-            db.Messages.Add(new Message { ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Earlier results", More = [$"p:{Guid.NewGuid()}"] });
+            db.Messages.Add(new Message { ConversationId = Guid.Parse(chatId), Role = "bot", Text = "Earlier results", More = [ResultRefs.Region(older.RegionId)] });
             await db.SaveChangesAsync();
         }
         app.ChatModel.EnqueueText("{\"lines\":[\"Model prepared the older follow-up.\"]}");
@@ -716,17 +720,18 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         {
             var refs = new JsonArray((last?.Results ?? []).Take(1).Select(r => (JsonNode)r).ToArray());
             app.ChatModel.EnqueueTool("reply", new JsonObject { ["commentary"] = $"Model reply {app.ChatModel.RequestCount + 1}.",
-                ["result_refs"] = refs, ["refused"] = true, ["more_commentary"] = new JsonArray() });
+                ["result_refs"] = refs, ["asked_for"] = "questions", ["refused"] = true, ["more_commentary"] = new JsonArray() });
             return;
         }
         var courses = await db.Courses.AsNoTracking().ToListAsync();
         var course = Heuristics.MatchCourse(lower, courses);
-        var args = new JsonObject { ["query"] = text };
+        var want = lower.Contains("full") && lower.Contains("papers") ? MaterialWants.Files : Heuristics.AskedKind(text) ?? MaterialWants.Questions;
+        var args = new JsonObject { ["query"] = text, ["want"] = want };
         if (course is not null) args["course"] = course.Slug;
         if (Heuristics.MaterialType(lower) is { } type) args["material_type"] = type;
         if (Heuristics.Year(text) is { } year) args["year"] = year;
         if (Heuristics.Label(text) is { } label) args["assessment_label"] = label;
-        if (lower.Contains("full") && lower.Contains("papers")) args["result_kind"] = "files";
+
         app.ChatModel.EnqueueTool("search_material", args);
         app.ChatModel.Enqueue(request =>
         {
@@ -735,7 +740,7 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
             var result = JsonNode.Parse(tool["content"]!.GetValue<string>())!;
             var refs = new JsonArray(result["results"]!.AsArray().Take(12).Select(r => (JsonNode)r!["ref"]!.GetValue<string>()).ToArray());
             return ScriptedChatModel.Tool("reply", new JsonObject { ["commentary"] = $"Model reply {app.ChatModel.RequestCount}.",
-                ["result_refs"] = refs, ["refused"] = false,
+                ["result_refs"] = refs, ["asked_for"] = want, ["refused"] = false,
                 ["more_commentary"] = new JsonArray("AI prepared batch one.", "AI prepared batch two.", "AI prepared batch three.") });
         });
     }

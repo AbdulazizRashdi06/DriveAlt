@@ -1,4 +1,5 @@
 using DriveAlt.Api.Data;
+using DriveAlt.Api.Files;
 using Microsoft.EntityFrameworkCore;
 
 namespace DriveAlt.Api.Search;
@@ -41,11 +42,22 @@ public sealed record ResultCard(
 public static class ResultRefs
 {
     public static bool TryParseFile(string r, out Guid id)
+        => TryParseFile(r, out id, out _);
+
+    public static bool TryParseFile(string r, out Guid id, out int? page)
     {
         id = Guid.Empty;
-        return r.StartsWith("f:") && Guid.TryParse(r[2..], out id);
+        page = null;
+        if (!r.StartsWith("f:")) return false;
+        var parts = r[2..].Split("?page=", StringSplitOptions.None);
+        if (parts.Length > 2 || !Guid.TryParse(parts[0], out id)) return false;
+        if (parts.Length == 1) return true;
+        if (!int.TryParse(parts[1], out var n) || n < 1) return false;
+        page = n;
+        return true;
     }
-    public static string File(Guid id) => "f:" + id;
+    // Page hints survive saved chats/options without a schema change. Legacy bare refs still use the cover.
+    public static string File(Guid id, int page = 1) => "f:" + id + (page > 1 ? $"?page={page}" : "");
     public static bool TryParse(string r, out bool isRegion, out Guid id)
     {
         isRegion = r.StartsWith("r:");
@@ -59,6 +71,50 @@ public static class ResultRefs
 
 public sealed class ResultCards(AppDb db)
 {
+    /// <summary>Classifies stored refs using source metadata, never the model's claimed result kind.</summary>
+    public async Task<Dictionary<string, string>> KindsAsync(IReadOnlyCollection<string> refs, CancellationToken ct)
+    {
+        if (refs.Count == 0) return [];
+        var fileIds = refs.Select(r => ResultRefs.TryParseFile(r, out var id) ? id : Guid.Empty).ToList();
+        var pageIds = refs.Select(r => ResultRefs.TryParse(r, out var region, out var id) && !region ? id : Guid.Empty).ToList();
+        var regionIds = refs.Select(r => ResultRefs.TryParse(r, out var region, out var id) && region ? id : Guid.Empty).ToList();
+        var files = await db.Files.AsNoTracking().Where(f => fileIds.Contains(f.Id) && FileStatuses.Visible.Contains(f.Status))
+            .ToDictionaryAsync(f => f.Id, f => f.MaterialType == MaterialTypes.Slides ? MaterialWants.Slides : MaterialWants.Files, ct);
+        var pages = await db.Pages.AsNoTracking().Where(p => pageIds.Contains(p.Id) && FileStatuses.Visible.Contains(p.File!.Status))
+            .Select(p => new { p.Id, p.Kind, p.File!.MaterialType, HasQuestions = p.Regions.Any(r => r.Label == RegionLabels.Question) }).ToListAsync(ct);
+        var pageKinds = pages.ToDictionary(p => p.Id, p => p.Kind switch
+        {
+            PageKinds.Slide => MaterialWants.SlidePages,
+            PageKinds.Notes => MaterialWants.NotesPages,
+            PageKinds.Assessment when !p.HasQuestions && p.MaterialType is not (MaterialTypes.Slides or MaterialTypes.Notes) => MaterialWants.Questions,
+            _ => MaterialWants.None,
+        });
+        var regions = await db.Regions.AsNoTracking().Where(r => regionIds.Contains(r.Id) && r.Label == RegionLabels.Question
+            && FileStatuses.Visible.Contains(r.Page!.File!.Status) && r.Page.Kind != PageKinds.Slide && r.Page.Kind != PageKinds.Notes
+            && r.Page.File.MaterialType != MaterialTypes.Slides && r.Page.File.MaterialType != MaterialTypes.Notes)
+            .Select(r => r.Id).ToListAsync(ct);
+        var result = new Dictionary<string, string>();
+        foreach (var r in refs)
+        {
+            if (ResultRefs.TryParseFile(r, out var fid) && files.TryGetValue(fid, out var kind)) result[r] = kind;
+            else if (ResultRefs.TryParse(r, out var region, out var id))
+            {
+                if (region && regions.Contains(id)) result[r] = MaterialWants.Questions;
+                else if (!region && pageKinds.TryGetValue(id, out kind) && kind != MaterialWants.None) result[r] = kind;
+            }
+        }
+        return result;
+    }
+
+    public async Task<List<string>> FilterAsync(IEnumerable<string> refs, string want, CancellationToken ct)
+    {
+        if (!MaterialWants.IsSearch(want)) return [];
+        var candidates = refs.Distinct().ToList();
+        var kinds = await KindsAsync(candidates, ct);
+        return candidates.Where(r => kinds.GetValueOrDefault(r) == want)
+            .DistinctBy(r => ResultRefs.TryParseFile(r, out var id) ? ResultRefs.File(id) : r).ToList();
+    }
+
     public static string Version(Page p) => (p.EditedAt ?? p.File?.UpdatedAt ?? DateTime.UnixEpoch).Ticks.ToString("x");
 
     private static string NormalizeQ(string? s) =>
@@ -117,7 +173,12 @@ public sealed class ResultCards(AppDb db)
             .Where(p => fileIds.Contains(p.FileId) && FileStatuses.Visible.Contains(p.File!.Status))
             .GroupBy(p => p.FileId).Select(g => new { FileId = g.Key, PageId = g.OrderBy(p => p.Number).First().Id })
             .ToDictionaryAsync(c => c.FileId, c => c.PageId, ct);
-        var allPageIds = pageIds.Concat(regionPages).Concat(covers.Values).Distinct().ToList();
+        var requestedNumbers = refs.Select(r => ResultRefs.TryParseFile(r, out _, out var n) ? n : null)
+            .OfType<int>().Distinct().ToList();
+        var requestedPages = await db.Pages.AsNoTracking()
+            .Where(p => fileIds.Contains(p.FileId) && requestedNumbers.Contains(p.Number) && FileStatuses.Visible.Contains(p.File!.Status))
+            .Select(p => new { p.FileId, p.Number, p.Id }).ToListAsync(ct);
+        var allPageIds = pageIds.Concat(regionPages).Concat(covers.Values).Concat(requestedPages.Select(p => p.Id)).Distinct().ToList();
         var pages = await db.Pages.AsNoTracking().Include(p => p.File).ThenInclude(f => f!.Course).Include(p => p.Regions)
             .Where(p => allPageIds.Contains(p.Id))
             .AsSplitQuery()
@@ -135,9 +196,11 @@ public sealed class ResultCards(AppDb db)
         var cards = new List<ResultCard>();
         foreach (var r in refs.Distinct())
         {
-            if (ResultRefs.TryParseFile(r, out var fid))
+            if (ResultRefs.TryParseFile(r, out var fid, out var number))
             {
-                if (covers.TryGetValue(fid, out var coverId) && pages.TryGetValue(coverId, out var first))
+                var coverId = number is { } n ? requestedPages.FirstOrDefault(p => p.FileId == fid && p.Number == n)?.Id ?? Guid.Empty
+                    : covers.GetValueOrDefault(fid);
+                if (pages.TryGetValue(coverId, out var first))
                     cards.Add(Build(r, "file", first, null, null, null, false, null));
                 continue;
             }
