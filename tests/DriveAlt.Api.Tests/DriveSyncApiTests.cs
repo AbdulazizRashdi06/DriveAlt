@@ -126,6 +126,34 @@ public partial class ApiTests
             await admin.PutAsJsonAsync("/api/admin/drive-sync/", new { enabled = false });
         }
     }
+
+    [Fact]
+    public async Task Folder_files_are_listed_with_their_upload_status()
+    {
+        var admin = await app.SignInAsync(ApiFactory.Uploader);
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await app.SignInAsync("24-7711")).GetAsync("/api/admin/drive-sync/folders/list-ds/files")).StatusCode);
+        app.Drive.Folders[DriveImporter.Year2FolderId] = [new("list-sem", "semester 1", "folder", null)];
+        app.Drive.Folders["list-sem"] = [new("list-ds", "Data Structures", "folder", null)];
+        app.Drive.Folders["list-ds"] = [new("list-sub", "Quizzes", "folder", null), new("list-legacy", "b legacy.pdf", "file", null),
+            new("list-new", "c new.pdf", "file", null), new("list-video", "a lecture.mp4", "file", null)];
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+        var uploader = await db.Users.SingleAsync(u => u.UniId == ApiFactory.Uploader);
+        var legacy = new DocFile { Title = "Legacy import", OriginalName = "b legacy.pdf", SourceKind = SourceKinds.Pdf,
+            Sha256 = Guid.NewGuid().ToString(), SourceRef = "gdrive:list-legacy", UploadedById = uploader.Id };
+        db.Files.Add(legacy);
+        await db.SaveChangesAsync();
+        await admin.PostAsJsonAsync("/api/admin/drive-sync/scan", new { });
+        await scope.ServiceProvider.GetRequiredService<DriveSyncService>().RunOnceAsync(default);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/admin/drive-sync/folders/unknown/files")).StatusCode);
+        var files = (await admin.GetFromJsonAsync<JsonArray>("/api/admin/drive-sync/folders/list-ds/files"))!;
+        Assert.Equal(["a lecture.mp4", "b legacy.pdf", "c new.pdf"], files.Select(f => f!["name"]!.GetValue<string>()));
+        Assert.False(files[0]!["importable"]!.GetValue<bool>());
+        Assert.Equal(legacy.Id.ToString(), files[1]!["fileId"]!.GetValue<string>());
+        Assert.Null(files[2]!["fileId"]);
+        Assert.True(files[2]!["importable"]!.GetValue<bool>());
+    }
 }
 
 public class DriveSyncTests
