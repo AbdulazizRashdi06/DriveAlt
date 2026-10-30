@@ -47,7 +47,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
 {
     public bool Online => gemini.Enabled || deepseek.Enabled || codex.Enabled;
 
-    private const string ExtractInstructions = """
+    internal const string ExtractInstructions = """
         You read one page of university course material (lecture slides, past exam papers, quizzes, exercise sheets, labs, notes)
         for a search index. The page may be a clean PDF render or a phone photo (possibly rotated, skewed or with handwriting).
 
@@ -117,13 +117,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         """)!;
 
     // ---------- Codex (GPT): pixel boxes, which GPT models place far better than Gemini's 0–1000 format ----------
-
-    private const string NormalizedBoxLine = "box_2d is [ymin, xmin, ymax, xmax] normalized to 0–1000.";
     private const string CodexSystem = "You read pages of university course material for a search index.";
-
-    internal static string PixelBoxInstructions(int width, int height) => ExtractInstructions
-        .Replace(NormalizedBoxLine, $"bbox is [x0, y0, x1, y1] in pixels of this image, which is {width}x{height} pixels with the origin at the top-left.")
-        .Replace("box_2d", "bbox");
 
     private static JsonObject Nullable(string type) => new() { ["type"] = new JsonArray(type, "null") };
 
@@ -136,30 +130,6 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
     };
 
     private static JsonObject Enum(params string[] values) => new() { ["type"] = "string", ["enum"] = new JsonArray(values.Select(v => (JsonNode)v).ToArray()) };
-
-    private static readonly JsonObject CodexExtractSchema = Strict(new JsonObject
-    {
-        ["page_kind"] = Enum("slide", "assessment", "notes", "other"),
-        ["text"] = new JsonObject { ["type"] = "string" },
-        ["summary"] = new JsonObject { ["type"] = "string" },
-        ["topic"] = new JsonObject { ["type"] = "string" },
-        ["tags"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
-        ["material_type"] = Enum("slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"),
-        ["academic_year"] = Nullable("integer"),
-        ["assessment_label"] = Nullable("string"),
-        ["course_guess"] = Nullable("string"),
-        ["regions"] = new JsonObject
-        {
-            ["type"] = "array",
-            ["items"] = Strict(new JsonObject
-            {
-                ["label"] = Enum("question"),
-                ["bbox"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
-                ["question_number"] = Nullable("string"),
-                ["text"] = new JsonObject { ["type"] = "string" },
-            }),
-        },
-    });
 
     private static readonly JsonObject CodexSuggestSchema = Strict(new JsonObject
     {
@@ -220,14 +190,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
             The uploader filed this as: course "{ctx.CourseName}", type "{ctx.MaterialType}", title "{ctx.Title}"{(ctx.Year is { } y ? $", year {y}" : "")}{(ctx.AssessmentLabel is { } l ? $", label \"{l}\"" : "")}. This is page {ctx.PageNumber} of {ctx.PageCount}.
             {(string.IsNullOrWhiteSpace(embeddedText) ? "" : $"The PDF text layer for this page (may be incomplete or out of order):\n\"\"\"\n{Truncate(embeddedText, 6000)}\n\"\"\"")}
             """;
-        if (codex.Enabled)
-        {
-            var (w, h) = ImageOps.Identify(jpeg);
-            var codexPrompt = prompt.Replace(ExtractInstructions, PixelBoxInstructions(w, h));
-            var answer = await codex.JsonAsync(CodexSystem, codexPrompt, jpeg, CodexExtractSchema, ct);
-            var node = Json.Parse(answer) ?? throw new InvalidOperationException("Codex returned non-JSON extraction: " + Truncate(answer, 200));
-            return FromJson(PixelBoxesToNormalized(node, w, h), answer);
-        }
+        // With Codex configured, pages go through ReadBatchAsync (MaterialAi.Batches.cs) instead.
         if (deepseek.Enabled)
         {
             var text = await DeepSeekJsonAsync(jpeg, prompt, ExtractSchema, ct);
@@ -318,7 +281,7 @@ public sealed partial class MaterialAi(GeminiClient gemini, DeepSeekClient deeps
         };
         try
         {
-            var j = Json.Parse(codex.Enabled ? await codex.BatchJsonAsync(CodexSystem, prompt, [jpeg], CodexSuggestSchema, ct)
+            var j = Json.Parse(codex.Enabled ? await codex.JsonAsync(CodexSystem, prompt, jpeg, CodexSuggestSchema, ct)
                 : deepseek.Enabled ? await DeepSeekJsonAsync(jpeg, prompt, SuggestSchema, ct)
                 : GeminiClient.CandidateText(await gemini.GenerateAsync(body, ct)));
             if (j is null) return null;

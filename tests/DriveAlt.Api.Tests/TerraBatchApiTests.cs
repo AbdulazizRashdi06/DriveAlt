@@ -52,7 +52,7 @@ public partial class ApiTests
     }
 
     [Fact]
-    public async Task Flagged_Terra_pages_stay_unread_and_can_be_corrected_in_Inspect_without_repeating_AI()
+    public async Task Flagged_Terra_pages_keep_their_boxes_and_do_not_stop_the_file()
     {
         var client = await app.SignInAsync(ApiFactory.Uploader);
         var id = await BatchFileAsync(2);
@@ -67,24 +67,23 @@ public partial class ApiTests
         {
             (await client.PostAsync($"/api/files/{id}/process", null)).EnsureSuccessStatusCode();
             await app.DrainJobsAsync();
+            Assert.Equal(1, calls);
             using (var scope = app.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDb>();
-                Assert.Equal("failed", (await db.Jobs.SingleAsync(j => j.FileId == id)).State);
-                Assert.Equal(1, await db.Pages.CountAsync(p => p.FileId == id && p.Extracted));
-                var flagged = await db.Pages.SingleAsync(p => p.FileId == id && p.Number == 1);
-                Assert.Empty(flagged.Text);
-                Assert.StartsWith("Terra review required", flagged.Error);
+                Assert.Equal(2, await db.Pages.CountAsync(p => p.FileId == id && p.Extracted));
+                var flagged = await db.Pages.Include(p => p.Regions).SingleAsync(p => p.FileId == id && p.Number == 1);
+                Assert.NotEmpty(flagged.Regions);
+                Assert.Equal(ProcessingService.ReviewFlag, flagged.Error);
             }
-            var inspect = await client.GetFromJsonAsync<JsonObject>($"/api/inspect/files/{id}");
-            Assert.Equal(2, inspect!["pages"]!.AsArray().Count);
-            var pageId = inspect["pages"]!.AsArray().Single(p => p!["number"]!.GetValue<int>() == 1)!["id"]!.GetValue<string>();
-            (await client.PutAsJsonAsync($"/api/inspect/pages/{pageId}", new { text = "Question about queues", kind = "assessment" })).EnsureSuccessStatusCode();
-            (await client.PostAsync($"/api/files/{id}/process", null)).EnsureSuccessStatusCode();
-            await app.DrainJobsAsync();
-            Assert.Equal(1, calls);
             var detail = await client.GetFromJsonAsync<JsonObject>($"/api/files/{id}");
             Assert.Equal("ready", detail!["file"]!["status"]!.GetValue<string>());
+            var inspect = await client.GetFromJsonAsync<JsonObject>($"/api/inspect/files/{id}");
+            var page1 = inspect!["pages"]!.AsArray().Single(p => p!["number"]!.GetValue<int>() == 1)!;
+            Assert.Equal(ProcessingService.ReviewFlag, page1["error"]!.GetValue<string>());
+            (await client.PutAsJsonAsync($"/api/inspect/pages/{page1["id"]!.GetValue<string>()}", new { text = "Question about queues", kind = "assessment" })).EnsureSuccessStatusCode();
+            inspect = await client.GetFromJsonAsync<JsonObject>($"/api/inspect/files/{id}");
+            Assert.Null(inspect!["pages"]!.AsArray().Single(p => p!["number"]!.GetValue<int>() == 1)!["error"]);
         }
         finally { app.Material.BatchHandler = null; }
     }

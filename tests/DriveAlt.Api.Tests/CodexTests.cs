@@ -46,19 +46,11 @@ public class CodexTests
     [Fact]
     public void Extraction_prompt_lets_crops_show_answers_but_never_write_them()
     {
-        var p = MaterialAi.PixelBoxInstructions(586, 760);
+        var p = MaterialAi.ExtractInstructions;
         Assert.Contains("answers included", p);
         Assert.DoesNotContain("Do NOT include the answer", p);
         Assert.Contains("never write out, paraphrase or hint at an answer", p);
-    }
-
-    [Fact]
-    public void Codex_prompt_asks_for_pixel_boxes()
-    {
-        var p = MaterialAi.PixelBoxInstructions(586, 760);
-        Assert.Contains("bbox is [x0, y0, x1, y1] in pixels of this image, which is 586x760 pixels", p);
-        Assert.DoesNotContain("box_2d", p);
-        Assert.DoesNotContain("normalized to 0–1000", p);
+        Assert.Contains("Answers may be SHOWN in the crop, never WRITTEN", MaterialAi.BatchInstructions);
     }
 
     [Fact]

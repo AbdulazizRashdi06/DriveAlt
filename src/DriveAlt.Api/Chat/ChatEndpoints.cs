@@ -83,7 +83,8 @@ public static class ChatEndpoints
                     m => Send("message", new { conversation = new ConversationDto(convo.Id, convo.Title, convo.UpdatedAt), message = m }),
                     (messageId, options) => Send("options", new { messageId, options })), ct);
             }
-            catch (Exception e) when (e is not OperationCanceledException)
+            // An HttpClient timeout is a TaskCanceledException too; only the student leaving ends the stream silently.
+            catch (Exception e) when (!ct.IsCancellationRequested)
             {
                 app.Logger.LogWarning("Chat reply failed: {ErrorType}", e.GetType().Name);
                 await Send("error", new { error = "The AI couldn't complete this reply. Please try again." });
