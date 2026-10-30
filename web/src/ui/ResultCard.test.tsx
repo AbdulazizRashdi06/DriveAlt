@@ -24,11 +24,20 @@ describe('Result cards respect the requested material', () => {
     render(<MemoryRouter><ResultCard card={file} index={0} all={[file]} /></MemoryRouter>)
     expect(screen.getByText('Full file')).toBeTruthy()
     expect(screen.getByText('7 pages')).toBeTruthy()
-    expect(screen.getByRole('link', { name: /^Open file$/ }).getAttribute('href')).toBe('/files/file-id')
+    expect(screen.getByRole('link', { name: /^Open file$/ }).getAttribute('href')).toBe('/files/file-id?page=1')
     expect(screen.getByRole('link', { name: 'Download full file DS Midterm' }).getAttribute('href')).toBe('/api/files/file-id/download')
     expect(screen.queryByRole('button', { name: 'Open full page' })).toBeNull()
     fireEvent.click(screen.getByRole('link', { name: 'Open full file DS Midterm' }))
     expect(openViewer).not.toHaveBeenCalled()
+  })
+
+  it('opens a complete slide deck at its best matching slide', () => {
+    const deck = { ...file, materialType: 'slides', fileTitle: 'Queues lecture', pageNumber: 5 } as Card
+    render(<MemoryRouter><ResultCard card={deck} index={0} all={[deck]} /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: /^Open file$/ }).getAttribute('href')).toBe('/files/file-id?page=5')
+    expect(screen.getByRole('link', { name: 'Open full file Queues lecture' }).getAttribute('href')).toBe('/files/file-id?page=5')
+    expect(screen.getByRole('img').getAttribute('alt')).toBe('Page 5 preview of Queues lecture')
+    expect(screen.getByRole('link', { name: 'Download full file Queues lecture' }).getAttribute('href')).toBe('/api/files/file-id/download')
   })
 
   it('keeps question results in the crop/page viewer, excluding any file cards', () => {

@@ -15,7 +15,9 @@ public sealed record SearchQuery(
     string? AssessmentLabel = null,
     string? Tag = null,
     Guid? FileId = null,
-    int Limit = 12);
+    int Limit = 12,
+    string? PageKind = null,
+    bool QuestionsOnly = false);
 
 public sealed record SearchHit(string Ref, Guid PageId, Guid? RegionId, double Score);
 
@@ -104,6 +106,10 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
             var recent = await pages.OrderByDescending(p => p.File!.AcademicYear).ThenBy(p => p.File!.Title).ThenBy(p => p.Number)
                 .Select(p => new { p.Id }).Take(Candidates).ToListAsync(ct);
             lists.Add((recent.Select(p => ("p:" + p.Id, p.Id, (Guid?)null)).ToList(), 1.0));
+            var recentRegions = await regions.OrderByDescending(r => r.Page!.File!.AcademicYear)
+                .ThenBy(r => r.Page!.File!.Title).ThenBy(r => r.Page!.Number).ThenBy(r => r.Y)
+                .Select(r => new { r.Id, r.PageId }).Take(Candidates).ToListAsync(ct);
+            lists.Add((recentRegions.Select(r => ("r:" + r.Id, r.PageId, (Guid?)r.Id)).ToList(), 1.1));
         }
 
         var scores = new Dictionary<string, (Guid PageId, Guid? RegionId, double Score)>();
@@ -162,12 +168,15 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
         var selectedCourses = await courseQuery.ToListAsync(ct);
         var topic = FileTopic(q.Text, selectedCourses, q.AssessmentLabel);
         Dictionary<Guid, double>? scores = null;
+        var bestPages = new Dictionary<Guid, Guid>();
         if (topic.Length > 0)
         {
             var hits = await SearchAsync(q with { Text = topic, Limit = Candidates * 2 }, ct);
             var pageIds = hits.Select(h => h.PageId).Distinct().ToList();
             var pageFiles = await db.Pages.AsNoTracking().Where(p => pageIds.Contains(p.Id)).Select(p => new { p.Id, p.FileId }).ToDictionaryAsync(p => p.Id, ct);
             scores = hits.Where(h => pageFiles.ContainsKey(h.PageId)).GroupBy(h => pageFiles[h.PageId].FileId).ToDictionary(g => g.Key, g => g.Max(h => h.Score));
+            bestPages = hits.Where(h => pageFiles.ContainsKey(h.PageId)).GroupBy(h => pageFiles[h.PageId].FileId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(h => h.Score).First().PageId);
             // An original can be found by its filename even while its AI/text indexing is held.
             var titleMatches = await files.Where(f => EF.Functions.ILike(f.Title, $"%{topic}%")).Select(f => f.Id).Take(Candidates).ToListAsync(ct);
             foreach (var id in titleMatches) scores[id] = Math.Max(scores.GetValueOrDefault(id), 1);
@@ -176,8 +185,11 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
         }
         var candidates = await files.OrderByDescending(f => f.AcademicYear).ThenBy(f => f.Title).Take(scores is null ? q.Limit : scores.Count)
             .Select(f => new { f.Id, Cover = f.Pages.OrderBy(p => p.Number).First().Id }).ToListAsync(ct);
+        var selectedPages = candidates.Select(f => bestPages.GetValueOrDefault(f.Id, f.Cover)).ToList();
+        var numbers = await db.Pages.AsNoTracking().Where(p => selectedPages.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Number, ct);
         return candidates.OrderByDescending(f => scores?.GetValueOrDefault(f.Id) ?? 0).Take(q.Limit)
-            .Select(f => new SearchHit(ResultRefs.File(f.Id), f.Cover, null, scores?.GetValueOrDefault(f.Id) ?? 0)).ToList();
+            .Select(f => new SearchHit(ResultRefs.File(f.Id, numbers[bestPages.GetValueOrDefault(f.Id, f.Cover)]),
+                bestPages.GetValueOrDefault(f.Id, f.Cover), null, scores?.GetValueOrDefault(f.Id) ?? 0)).ToList();
     }
 
     private static readonly HashSet<string> FileBoilerplate = new(StringComparer.OrdinalIgnoreCase)
@@ -200,6 +212,10 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
     private static IQueryable<Page> FilterPages(IQueryable<Page> pages, SearchQuery q)
     {
         pages = pages.Where(p => FileStatuses.Visible.Contains(p.File!.Status));
+        if (q.PageKind is { } kind) pages = pages.Where(p => p.Kind == kind);
+        if (q.QuestionsOnly) pages = pages.Where(p => p.Kind == PageKinds.Assessment
+            && p.File!.MaterialType != MaterialTypes.Slides && p.File.MaterialType != MaterialTypes.Notes
+            && !p.Regions.Any(r => r.Label == RegionLabels.Question));
         if (q.FileId is { } fid) pages = pages.Where(p => p.FileId == fid);
         if (q.CourseIds is { Count: > 0 } cs) pages = pages.Where(p => cs.Contains(p.File!.CourseId!.Value));
         if (q.Types is { Count: > 0 } ts) pages = pages.Where(p => ts.Contains(p.File!.MaterialType));
@@ -213,6 +229,10 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
     private static IQueryable<Region> FilterRegions(IQueryable<Region> regions, SearchQuery q)
     {
         regions = regions.Where(r => r.Label == RegionLabels.Question && FileStatuses.Visible.Contains(r.Page!.File!.Status));
+        // Specific page requests never return crops. Question searches exclude slide/notes crops too.
+        if (q.PageKind is not null) return regions.Where(r => false);
+        if (q.QuestionsOnly) regions = regions.Where(r => r.Page!.Kind != PageKinds.Slide && r.Page.Kind != PageKinds.Notes
+            && r.Page.File!.MaterialType != MaterialTypes.Slides && r.Page.File.MaterialType != MaterialTypes.Notes);
         if (q.FileId is { } fid) regions = regions.Where(r => r.Page!.FileId == fid);
         if (q.CourseIds is { Count: > 0 } cs) regions = regions.Where(r => cs.Contains(r.Page!.File!.CourseId!.Value));
         if (q.Types is { Count: > 0 } ts) regions = regions.Where(r => ts.Contains(r.Page!.File!.MaterialType));
