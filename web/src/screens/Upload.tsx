@@ -214,7 +214,8 @@ export function Upload() {
   const onPick = (e: ChangeEvent<HTMLInputElement>) => { void send(Array.from(e.target.files ?? [])); e.target.value = '' }
   const onDrop = (e: DragEvent) => { e.preventDefault(); setOver(false); void send(Array.from(e.dataTransfer.files)) }
 
-  const list = uploads.data ?? []
+  // Files still to do (waiting, processing or failed) first; finished ones below. Newest first within each.
+  const list = [...(uploads.data ?? [])].sort((a, b) => Number(a.status === 'ready') - Number(b.status === 'ready'))
   const waiting = list.filter(f => f.status === 'uploaded' && f.courseId !== null)
   const active = list.filter(f => f.status !== 'ready' && f.status !== 'failed').length
 
