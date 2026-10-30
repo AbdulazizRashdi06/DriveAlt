@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, count, TYPE_SINGULAR, type FileDto, type InspectPage, type RegionDto } from '../lib/api'
+import { api, count, TYPE_LABELS, TYPE_SINGULAR, type Course, type FileDto, type InspectPage, type RegionDto } from '../lib/api'
 import { useApp } from '../lib/app'
 import { fromCorners, isUsable, moveBox, relPoint, resizeBox, type Handle, type NBox } from '../lib/boxes'
 import { FileBadge, fileMeta } from './Browse'
-import { IconClose, IconExternal, IconFrame, IconLeft, IconPlus, IconPointer, IconRefresh, IconRight, IconSearch, IconTrash } from '../ui/Icons'
+import { IconClose, IconExternal, IconFolder, IconFrame, IconLeft, IconPlus, IconPointer, IconRefresh, IconRight, IconSearch, IconTrash } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
 
 type Label = RegionDto['label']
@@ -325,14 +325,36 @@ function InspectFile({ id }: { id: string }) {
   )
 }
 
+/** Where a file sits in the drive: Semester › (Semester 1 group) › Course › Type › its own folders. */
+function treePath(f: FileDto, courses: Map<number, Course>): string[] {
+  const c = f.courseId === null ? undefined : courses.get(f.courseId)
+  if (!c) return ['No course', TYPE_LABELS[f.materialType], ...(f.folder?.split('/').filter(Boolean) ?? [])]
+  return [`Semester ${c.semester}`, ...(c.semester === 1 && c.group ? [c.group] : []), c.name, TYPE_LABELS[f.materialType],
+    ...(f.folder?.split('/').filter(Boolean) ?? [])]
+}
+
 function InspectList() {
   const [filter, setFilter] = useState('')
+  const [params, setParams] = useSearchParams()
+  const path = useMemo(() => params.get('path')?.split('/').filter(Boolean) ?? [], [params])
+  const setPath = (p: string[]) => setParams(p.length ? { path: p.join('/') } : {})
   const q = useQuery({ queryKey: ['uploads', 'all'], queryFn: () => api.get<FileDto[]>('/api/uploads?all=true') })
-  const list = useMemo(() => {
-    const f = filter.trim().toLowerCase()
-    return (q.data ?? []).filter(x => x.status === 'ready' || x.pageCount > 0)
-      .filter(x => !f || `${x.title} ${x.courseName} ${x.originalName}`.toLowerCase().includes(f))
-  }, [q.data, filter])
+  const courses = useQuery({ queryKey: ['courses'], queryFn: () => api.get<Course[]>('/api/courses') })
+  const byCourse = useMemo(() => new Map((courses.data ?? []).map(c => [c.id, c])), [courses.data])
+  const all = useMemo(() => (q.data ?? []).filter(x => x.status === 'ready' || x.pageCount > 0)
+    .map(f => ({ f, p: treePath(f, byCourse) })), [q.data, byCourse])
+  const f = filter.trim().toLowerCase()
+  const under = all.filter(x => path.every((s, i) => x.p[i] === s))
+  // Searching lists matching files anywhere; otherwise this folder's subfolders, then its own files.
+  const files = f ? all.filter(x => `${x.f.title} ${x.f.courseName} ${x.f.originalName}`.toLowerCase().includes(f))
+    : under.filter(x => x.p.length === path.length)
+  const folders = f ? [] : [...under.filter(x => x.p.length > path.length).reduce((m, x) => {
+    const name = x.p[path.length]
+    const e = m.get(name) ?? { name, files: 0, issues: 0 }
+    e.files++; if (x.f.error) e.issues++
+    return m.set(name, e)
+  }, new Map<string, { name: string; files: number; issues: number }>()).values()]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
@@ -343,17 +365,28 @@ function InspectList() {
         <div className="search" style={{ flex: '0 1 360px', minWidth: 240 }}>
           <IconSearch size={20} />
           <label htmlFor="if" className="sr">Filter files</label>
-          <input id="if" type="search" placeholder="Filter files" value={filter} onChange={e => setFilter(e.target.value)} />
+          <input id="if" type="search" placeholder="Search all files" value={filter} onChange={e => setFilter(e.target.value)} />
         </div>
       </div>
+      {!f && <nav aria-label="Folder path" className="drive-sync-crumbs">
+        <button type="button" className="crumb" onClick={() => setPath([])}>Year 2</button>
+        {path.map((p, i) => <span key={i}> › <button type="button" className="crumb" onClick={() => setPath(path.slice(0, i + 1))}>{p}</button></span>)}
+      </nav>}
       {q.isLoading && [0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 64 }} />)}
-      {q.data && list.length === 0 && <div className="empty"><Mascot size={84} />Nothing to inspect yet. <Link className="candy" to="/upload">Upload something</Link></div>}
+      {q.data && all.length === 0 && <div className="empty"><Mascot size={84} />Nothing to inspect yet. <Link className="candy" to="/upload">Upload something</Link></div>}
+      {q.data && all.length > 0 && files.length === 0 && folders.length === 0 && <div className="empty"><Mascot size={84} />{f ? 'No files match.' : 'Nothing in this folder.'}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: 10 }}>
-        {list.map((f, i) => (
-          <Link key={f.id} to={`/inspect/${f.id}`} className="file" style={{ animation: `pop-in 300ms var(--ease-out) ${Math.min(i, 10) * 40}ms both` }}>
-            <FileBadge file={f} />
-            <span className="meta"><b title={f.title}>{f.title}</b><span>{[f.courseName, fileMeta(f)].filter(Boolean).join(' · ')}</span></span>
-            {f.error && <span className="badge" title={f.error}>!</span>}
+        {folders.map(d => (
+          <button key={d.name} type="button" className="file folder" onClick={() => setPath([...path, d.name])}>
+            <span className="ftype" style={{ background: '#FFD34D' }}><IconFolder size={20} /></span>
+            <span className="meta"><b title={d.name}>{d.name}</b><span>{count(d.files, 'file')}{d.issues ? ` · ${d.issues} with problems` : ''}</span></span>
+          </button>
+        ))}
+        {files.map(({ f: x, p }, i) => (
+          <Link key={x.id} to={`/inspect/${x.id}`} className="file" style={{ animation: `pop-in 300ms var(--ease-out) ${Math.min(i, 10) * 40}ms both` }}>
+            <FileBadge file={x} />
+            <span className="meta"><b title={x.title}>{x.title}</b><span>{(f ? [p.join(' › ')] : [fileMeta(x)]).filter(Boolean).join(' · ')}</span></span>
+            {x.error && <span className="badge" title={x.error}>!</span>}
           </Link>
         ))}
       </div>

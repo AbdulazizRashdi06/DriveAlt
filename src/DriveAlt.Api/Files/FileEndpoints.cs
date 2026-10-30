@@ -130,7 +130,8 @@ public static class FileEndpoints
             var uid = http.User.RequiredUserId();
             var q = db.Files.AsNoTracking().Include(f => f.Course).AsQueryable();
             if (all != true) q = q.Where(f => f.UploadedById == uid);
-            var files = await q.OrderByDescending(f => f.CreatedAt).Take(200).ToListAsync(ct);
+            // Inspect (all=true) browses the whole drive as a tree, so it needs every file, not just the latest 200.
+            var files = await q.OrderByDescending(f => f.CreatedAt).Take(all == true ? 10_000 : 200).ToListAsync(ct);
             return files.Select(ToDto);
         });
 
