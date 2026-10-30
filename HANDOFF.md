@@ -22,6 +22,8 @@
 **In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; full GitHub CI passed on code head `b622787`. No production change is authorized by this task.
 ## 2. State of the world
 
+**Vocabulary correction, 2026-10-30 (Codex, PR #46):** owner identified overbroad exercise/lecture keyword overrides. `AskedKind` now treats exercise(s) as questions only without PDF/sheet/file/download words (including plurals), and excludes lecture notes from slide vocabulary. Explicit questions/Q-number vocabulary still wins. Added nine vocabulary cases and three scripted-model API cases proving exercise files and notes pages remain visible. Online CI pending for this correction; do not run local tests. Earlier passing CI below validates the preceding code only.
+
 **Asked-for contract, 2026-10-30 (Codex, [PR #46](https://github.com/AbdulazizRashdi06/DriveAlt/pull/46), not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Clear question/slide vocabulary overrides the model; mixed vocabulary is left to interpretation, and specific-slide requests keep `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
 
 **Online validation:** PR #46 opened on implementation commit `26b0401`. GitHub run `41069331169`, job `124109403349`, tested head `9a23253`: `Failed: 1, Passed: 115, Skipped: 0, Total: 116`. The new contract regressions passed. The existing whole-paper test expected one held result but got nine because the new fixtures shared its Data Structures/2026 inventory (`ApiTests.cs:484`; `MaterialKindApiTests.cs:28`). New fixtures now use 2028, keeping the existing 2026 inventory isolated. The corrective code head `b622787` passed full online run `41069786816` (job `124110547778`): `Passed! - Failed: 0, Passed: 116, Skipped: 0, Total: 116`; gateway contract `tests 3 / pass 3 / fail 0`; frontend `9 passed` files / `31 passed` tests; TypeScript and Vite production build passed. Image build/deploy jobs were skipped as intended for a PR. This final documentation commit records those results without changing the tested code; its ordinary CI rerun is tracked by T3. No merge or deployment occurred.
@@ -316,6 +318,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 </details>
 
 ## 3. What was done
+
+**2026-10-30, Codex - vocabulary correction:** narrowed the exercise and lecture overrides as requested; retained topic-exercise question behavior and explicit question vocabulary. Updated tests and the AI guide; pushed for online CI. No local tests or production changes.
 
 **2026-10-30, Codex ? online validation complete:** PR #46 code head `b622787` passed run `41069786816`: all 116 backend tests, 3 gateway contracts, 31 frontend tests, TypeScript and production build. Updated the PR description and this handoff with real output; ready for owner review. No local tests resumed and no merge/deploy occurred.
 
@@ -640,7 +644,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current task:** PR #46 implementation and full online tests are complete on `b622787`; final documentation CI is watched. Hand back for owner review after it passes. Retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues" and "queues"; those live checks remain pending.
+**Current task:** PR #46 vocabulary correction is awaiting online CI; previous full pass on `b622787` is historical. Hand back for owner review after the corrected head passes. Retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues", "queues", exercise file requests and lecture notes; those live checks remain pending.
 
 **Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
 

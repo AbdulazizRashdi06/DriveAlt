@@ -215,6 +215,7 @@ Return JSON only, following the schema:
 - `want=files`: whole non-slide files, with the requested type/course/year/label filters. `notes_pages` returns only `p:` notes pages.
 - `reply.asked_for` is required and uses those five kinds plus `none`. Real region/page/file metadata determines which refs survive; the model cannot relabel them. Filtering happens before the first batch and held-back count are saved. The model's line is passed through even if all refs are dropped.
 - Offers can appear in text or `ask` chips. An offer does not authorize showing another kind. An unclear kind prompts one chip per meaning, each with its own required `want`.
+- The vocabulary cross-check treats exercise(s) as questions only without file words (`pdf`, `sheet`, `file`, `download`, including plurals). Explicit question/Q-number wording still identifies questions. Lecture notes does not identify slides; the model's declared notes/file kind remains in control.
 - Old options JSON reads `files:true` as `want=files`; other missing `want` values become `questions`. New writes use `want`. No database migration.
 - Best-page hints use `f:<file-id>?page=N` (bare legacy `f:` refs still use the cover). Hydration checks the page belongs to that file; the resulting card opens `/files/<id>?page=N` and downloads the entire original. The hint survives history, chips and Show more without adding columns.
 

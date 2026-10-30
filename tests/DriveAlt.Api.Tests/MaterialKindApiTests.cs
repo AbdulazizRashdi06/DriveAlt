@@ -13,7 +13,7 @@ public partial class ApiTests
 {
     private sealed record KindFixture(string Topic, Guid Deck, Guid Slide, Guid Crop, Guid Bare, Guid Boxed, Guid Note);
 
-    private async Task<KindFixture> KindMaterialAsync()
+    private async Task<KindFixture> KindMaterialAsync(string assessmentType = MaterialTypes.PastPaper)
     {
         await app.SignInAsync(ApiFactory.Uploader);
         using var scope = app.Services.CreateScope();
@@ -39,7 +39,7 @@ public partial class ApiTests
         var slide = Page(deck, 2, PageKinds.Slide, topic);
         // A question-shaped box in slides must not leak into question searches either.
         slide.Regions.Add(new Region { Page = slide, Label = RegionLabels.Question, Text = topic, W = .8f, H = .5f });
-        var paper = File(MaterialTypes.PastPaper);
+        var paper = File(assessmentType);
         var boxed = Page(paper, 1, PageKinds.Assessment, topic);
         var crop = new Region { Page = boxed, Label = RegionLabels.Question, Text = topic, W = .8f, H = .5f };
         boxed.Regions.Add(crop);
@@ -225,5 +225,25 @@ public partial class ApiTests
         var deck = Assert.Single(picked["results"]!.AsArray())!;
         Assert.Equal("file", deck["kind"]!.GetValue<string>());
         Assert.Equal(2, deck["pageNumber"]!.GetValue<int>());
+    }
+
+    [Theory]
+    [InlineData("Send me exercise sheet 6", "files", "exercise")]
+    [InlineData("exercise 6 pdf", "files", "exercise")]
+    [InlineData("lecture notes on hashing", "notes_pages", "notes")]
+    public async Task File_and_notes_wording_does_not_override_the_requested_kind(string text, string want, string type)
+    {
+        var f = await KindMaterialAsync(MaterialTypes.Exercise);
+        var student = await app.SignInAsync("25-8894");
+        var chat = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        var args = SearchKind(f, want);
+        args["material_type"] = type;
+        app.ChatModel.EnqueueTool("search_material", args);
+        app.ChatModel.Enqueue(request => ScriptedChatModel.Tool("reply", KindReply(want,
+            SearchOutput(request).Select(r => r!["ref"]!.GetValue<string>()).ToArray())));
+        var reply = await SendAsync(student, chat, text, prepared: true);
+        var card = Assert.Single(reply["results"]!.AsArray())!;
+        Assert.Equal(type, card["materialType"]!.GetValue<string>());
+        Assert.Equal(want == "files" ? "file" : "page", card["kind"]!.GetValue<string>());
     }
 }
