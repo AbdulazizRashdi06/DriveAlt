@@ -11,6 +11,7 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
 {
     private const long LockId = 738129405;
     internal const int ListingConcurrency = 6;
+    internal const int PhotosPerFile = 40;
 
     internal sealed record FolderListing(List<DriveImporter.DriveItem>? Items, Exception? Error);
 
@@ -108,7 +109,9 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
                             .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
                         var photos = fresh.Where(i => DocumentConverter.IsImage(i.Name)).ToList();
                         var batches = fresh.Except(photos).Select(i => new List<DriveImporter.DriveItem> { i }).ToList();
-                        if (photos.Count > 0) batches.Add(photos);
+                        // New photos in one folder become one file, in chunks so the joined source ref stays well inside
+                        // Postgres's btree row limit (~2.7 KB; Drive IDs are ~33 chars).
+                        batches.AddRange(photos.Chunk(PhotosPerFile).Select(c => c.ToList()));
                         foreach (var batch in batches)
                         {
                             // Read current switches immediately before starting each download, without stale tracked values.
@@ -116,7 +119,21 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
                                 .Select(s => s.UploaderId).FirstOrDefaultAsync(ct);
                             if (on is not { } uploader || !await db.Users.AnyAsync(u => u.Id == uploader && u.Role == Roles.Uploader, ct)
                                 || !await db.DriveSyncFolders.AsNoTracking().AnyAsync(f => f.Id == folder.Id && f.Enabled, ct)) break;
-                            var fileId = await importer.ImportNewAsync(batch, entry.Segments, uploader, ct);
+                            Guid? fileId;
+                            try { fileId = await importer.ImportNewAsync(batch, entry.Segments, uploader, ct); }
+                            catch (Exception e) when (!ct.IsCancellationRequested)
+                            {
+                                // One bad item (undetectable content, a Drive 403, a download timeout) must not hide the
+                                // rest of the folder: note it and carry on with the next batch.
+                                log.LogWarning("Drive sync skipped an item in folder {Folder}; exception type {Type}", entry.Id, e.GetType().Name);
+                                failed = true;
+                                db.ChangeTracker.Clear();
+                                folder = await db.DriveSyncFolders.SingleAsync(f => f.Id == entry.Id, ct);
+                                folder.Error = "Some files in this folder couldn't be imported. Check they are PDF, Office or image files with download access; they will retry next scan.";
+                                state = await db.DriveSyncStates.SingleAsync(s => s.Id == 1, ct);
+                                await db.SaveChangesAsync(ct);
+                                continue;
+                            }
                             if (fileId is null)
                             {
                                 folder.Error = "No matching course for this folder. Move material under a recognised course folder.";
@@ -132,7 +149,7 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
                             await db.SaveChangesAsync(ct);
                         }
                     }
-                    catch (Exception e) when (e is not OperationCanceledException)
+                    catch (Exception e) when (!ct.IsCancellationRequested)
                     {
                         // Never persist request URLs: a Google API key can be present in an exception message.
                         log.LogWarning("Drive sync failed in folder {Folder}; exception type {Type}", folder.Id, e.GetType().Name);

@@ -10,6 +10,7 @@ public sealed class ScriptedDrive : HttpMessageHandler
     public Dictionary<string, DriveImporter.DriveItem[]> Folders { get; } = [];
     public List<string> Downloads { get; } = [];
     public HashSet<string> FailFolders { get; } = [];
+    public HashSet<string> FailDownloads { get; } = [];
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
@@ -26,6 +27,7 @@ public sealed class ScriptedDrive : HttpMessageHandler
         }
         var fileId = url.Segments.Last();
         Downloads.Add(fileId);
+        if (FailDownloads.Contains(fileId)) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new ByteArrayContent(Encoding.UTF8.GetBytes("%PDF-1.4 test content " + fileId)),

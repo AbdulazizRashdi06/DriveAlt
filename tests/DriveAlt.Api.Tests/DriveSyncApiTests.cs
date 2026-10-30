@@ -88,6 +88,44 @@ public partial class ApiTests
         Assert.DoesNotContain("test-only", state.ToJsonString());
         app.Drive.FailFolders.Clear();
     }
+
+    [Fact]
+    public async Task One_failing_drive_file_does_not_hide_the_rest_of_its_folder()
+    {
+        var admin = await app.SignInAsync(ApiFactory.Uploader);
+        var photos = Enumerable.Range(0, DriveSyncService.PhotosPerFile + 1)
+            .Select(n => new DriveImporter.DriveItem($"bulk-photo-{n:D2}", $"photo {n:D2}.jpg", "file", null)).ToArray();
+        app.Drive.Folders[DriveImporter.Year2FolderId] = [new("bad-sem", "semester 1", "folder", null)];
+        app.Drive.Folders["bad-sem"] = [new("bad-ds", "Data Structures", "folder", null)];
+        app.Drive.Folders["bad-ds"] = [new("a-broken", "a broken.pdf", "file", null), new("b-good", "b good.pdf", "file", null), .. photos];
+        app.Drive.FailDownloads.Add("a-broken");
+        try
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var sync = scope.ServiceProvider.GetRequiredService<DriveSyncService>();
+            await admin.PostAsJsonAsync("/api/admin/drive-sync/scan", new { });
+            await sync.RunOnceAsync(default); // discovers the folders, all off
+            await admin.PutAsJsonAsync("/api/admin/drive-sync/folders/bad-ds", new { enabled = true });
+            await admin.PutAsJsonAsync("/api/admin/drive-sync/", new { enabled = true });
+            db.ChangeTracker.Clear();
+            await sync.RunOnceAsync(default);
+
+            var items = await db.DriveSyncItems.AsNoTracking().Where(i => i.FolderId == "bad-ds").ToListAsync();
+            Assert.Contains(items, i => i.Id == "b-good");
+            Assert.DoesNotContain(items, i => i.Id == "a-broken");
+            Assert.Equal(photos.Length, items.Count(i => i.Id.StartsWith("bulk-photo-")));
+            // Photos are grouped in chunks, so the joined source ref stays inside the index's row limit.
+            Assert.Equal(2, items.Where(i => i.Id.StartsWith("bulk-photo-")).Select(i => i.FileId).Distinct().Count());
+            var folder = await db.DriveSyncFolders.AsNoTracking().SingleAsync(f => f.Id == "bad-ds");
+            Assert.Contains("couldn't be imported", folder.Error);
+        }
+        finally
+        {
+            app.Drive.FailDownloads.Clear();
+            await admin.PutAsJsonAsync("/api/admin/drive-sync/", new { enabled = false });
+        }
+    }
 }
 
 public class DriveSyncTests
