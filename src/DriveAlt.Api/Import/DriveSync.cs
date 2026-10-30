@@ -253,6 +253,39 @@ public static class DriveSyncEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
         });
+        // A folder's own files, listed live from Drive, each marked uploaded (with its app file) or not.
+        g.MapGet("/folders/{id}/files", async (string id, AppDb db, DriveImporter importer, ILogger<DriveSyncService> log, CancellationToken ct) =>
+        {
+            if (!await db.DriveSyncFolders.AnyAsync(f => f.Id == id, ct)) return Results.NotFound();
+            List<DriveImporter.DriveItem> items;
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                items = await importer.ListFolderAsync(id, timeout.Token);
+            }
+            catch (Exception e) when (!ct.IsCancellationRequested)
+            {
+                // Never return the exception text: a Google API key can be in its URL.
+                log.LogWarning("Drive folder listing failed for {Folder}; exception type {Type}", id, e.GetType().Name);
+                return Results.Problem("Couldn't list this folder on Drive. Check its sharing and try again.", statusCode: 502);
+            }
+            var files = items.Where(i => i.Kind != "folder").OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            var ids = files.Select(f => f.Id).ToList();
+            var imported = await db.DriveSyncItems.AsNoTracking().Where(i => ids.Contains(i.Id))
+                .ToDictionaryAsync(i => i.Id, i => i.FileId, ct);
+            // Files from the original Drive import are only recorded in source_ref ("gdrive:id1+id2").
+            foreach (var f in await db.Files.AsNoTracking().Where(f => f.SourceRef != null && f.SourceRef.StartsWith("gdrive:"))
+                         .Select(f => new { f.Id, f.SourceRef }).ToListAsync(ct))
+                foreach (var driveId in f.SourceRef![7..].Split('+'))
+                    imported.TryAdd(driveId, f.Id);
+            return Results.Ok(files.Select(f => new
+            {
+                f.Id, f.Name,
+                Importable = DriveImporter.CanImport(f),
+                FileId = imported.TryGetValue(f.Id, out var fileId) ? fileId : (Guid?)null,
+            }));
+        });
         g.MapPut("/folders/{id}", async (string id, ToggleBody body, AppDb db, CancellationToken ct) =>
         {
             var folder = await db.DriveSyncFolders.FindAsync([id], ct);
