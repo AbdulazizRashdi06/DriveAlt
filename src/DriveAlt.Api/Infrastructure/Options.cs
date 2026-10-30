@@ -64,7 +64,7 @@ public sealed class CodexOptions
     /// <summary>e.g. http://codex:8090/v1 on the zarqa_default network.</summary>
     public string BaseUrl { get; set; } = "";
     public string Model { get; set; } = "gpt-6.1-sol";
-    /// <summary>Batch extraction is separate from the legacy single-page/suggestion model.</summary>
+    /// <summary>Page reading uses BatchModel (8 pages per call); Model only guesses course/type for new uploads.</summary>
     public string BatchModel { get; set; } = "gpt-6.1-terra";
     public string BatchReasoningEffort { get; set; } = "low";
     public int BatchSize { get; set; } = 8;

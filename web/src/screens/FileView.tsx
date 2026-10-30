@@ -6,11 +6,11 @@ import { api, count, TYPE_SINGULAR, type FileDto, type PageRegion, type PageThum
 import { useApp } from '../lib/app'
 import { IconBack, IconClose, IconDownload, IconExpand, IconShare } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
-import { ReportButton, type ReportTarget } from '../ui/ReportButton'
+import { ReportButton } from '../ui/ReportButton'
 import { copyShareLink } from '../ui/Viewer'
 
 /** Renders one PDF page when it scrolls near the viewport. */
-function PdfPage({ doc, number, width, target }: { doc: PDFDocumentProxy; number: number; width: number; target?: ReportTarget }) {
+function PdfPage({ doc, number, width }: { doc: PDFDocumentProxy; number: number; width: number }) {
   const holder = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const [visible, setVisible] = useState(false)
@@ -58,12 +58,12 @@ function PdfPage({ doc, number, width, target }: { doc: PDFDocumentProxy; number
         <canvas ref={canvas} aria-label={`Page ${number}`} />
         <span className="doc-num">{number}</span>
       </div>
-      {target && <div className="doc-page-actions"><ReportButton target={target} /></div>}
     </div>
   )
 }
 
-function PdfDoc({ url, startPage, onPageCount, pages, title }: { url: string; startPage: number; onPageCount: (n: number) => void; pages: PageThumb[]; title: string }) {
+/** Only for files with no rendered pages yet (still processing), so there's nothing to report against. */
+function PdfDoc({ url, startPage, onPageCount }: { url: string; startPage: number; onPageCount: (n: number) => void }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [error, setError] = useState<string | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
@@ -101,10 +101,7 @@ function PdfDoc({ url, startPage, onPageCount, pages, title }: { url: string; st
     <div ref={wrap} className="doc-pages">
       {error && <div className="err">Couldn't open this file: {error}</div>}
       {!doc && !error && <div className="skeleton" style={{ width: '100%', aspectRatio: '1 / 1.41' }} />}
-      {doc && width > 0 && Array.from({ length: doc.numPages }, (_, i) => {
-        const page = pages.find(p => p.number === i + 1)
-        return <PdfPage key={i} doc={doc} number={i + 1} width={width} target={page ? { ref: `p:${page.id}`, fileTitle: title, pageNumber: page.number } : undefined} />
-      })}
+      {doc && width > 0 && Array.from({ length: doc.numPages }, (_, i) => <PdfPage key={i} doc={doc} number={i + 1} width={width} />)}
     </div>
   )
 }
@@ -289,7 +286,7 @@ function FileReader() {
         </div>
       )}
       {file && pages.length === 0 && file.sourceKind !== 'images' && (
-        <PdfDoc url={`/api/files/${file.id}/view`} startPage={startPage} onPageCount={setPageCount} pages={pages} title={file.title} />
+        <PdfDoc url={`/api/files/${file.id}/view`} startPage={startPage} onPageCount={setPageCount} />
       )}
     </main>
   )
