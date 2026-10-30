@@ -9,32 +9,6 @@ namespace DriveAlt.Api.Tests;
 public class MaterialKindTests
 {
     [Theory]
-    [InlineData("questions on circular queues", "questions")]
-    [InlineData("slides about queues", "slides")]
-    [InlineData("a lecture on hashing", "slides")]
-    [InlineData("Q3", "questions")]
-    [InlineData("exercise on trees", "questions")]
-    [InlineData("Send me exercise sheet 6", null)]
-    [InlineData("exercise 6 pdf", null)]
-    [InlineData("download exercises on trees", null)]
-    [InlineData("the exercise file", null)]
-    [InlineData("exercise PDFs", null)]
-    [InlineData("questions from exercise sheet 6", "questions")]
-    [InlineData("lecture notes on hashing", null)]
-    [InlineData("Lecture Notes on hashing", null)]
-    [InlineData("lecture-notes on hashing", null)]
-    [InlineData("problems about graphs", "questions")]
-    [InlineData("queues", null)]
-    [InlineData("midterm 2023 pdf", null)]
-    [InlineData("the slide with Dijkstra's pseudocode", "slide_pages")]
-    [InlineData("slide 12", "slide_pages")]
-    [InlineData("slides and questions", null)]
-    [InlineData("questions from the slides", null)]
-    [InlineData("landslides and unquestionable facts", null)]
-    public void Asked_kind_only_overrides_clear_vocabulary(string text, string? kind) =>
-        Assert.Equal(kind, Heuristics.AskedKind(text));
-
-    [Theory]
     [InlineData("[{\"files\":true}]", "files")]
     [InlineData("[{\"files\":false}]", "questions")]
     [InlineData("[{}]", "questions")]

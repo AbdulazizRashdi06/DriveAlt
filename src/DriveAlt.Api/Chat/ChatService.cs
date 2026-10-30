@@ -137,17 +137,16 @@ public sealed partial class ChatService(
         }
         if (reply.Option is { } picked && lastBot is not null && picked >= 0 && picked < ChatOption.Read(lastBot.Options).Count)
         {
-            await PickAsync(convo, userId, lastBot, picked, reply.Commentary, turn, stream, ct);
+            await PickAsync(convo, userId, lastBot, picked, reply.Commentary, turn, stream, ct, reply.AskedFor);
             return;
         }
         if (reply.ShowMore && lastBot is { More.Length: > 0 })
         {
-            await ShowMoreAsync(convo, userId, lastBot, turn, reply.Commentary, stream, ct);
+            await ShowMoreAsync(convo, userId, lastBot, turn, reply.Commentary, stream, ct, reply.AskedFor);
             return;
         }
 
-        var want = MaterialWants.Effective(text, reply.AskedFor);
-        var refs = (await cards.FilterAsync(reply.Refs.Where(turn.Allowed.Contains), want, ct)).Take(MaxResults).ToList();
+        var refs = (await cards.FilterAsync(reply.Refs.Where(turn.Allowed.Contains), reply.AskedFor, ct)).Take(MaxResults).ToList();
         var refused = reply.Refused;
         // A refusal shows the few questions in play as they are; everything else starts with the best few.
         var shown = refused ? refs : refs.Take(FirstBatch).ToList();
@@ -328,7 +327,7 @@ public sealed partial class ChatService(
         }
     }
 
-    private async Task PickAsync(Conversation convo, Guid userId, Message lastBot, int index, string? commentary, Turn turn, ChatStream stream, CancellationToken ct)
+    private async Task PickAsync(Conversation convo, Guid userId, Message lastBot, int index, string? commentary, Turn turn, ChatStream stream, CancellationToken ct, string? askedFor = null)
     {
         var o = ChatOption.Read(lastBot.Options)[index];
         if (!o.Done)
@@ -337,7 +336,7 @@ public sealed partial class ChatService(
             await stream.Status(new ChatStatus($"Digging through {o.Label}…"));
             o.Refs = (await SearchOptionAsync(o, courses, ct)).ToArray();
         }
-        var refs = (await cards.FilterAsync(o.Refs, MaterialWants.Effective(turn.Request, o.Want), ct)).Take(MaxResults).ToList();
+        var refs = (await cards.FilterAsync(o.Refs, askedFor ?? o.Want, ct)).Take(MaxResults).ToList();
         foreach (var r in refs) turn.Allowed.Add(r);
         var shown = refs.Take(FirstBatch).ToList();
         var held = refs.Skip(FirstBatch).ToList();
@@ -349,15 +348,14 @@ public sealed partial class ChatService(
         await SaveBotAsync(convo, userId, line, shown, held, false, null, stream, ct, drafts);
     }
 
-    private async Task ShowMoreAsync(Conversation convo, Guid userId, Message lastBot, Turn turn, string? modelLine, ChatStream stream, CancellationToken ct)
+    private async Task ShowMoreAsync(Conversation convo, Guid userId, Message lastBot, Turn turn, string? modelLine, ChatStream stream, CancellationToken ct, string? askedFor = null)
     {
         // Revalidate saved results too. Older conversations may contain mixed kinds from the old search.
         var kinds = await cards.KindsAsync(lastBot.Results.Concat(lastBot.More).ToList(), ct);
-        var original = turn.History.LastOrDefault(m => m.Role == "user")?.Text ?? "";
         var shownKinds = lastBot.Results.Where(kinds.ContainsKey).Select(r => kinds[r]).Distinct().ToList();
         var storedKinds = kinds.Values.Distinct().ToList();
-        var want = Heuristics.AskedKind(turn.Request) ?? Heuristics.AskedKind(original)
-            ?? (shownKinds.Count == 1 ? shownKinds[0] : storedKinds.Count == 1 ? storedKinds[0] : MaterialWants.None);
+        // A typed follow-up uses the model declaration. A button continues the already-selected results.
+        var want = askedFor ?? (shownKinds.Count == 1 ? shownKinds[0] : storedKinds.Count == 1 ? storedKinds[0] : MaterialWants.None);
         var refs = await cards.FilterAsync(lastBot.More, want, ct);
         var shown = refs.Take(FirstBatch).ToList();
         var held = refs.Skip(FirstBatch).ToList();
@@ -435,6 +433,7 @@ public sealed partial class ChatService(
             3. Commentary is at most 2 short sentences, playful and friendly, and may be a question back to the student.
                No lists, no markdown, no formulas, no code.
             4. First decide what the student asked for: questions, slides, one specific slide/page, whole files, or notes pages.
+               Interpret the full meaning in the student's language, including negation and context, never isolated keywords.
                Set search_material.want and reply.asked_for to that kind. Show only that kind, using refs returned by searches.
                Slides come as whole lecture files (want="slides", f: refs). Use want="slide_pages" only for a particular slide/page.
                Questions are question crops from past papers, quizzes, exercises and labs, or assessment pages without boxes yet.

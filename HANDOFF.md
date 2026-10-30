@@ -4,7 +4,7 @@
 
 ## 1. Header
 
-**Current update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; full validation runs on GitHub Actions at the owner's request. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
+**Current update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; owner now requires AI-only interpretation with no keyword overrides. Latest change awaits GitHub CI. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
 
 | | |
 |---|---|
@@ -19,12 +19,14 @@
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; full GitHub CI passed on corrected code head `43d0ce0`. No production change is authorized by this task.
+**In one line:** Verified production image is `083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc` with healthy public/gateway endpoints. Asked-for contract is prepared on this branch; latest AI-only intent change awaits online CI. Prior code `43d0ce0` passed 128 backend tests. No production change is authorized by this task.
 ## 2. State of the world
+
+**Current: AI-only intent, 2026-10-30 (Codex, PR #46):** owner explicitly requires no hardcoded interpretation, including Arabic and negated requests. Removed `Heuristics.AskedKind`, its regexes and `MaterialWants.Effective`. Replies now use only AI `asked_for`; option clicks use AI-authored `want`, typed picks/follow-ups use current `asked_for`, and Show more buttons continue the stored selected kind using metadata only. Server still validates tool kinds, search provenance and real database ref kinds. Prompt instructs interpreting full meaning, language, context and negation. Replaced keyword tests with scripted-model regressions proving the app honors AI decisions for Arabic, negation, lecture notes and question-PDF requests, even when literal words conflict. This supersedes the earlier vocabulary corrections below; online CI pending, no local tests or production changes.
 
 **Vocabulary correction, 2026-10-30 (Codex, PR #46):** owner identified overbroad exercise/lecture keyword overrides. `AskedKind` now treats exercise(s) as questions only without PDF/sheet/file/download words (including plurals), and excludes lecture notes from slide vocabulary. Explicit questions/Q-number vocabulary still wins. Added nine vocabulary cases and three scripted-model API cases proving exercise files and notes pages remain visible. Full online run `41070599306`, job `124113429123`, passed on corrected code head `43d0ce0`: `Passed! - Failed: 0, Passed: 128, Skipped: 0, Total: 128`; gateway `3 passed / 0 failed`; frontend `9 passed` files / `31 passed` tests; TypeScript and production build passed. This documentation-only commit records the verified code results and triggers ordinary CI; it changes no tested code. Do not run local tests. No merge/deploy occurred.
 
-**Asked-for contract, 2026-10-30 (Codex, [PR #46](https://github.com/AbdulazizRashdi06/DriveAlt/pull/46), not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Clear question/slide vocabulary overrides the model; mixed vocabulary is left to interpretation, and specific-slide requests keep `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
+**Asked-for contract, 2026-10-30 (Codex, [PR #46](https://github.com/AbdulazizRashdi06/DriveAlt/pull/46), not deployed):** searches require `want` (`questions`, `slides`, `slide_pages`, `files`, `notes_pages`); replies require `asked_for` (those plus `none`). `SearchService` filters every page/region candidate path, including vector/filter-only search, and excludes slide/notes content from questions. Question page fallback is limited to assessment pages without question boxes. `ResultCards.KindsAsync` uses database metadata to validate refs before batching, on option picks and on Show more. Only the AI interprets request intent; there is no keyword override. Specific-slide requests use AI-declared `slide_pages`. Slide decks open as one full file at the best-matching page. Ref hints `f:<id>?page=N` preserve that page through history/options without a schema migration; legacy bare file refs still open the cover. Old options `files:true` map to `files`, otherwise missing `want` maps to `questions`. AI-authored text remains unchanged if every ref is dropped.
 
 **Online validation:** PR #46 opened on implementation commit `26b0401`. GitHub run `41069331169`, job `124109403349`, tested head `9a23253`: `Failed: 1, Passed: 115, Skipped: 0, Total: 116`. The new contract regressions passed. The existing whole-paper test expected one held result but got nine because the new fixtures shared its Data Structures/2026 inventory (`ApiTests.cs:484`; `MaterialKindApiTests.cs:28`). New fixtures now use 2028, keeping the existing 2026 inventory isolated. The corrective code head `b622787` passed full online run `41069786816` (job `124110547778`): `Passed! - Failed: 0, Passed: 116, Skipped: 0, Total: 116`; gateway contract `tests 3 / pass 3 / fail 0`; frontend `9 passed` files / `31 passed` tests; TypeScript and Vite production build passed. Image build/deploy jobs were skipped as intended for a PR. This final documentation commit records those results without changing the tested code; its ordinary CI rerun is tracked by T3. No merge or deployment occurred.
 
@@ -319,6 +321,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-10-30, Codex - removed hardcoded intent:** removed all asked-kind keyword checks and routed normal/typed follow-up responses through model declarations. Preserved metadata validation and explicit button selection. Updated multilingual/negation regression coverage and AI docs; online CI pending.
+
 **2026-10-30, Codex - vocabulary fixes verified online:** run `41070599306` passed all 128 backend/API tests, 31 frontend tests, 3 gateway checks, TypeScript and production build on `43d0ce0`. PR #46 description and handoff now record the corrected code results; no local test runs or production writes.
 
 **2026-10-30, Codex - vocabulary correction:** narrowed the exercise and lecture overrides as requested; retained topic-exercise question behavior and explicit question vocabulary. Updated tests and the AI guide; pushed for online CI. No local tests or production changes.
@@ -486,6 +490,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-10-30, superseding keyword checks:** owner: "or talked in arabic ... it should be 100% no hardcoding stuff". AI alone interprets request language, negation, keywords and requested material kind; no deterministic keyword override. Keep database/ref validation enforcing that declared kind. This supersedes the initial brief's keyword cross-check and subsequent exercise/lecture keyword exceptions.
+
 - **2026-10-30, testing:** "test online no need locally use the old method in the handoff md". Use the PR's GitHub Actions tests with Postgres/pgvector; do not set up/run local tests. This authorizes publishing the feature branch/PR to trigger CI, not merging/deploying.
 - **2026-10-30, material contract:** show only the requested kind; slides mean whole decks except an explicitly specific slide. Offer alternatives without showing them; ask when unclear. Preserve the no-written-answers rules and AI-authored commentary.
 
@@ -613,7 +619,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Ready for owner review: Codex, `fix/chat-asked-material-kind`, PR #46:** contract, vocabulary corrections, best-slide file cards, regressions and AI docs are complete; full online validation passed on `43d0ce0`. Built on PR #45; merge #45 first. Leave #21/#44 branches intact. No production writes. Only final documentation CI and owner-controlled merge/deployment remain.
+**Ready for owner review: Codex, `fix/chat-asked-material-kind`, PR #46:** contract, vocabulary corrections, best-slide file cards, regressions and AI docs are complete; previous online validation passed on `43d0ce0`; new AI-only intent change is awaiting CI. Built on PR #45; merge #45 first. Leave #21/#44 branches intact. No production writes. Only final documentation CI and owner-controlled merge/deployment remain.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
@@ -646,7 +652,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current task:** PR #46 corrected code `43d0ce0` passed full online CI (128 backend / 31 frontend / 3 gateway). Only this results-recording documentation commit is newer; hand back for owner review after its routine CI rerun passes. Retain owner control over merge/deployment. Merge PR #45 first. After an authorized deployment, try unscripted "slides about queues", "questions about queues", "queues", exercise file requests and lecture notes; those live checks remain pending.
+**Current task:** PR #46 AI-only intent change awaits full online CI. Fix any failures, record actual results, then hand back for owner review. No local testing; no merge/deploy authorization. Merge #45 first. Unscripted live checks in English/Arabic, including negation and file requests, remain for an authorized deployment.
 
 **Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
 

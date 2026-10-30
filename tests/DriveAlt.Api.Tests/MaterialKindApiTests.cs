@@ -79,7 +79,8 @@ public partial class ApiTests
     [InlineData("questions", true)]
     [InlineData("slides", true)]
     [InlineData("questions", false)]
-    public async Task Replies_drop_wrong_kinds_even_when_the_model_misreads_the_request(string declaration, bool includeQuestion)
+    [InlineData("none", true)]
+    public async Task Replies_enforce_the_model_declared_kind_without_keyword_overrides(string declaration, bool includeQuestion)
     {
         var f = await KindMaterialAsync();
         var student = await app.SignInAsync("25-8894");
@@ -92,8 +93,10 @@ public partial class ApiTests
             ? [ResultRefs.Page(f.Slide), ResultRefs.File(f.Deck, 2), ResultRefs.Region(f.Crop)]
             : [ResultRefs.Page(f.Slide), ResultRefs.File(f.Deck, 2)]));
         var reply = await SendAsync(student, chat, "questions on " + f.Topic, prepared: true);
-        Assert.Equal(includeQuestion ? 1 : 0, reply["results"]!.AsArray().Count);
-        if (includeQuestion) Assert.Equal(ResultRefs.Region(f.Crop), reply["results"]![0]!["ref"]!.GetValue<string>());
+        var expected = declaration == "slides" ? ResultRefs.File(f.Deck, 2)
+            : declaration == "questions" && includeQuestion ? ResultRefs.Region(f.Crop) : null;
+        Assert.Equal(expected is null ? 0 : 1, reply["results"]!.AsArray().Count);
+        if (expected is not null) Assert.Equal(expected, reply["results"]![0]!["ref"]!.GetValue<string>());
         Assert.Equal("No matching questions yet. Want the lecture instead?", reply["text"]!.GetValue<string>());
         Assert.Equal(0, reply["moreCount"]!.GetValue<int>());
     }
@@ -231,6 +234,12 @@ public partial class ApiTests
     [InlineData("Send me exercise sheet 6", "files", "exercise")]
     [InlineData("exercise 6 pdf", "files", "exercise")]
     [InlineData("lecture notes on hashing", "notes_pages", "notes")]
+    [InlineData("Lecture 5 notes", "notes_pages", "notes")]
+    [InlineData("Send me the questions pdf", "files", "exercise")]
+    [InlineData("I don't want slides, show questions", "questions", "exercise")]
+    [InlineData("\u0645\u0627 \u0623\u0628\u063a\u0649 \u0633\u0644\u0627\u064a\u062f\u0627\u062a\u060c \u0623\u0628\u063a\u0649 \u0623\u0633\u0626\u0644\u0629", "questions", "exercise")]
+    [InlineData("\u0623\u0631\u0633\u0644 \u0644\u064a \u0645\u0644\u0641 \u0627\u0644\u0623\u0633\u0626\u0644\u0629 PDF", "files", "exercise")]
+    [InlineData("questions", "files", "exercise")]
     public async Task File_and_notes_wording_does_not_override_the_requested_kind(string text, string want, string type)
     {
         var f = await KindMaterialAsync(MaterialTypes.Exercise);
@@ -242,8 +251,47 @@ public partial class ApiTests
         app.ChatModel.Enqueue(request => ScriptedChatModel.Tool("reply", KindReply(want,
             SearchOutput(request).Select(r => r!["ref"]!.GetValue<string>()).ToArray())));
         var reply = await SendAsync(student, chat, text, prepared: true);
-        var card = Assert.Single(reply["results"]!.AsArray())!;
-        Assert.Equal(type, card["materialType"]!.GetValue<string>());
-        Assert.Equal(want == "files" ? "file" : "page", card["kind"]!.GetValue<string>());
+        var results = reply["results"]!.AsArray();
+        Assert.NotEmpty(results);
+        Assert.All(results, card => Assert.Equal(type, card!["materialType"]!.GetValue<string>()));
+        if (want == "questions")
+        {
+            Assert.Equal(new[] { ResultRefs.Region(f.Crop), ResultRefs.Page(f.Bare) }.Order(),
+                results.Select(r => r!["ref"]!.GetValue<string>()).Order());
+        }
+        else
+        {
+            var card = Assert.Single(results)!;
+            Assert.Equal(want == "files" ? "file" : "page", card["kind"]!.GetValue<string>());
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Typed_followups_use_the_current_model_kind_without_reinterpreting_words(bool pick)
+    {
+        var f = await KindMaterialAsync();
+        var student = await app.SignInAsync("25-8894");
+        var chat = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            db.Messages.Add(new Message { ConversationId = Guid.Parse(chat), Role = "bot", Text = "Earlier material",
+                Results = [ResultRefs.File(f.Deck, 2)],
+                More = [ResultRefs.File(f.Deck, 2), ResultRefs.Region(f.Crop), ResultRefs.Page(f.Bare)],
+                Options = ChatOption.Write([new() { Label = "Earlier search", Want = "slides", Done = true,
+                    Refs = [ResultRefs.File(f.Deck, 2), ResultRefs.Region(f.Crop)] }]) });
+            await db.SaveChangesAsync();
+        }
+        var response = KindReply("questions");
+        if (pick) response["option"] = 0;
+        else response["show_more"] = true;
+        app.ChatModel.EnqueueTool("reply", response);
+        var reply = await SendAsync(student, chat, "I don't want slides", prepared: true);
+        var refs = reply["results"]!.AsArray().Select(r => r!["ref"]!.GetValue<string>()).ToList();
+        Assert.Contains(ResultRefs.Region(f.Crop), refs);
+        Assert.DoesNotContain(ResultRefs.File(f.Deck, 2), refs);
+        Assert.Equal(pick ? 1 : 2, refs.Count);
     }
 }

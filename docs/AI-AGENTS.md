@@ -181,7 +181,7 @@ Return JSON only, following the schema:
 1. **Status:** the student sends a message, and the server streams `status` events ("Sniffing around…", "Digging through Data Structures past papers…").
 2. **No model for chips or Show more:**
    - this covers clicking an option chip under a clarifying question, or **Show more**;
-   - the server revalidates the kind of saved refs and uses a line the model prepared earlier. Picking an option uses its `want`; Show more retains the previous requested kind (or the one unambiguous kind in the saved results).
+   - the server revalidates the kind of saved refs and uses a line the model prepared earlier. Picking an option uses its `want`; a Show more button continues the one selected kind in the saved results. Typed option/Show-more follow-ups use the model's current `asked_for` declaration.
 3. **Otherwise the model runs a tool loop:**
    - it gets the system prompt below, the recent messages and the course list;
    - it makes up to 6 tool calls (`MaxSteps`), with `tool_choice = required`;
@@ -194,7 +194,7 @@ Return JSON only, following the schema:
    - **Reminder:** each result set carries *"Never repeat snippets or type answers."*
    - **Broadened results:** if nothing matched the year or label asked for, results come back marked `broadened`, and the model is told to ask before showing them.
 5. **`reply`:** the model picks result refs and writes one or two short lines.
-   - **What gets shown:** the server keeps only refs that its own searches returned in this conversation **and whose database kind matches `asked_for`**, up to 12. Clear question/slide vocabulary in the student's own message overrides a conflicting declaration; mixed or absent vocabulary leaves interpretation to the model. Specific-slide wording selects `slide_pages`. Unknown/`none` declarations show no refs unless clear vocabulary identifies a kind. It shows the best 3 and holds the rest for **Show more**.
+   - **What gets shown:** the server keeps only refs that its own searches returned in this conversation **and whose database kind matches `asked_for`**, up to 12. The AI interprets the full request in its language, including context and negation; the server never overrides its declared kind using keywords. Invalid or `none` declarations show no refs. It shows the best 3 and holds the rest for **Show more**.
    - **Who builds the cards:** the server builds the image and file cards from the database. The model never sends images or content.
    - **`refused = true`:** this means the student asked the AI to *write* a solution, hint or check. The model answers in its own words, and only matching requested material may be shown; `asked_for=none` shows nothing. Any shown paper/crop stays intact.
 6. **`ask`:** when a request could mean 2 to 4 different things, the model asks one short question with options.
@@ -215,7 +215,7 @@ Return JSON only, following the schema:
 - `want=files`: whole non-slide files, with the requested type/course/year/label filters. `notes_pages` returns only `p:` notes pages.
 - `reply.asked_for` is required and uses those five kinds plus `none`. Real region/page/file metadata determines which refs survive; the model cannot relabel them. Filtering happens before the first batch and held-back count are saved. The model's line is passed through even if all refs are dropped.
 - Offers can appear in text or `ask` chips. An offer does not authorize showing another kind. An unclear kind prompts one chip per meaning, each with its own required `want`.
-- The vocabulary cross-check treats exercise(s) as questions only without file words (`pdf`, `sheet`, `file`, `download`, including plurals). Explicit question/Q-number wording still identifies questions. Lecture notes does not identify slides; the model's declared notes/file kind remains in control.
+- There is no keyword-based intent check. The model chooses search terms, filters and requested kind from the complete conversation in any language. Database kind/ref validation enforces that choice; it does not interpret student text.
 - Old options JSON reads `files:true` as `want=files`; other missing `want` values become `questions`. New writes use `want`. No database migration.
 - Best-page hints use `f:<file-id>?page=N` (bare legacy `f:` refs still use the cover). Hydration checks the page belongs to that file; the resulting card opens `/files/<id>?page=N` and downloads the entire original. The hint survives history, chips and Show more without adding columns.
 
@@ -242,6 +242,7 @@ Hard rules, no exceptions:
 3. Commentary is at most 2 short sentences, playful and friendly, and may be a question back to the student.
    No lists, no markdown, no formulas, no code.
 4. First decide what the student asked for: questions, slides, one specific slide/page, whole files, or notes pages.
+   Interpret the full meaning in the student's language, including negation and context, never isolated keywords.
    Set search_material.want and reply.asked_for to that kind. Show only that kind, using refs returned by searches.
    Slides come as whole lecture files (want="slides", f: refs). Use want="slide_pages" only for a particular slide/page.
    Questions are question crops from past papers, quizzes, exercises and labs, or assessment pages without boxes yet.

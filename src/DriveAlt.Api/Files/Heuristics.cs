@@ -6,33 +6,6 @@ namespace DriveAlt.Api.Files;
 /// <summary>Guesses course / type / year / label from file names and Drive folder paths.</summary>
 public static partial class Heuristics
 {
-    [GeneratedRegex(@"\b(?:questions?|problems?|q\s*\.?\s*\d+[a-z]?)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex QuestionWords();
-
-    [GeneratedRegex(@"\bexercises?\b", RegexOptions.IgnoreCase)]
-    private static partial Regex ExerciseWords();
-
-    [GeneratedRegex(@"\b(?:pdfs?|sheets?|files?|downloads?)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex FileRequestWords();
-
-    [GeneratedRegex(@"\b(?:slides?|lectures?(?![\s-]+notes?\b))\b", RegexOptions.IgnoreCase)]
-    private static partial Regex SlideWords();
-
-    [GeneratedRegex(@"\b(?:(?:the|specific|particular)\s+slide\b|slide\s*(?:number\s*|no\.?\s*|#\s*)?\d+\b)", RegexOptions.IgnoreCase)]
-    private static partial Regex SpecificSlideWords();
-
-    /// <summary>Only unambiguous vocabulary overrides the model; mixed or absent kinds need interpretation.</summary>
-    public static string? AskedKind(string text)
-    {
-        var questions = QuestionWords().IsMatch(text)
-            || (ExerciseWords().IsMatch(text) && !FileRequestWords().IsMatch(text));
-        var slides = SlideWords().IsMatch(text);
-        if (questions && slides) return null;
-        if (questions) return MaterialWants.Questions;
-        if (slides) return SpecificSlideWords().IsMatch(text) ? MaterialWants.SlidePages : MaterialWants.Slides;
-        return null;
-    }
-
     public sealed record Guess(Course? Course, string? MaterialType, int? Year, string? Label);
 
     [GeneratedRegex(@"(?<!\d)(20[12]\d)(?!\d)")]

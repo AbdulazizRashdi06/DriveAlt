@@ -725,7 +725,7 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         }
         var courses = await db.Courses.AsNoTracking().ToListAsync();
         var course = Heuristics.MatchCourse(lower, courses);
-        var want = lower.Contains("full") && lower.Contains("papers") ? MaterialWants.Files : Heuristics.AskedKind(text) ?? MaterialWants.Questions;
+        var want = lower.Contains("full") && lower.Contains("papers") ? MaterialWants.Files : MaterialWants.Questions;
         var args = new JsonObject { ["query"] = text, ["want"] = want };
         if (course is not null) args["course"] = course.Slug;
         if (Heuristics.MaterialType(lower) is { } type) args["material_type"] = type;
