@@ -8,7 +8,6 @@ using Pgvector;
 
 namespace DriveAlt.Api.Processing;
 
-public sealed class MaterialReviewRequiredException(int page) : Exception($"Terra review required on page {page}. Correct it in Inspect, then retry processing.");
 
 /// <summary>
 /// The upload pipeline: split → read (AI extraction) → tag (embeddings) → crop questions and answers → ready.
@@ -177,11 +176,10 @@ public sealed class ProcessingService(
             });
     }
 
+    public const string ReviewFlag = "Flagged for review: check this page's boxes and text in Inspect, then save.";
+
     private async Task ReadBatchesAsync(DocFile file, List<Page> pending, string? pdf, IReadOnlyList<Course> courses, CancellationToken ct)
     {
-        // Review flags require an uploader correction, never repeated billed attempts or an offline success marker.
-        if (pending.FirstOrDefault(p => p.Error?.StartsWith("Terra review required") == true) is { } held)
-            throw new MaterialReviewRequiredException(held.Number);
         foreach (var batch in pending.Chunk(Math.Clamp(ai.ExtractionBatchSize, 1, 8)))
         {
             var inputs = new List<PageReadInput>();
@@ -199,7 +197,6 @@ public sealed class ProcessingService(
             var ids = batch.Select(p => p.Id).ToList();
             var current = await db.Pages.AsNoTracking().Where(p => ids.Contains(p.Id))
                 .Select(p => new { p.Id, p.Extracted, p.EditedAt }).ToDictionaryAsync(p => p.Id, ct);
-            int? reviewPage = null;
             for (var i = 0; i < batch.Length; i++)
             {
                 var page = batch[i];
@@ -210,20 +207,14 @@ public sealed class ProcessingService(
                     await db.Entry(page).ReloadAsync(ct);
                     continue;
                 }
-                if (result.NeedsReview)
-                {
-                    page.RawExtraction = result.RawJson;
-                    page.Error = new MaterialReviewRequiredException(page.Number).Message;
-                    reviewPage ??= page.Number;
-                    continue;
-                }
+                // A flagged page keeps Terra's boxes and text, so the uploader corrects them in Inspect instead of
+                // redrawing everything, and the rest of the file carries on. Saving the page in Inspect clears the flag.
                 Apply(file, page, result);
-                page.Error = null;
+                page.Error = result.NeedsReview ? ReviewFlag : null;
                 file.Progress++;
             }
             file.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct); // A restart/limit resumes only the remaining unread pages.
-            if (reviewPage is { } number) throw new MaterialReviewRequiredException(number);
         }
     }
 

@@ -105,7 +105,7 @@ public sealed class JobWorker(IServiceScopeFactory scopes, IOptions<ProcessingOp
         {
             log.LogError(e, "Job {Job} ({Kind}) for file {File} failed (attempt {Attempt})", job.Id, job.Kind, job.FileId, job.Attempts);
             job.Error = e.Message.Length > 2000 ? e.Message[..2000] : e.Message;
-            var retry = e is not MaterialReviewRequiredException && job.Attempts < MaxAttempts && job.Kind != JobKinds.Suggest;
+            var retry = job.Attempts < MaxAttempts && job.Kind != JobKinds.Suggest;
             job.State = retry ? "queued" : "failed";
             if (retry) job.RunAfter = DateTime.UtcNow.AddSeconds(20 * job.Attempts);
 
