@@ -50,6 +50,16 @@ export interface FileDto {
   createdAt: string
   thumbUrl: string | null
   parts: number
+  /** Why an unfinished file isn't moving (server-side job state). */
+  wait?: FileWait | null
+}
+
+export interface FileWait {
+  reason: 'reading' | 'queued' | 'paused' | 'retrying' | 'held' | 'stuck'
+  detail?: string | null
+  until?: string | null
+  ahead?: number | null
+  attempt?: number | null
 }
 
 export interface Box { x: number; y: number; w: number; h: number }

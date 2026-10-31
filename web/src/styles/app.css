@@ -630,3 +630,8 @@ a, button, input, textarea, select, label {
 .drive-sync-progress::-webkit-progress-bar { background: var(--cream); border-radius: 99px; }
 .drive-sync-progress::-webkit-progress-value { background: var(--blue); border-radius: 99px; }
 .drive-sync-progress::-moz-progress-bar { background: var(--blue); border-radius: 99px; }
+
+/* Why an unfinished upload isn't moving (Upload page). */
+.steps .wait-why { display: block; margin-top: 4px; font: 700 13px/1.35 var(--font-body); color: var(--muted); overflow-wrap: anywhere; }
+.steps .wait-why.paused, .steps .wait-why.held { color: #8A5A00; }
+.steps .wait-why.retrying, .steps .wait-why.stuck { color: #9B2C5E; }
