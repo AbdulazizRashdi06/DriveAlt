@@ -56,7 +56,7 @@ export function waitText(w?: FileWait | null): string | null {
       ? `Paused: the AI's usage limit was reached. Resumes about ${clock(w.until)}.`
       : `Paused: the AI service isn't available right now. Tries again about ${clock(w.until)}.`
     case 'retrying': return `Hit an error, trying again at ${clock(w.until)} (attempt ${w.attempt ?? 1} of 3)${w.detail ? `: ${w.detail}` : '.'}`
-    case 'held': return `On hold${w.detail ? `: ${w.detail.replace(/^Held:?\s*/i, '')}` : '.'}`
+    case 'held': return `On hold${w.detail ? `: ${w.detail.replace(/^Held:?\s*/i, '')}` : ''}. Press Resume to process it now.`
     case 'stuck': return "Not in the processing queue, so it won't move. Press Retry."
   }
 }
@@ -121,6 +121,11 @@ function UploadRow({ file, courses, onChange }: { file: FileDto; courses: Course
             onClick={() => void act(() => api.post(`/api/files/${file.id}/process`))}>Process</button>
         )}
         {(file.status === 'ready' || (file.status === 'failed' && file.pageCount > 0)) && <Link className="candy c-white sm" to={`/inspect/${file.id}`}>Inspect</Link>}
+        {file.wait?.reason === 'held' && (
+          <button className="candy c-white sm" type="button" disabled={busy} onClick={() => void act(() => api.post(`/api/files/${file.id}/resume`))}>
+            <IconRefresh size={16} />Resume
+          </button>
+        )}
         {(file.status === 'failed' || file.wait?.reason === 'stuck') && (
           <button className="candy c-white sm" type="button" disabled={busy} onClick={() => void act(() => api.post(`/api/files/${file.id}/process`))}>
             <IconRefresh size={16} />Retry

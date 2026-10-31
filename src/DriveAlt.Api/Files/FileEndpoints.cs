@@ -199,6 +199,17 @@ public static class FileEndpoints
             return Results.Ok(ToDto(f));
         });
 
+        // Releases a file's held processing jobs (run_after far in the future, e.g. "Held: owner wants Semester 1 only"),
+        // so it joins the normal queue now. Paused jobs (usage limit) are left alone: they resume on their own.
+        up.MapPost("/files/{id:guid}/resume", async (Guid id, AppDb db, CancellationToken ct) =>
+        {
+            var now = DateTime.UtcNow;
+            var released = await db.Jobs.Where(j => j.FileId == id && j.State == "queued"
+                    && ((j.Error != null && j.Error.StartsWith("Held")) || j.RunAfter.Year >= 2100))
+                .ExecuteUpdateAsync(s => s.SetProperty(j => j.RunAfter, now).SetProperty(j => j.Error, (string?)null), ct);
+            return released == 0 ? Results.NotFound(new { error = "Nothing on hold for this file." }) : Results.Ok(new { released });
+        });
+
         up.MapPost("/files/{id:guid}/process", async (Guid id, AppDb db, CancellationToken ct) =>
         {
             var f = await db.Files.Include(x => x.Course).FirstOrDefaultAsync(x => x.Id == id, ct);
