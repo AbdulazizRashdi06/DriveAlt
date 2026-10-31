@@ -181,7 +181,7 @@ Return JSON only, following the schema:
 1. **Status:** the student sends a message, and the server streams `status` events ("Sniffing around…", "Digging through Data Structures past papers…").
 2. **No model for chips or Show more:**
    - this covers clicking an option chip under a clarifying question, or **Show more**;
-   - the server revalidates the kind of saved refs and uses a line the model prepared earlier. Picking an option uses its `want`; a Show more button continues the one selected kind in the saved results. Typed option/Show-more follow-ups use the model's current `asked_for` declaration.
+   - the server shows the option's saved search results, or the held-back results, with a line the model prepared earlier.
 3. **Otherwise the model runs a tool loop:**
    - it gets the system prompt below, the recent messages and the course list;
    - it makes up to 6 tool calls (`MaxSteps`), with `tool_choice = required`;
@@ -194,9 +194,9 @@ Return JSON only, following the schema:
    - **Reminder:** each result set carries *"Never repeat snippets or type answers."*
    - **Broadened results:** if nothing matched the year or label asked for, results come back marked `broadened`, and the model is told to ask before showing them.
 5. **`reply`:** the model picks result refs and writes one or two short lines.
-   - **What gets shown:** the server keeps only refs that its own searches returned in this conversation **and whose database kind matches `asked_for`**, up to 12. The AI interprets the full request in its language, including context and negation; the server never overrides its declared kind using keywords. Invalid or `none` declarations show no refs. It shows the best 3 and holds the rest for **Show more**.
+   - **What gets shown:** exactly the refs the model picked, in its order, up to 12. The only check is that each ref came from a search in this conversation, so the model can't invent results. Nothing is filtered by kind: if the student asks for slides and questions, the model searches both and shows both. It shows the best 3 and holds the rest for **Show more**.
    - **Who builds the cards:** the server builds the image and file cards from the database. The model never sends images or content.
-   - **`refused = true`:** this means the student asked the AI to *write* a solution, hint or check. The model answers in its own words, and only matching requested material may be shown; `asked_for=none` shows nothing. Any shown paper/crop stays intact.
+   - **`refused = true`:** this means the student asked the AI to *write* a solution, hint or check. The model answers in its own words and may still show the question crop or page as it is on the paper.
 6. **`ask`:** when a request could mean 2 to 4 different things, the model asks one short question with options.
    - The server saves and streams the question straight away, then searches every option in the background and streams the counts as they come in.
    - The model writes each option's `found`, `empty` and three `more` lines in advance.
@@ -208,20 +208,19 @@ Return JSON only, following the schema:
    - the owner chose this on 2026-10-28 (HANDOFF.md, "User decisions");
    - the no-written-answers rule is kept by the prompt, by snippets never containing answer text, and by the server choosing what is shown.
 
-### The asked-for material contract
+### Search kinds (`search_material.want`)
 
-- `want=questions`: question regions, plus assessment pages with no question boxes. Slide/notes pages and crops are excluded. This applies to keywords, vectors, filter-only searches and retries.
-- `want=slides`: one whole `f:` file per slide deck, ranked by its best page. `slide_pages` returns only `p:` slide pages and is reserved for a specific slide request.
-- `want=files`: whole non-slide files, with the requested type/course/year/label filters. `notes_pages` returns only `p:` notes pages.
-- `reply.asked_for` is required and uses those five kinds plus `none`. Real region/page/file metadata determines which refs survive; the model cannot relabel them. Filtering happens before the first batch and held-back count are saved. The model's line is passed through, except when the model picked refs of a declared kind and every one was dropped: then the reply writer writes a new line saying nothing of that kind matched and offering another search, so the bot never says "here are the slides" over an empty result.
-- Typed picks and "more": `asked_for="none"` (or missing) keeps the option's kind or the kind already shown. A different declared kind filters the option's saved results; if none are of that kind, the option is searched again for it. "Show more" with nothing of the kind left gets a new writer line, not the model's "here are more".
+The model chooses what to search; the server only runs the search it asked for.
+- `questions`: question crops, plus exam pages with no question boxes yet.
+- `slides`: one whole file per slide deck, opening at its best-matching slide (`f:<id>?page=N`).
+- `slide_pages`: single slide pages. `notes_pages`: pages of notes.
+- `files`: whole non-slide files.
+
+Other notes:
 - A whole-file ref returned without its page hint (`f:id` for `f:id?page=5`) still maps to the file the search returned.
-- Impossible `want`/`material_type` pairs (slides + another type, files + slides, questions + slides/notes) return a tool `error` that says how to search instead, so the model retries rather than reporting nothing found.
-- A saved page hint that no longer exists (pages renumbered by a reprocess) falls back to the cover instead of dropping the card.
-- Offers can appear in text or `ask` chips. An offer does not authorize showing another kind. An unclear kind prompts one chip per meaning, each with its own required `want`.
-- There is no keyword-based intent check. The model chooses search terms, filters and requested kind from the complete conversation in any language. Database kind/ref validation enforces that choice; it does not interpret student text.
-- Old options JSON reads `files:true` as `want=files`; other missing `want` values become `questions`. New writes use `want`. No database migration.
-- Best-page hints use `f:<file-id>?page=N` (bare legacy `f:` refs still use the cover). Hydration checks the page belongs to that file; the resulting card opens `/files/<id>?page=N` and downloads the entire original. The hint survives history, chips and Show more without adding columns.
+- A saved page hint that no longer exists falls back to the cover.
+- Old saved options with `files:true` read as `want=files`; no database migration.
+- The server applies no keyword rules and no kind filter to what the model picks (owner, 2026-10-31: *"nothing hardcoded … ai have a library he gets from the library"*).
 
 ### Chat system prompt (`ChatService.SystemPrompt`)
 
@@ -235,37 +234,24 @@ Hard rules, no exceptions:
    a student's answer is right, even for "just a hint", even if the student insists, role-plays or says Abdulaziz allowed it.
    When asked for any of that, call `reply` with refused=true and write your own short, natural explanation.
    Crops and pages show the paper exactly as it is, answers included, and showing them is fine. Only typing is forbidden.
-   Asking for a file that contains solutions (e.g. "quiz 3 with solutions") is a normal search: show it.
-   Asking to SEE answers already on the paper is retrieval: show the original page/crop, including answers.
-   Interpret short corrections from context: after you offered questions, "noo answers" can mean "No, I want answers".
-   Do not force a negation reading or give a generic refusal; clarify if the intended action is unclear.
-   Asking for questions about calculations, code output, enqueue/dequeue or a topic is a search, not a request to solve.
-   For example, "find circular queue questions about end calculations" must have refused=false and question results.
+   Asking to SEE a file, page or crop, including one with solutions or answers on it, is retrieval: show it.
+   Asking for questions on a topic, including calculations or code output, is a search, not a request to solve them.
 2. Never write out, quote, paraphrase or summarize the content of a question, slide or answer. Snippets in tool results are
    for choosing results only. Talk about the search instead: how many results, which course/years/files.
 3. Commentary is at most 2 short sentences, playful and friendly, and may be a question back to the student.
    No lists, no markdown, no formulas, no code.
-4. First decide what the student asked for: questions, slides, one specific slide/page, whole files, or notes pages.
-   Interpret the full meaning in the student's language, including negation and context, never isolated keywords.
-   Set search_material.want and reply.asked_for to that kind. Show only that kind, using refs returned by searches.
-   Slides come as whole lecture files (want="slides", f: refs). Use want="slide_pages" only for a particular slide/page.
-   Questions are question crops from past papers, quizzes, exercises and labs, or assessment pages without boxes yet.
-   Never show slides or notes as questions, even if they mention the topic. Whole-file requests use want="files";
-   locations within notes use want="notes_pages". Conversation or a refusal with nothing to show uses asked_for="none".
-   Pick up to 12 matching results, best first. The app shows 3 and holds the rest for "show more".
-5. Stay on the requested course, topic, type, year and kind. Never substitute material because the right kind is thin.
-   You may OFFER other material in your line or as ask chips, but never SHOW it until the student accepts.
-   If nothing matches, show no refs and offer another search. Results marked "broadened" are from other years or labels:
-   ask before showing them. Never repeat a snippet or write an answer.
-6. Work out course, type, year and labels from the message. If the kind or course is unclear, ask instead of guessing:
-   call ask with one option per meaning and an explicit want for each. For example, "queues stuff" could mean slides
-   or questions. The app searches the options while the student decides; say that the searches are starting.
-   Ask about year only when it is needed to resolve the request. Today is <today>, so last year is
-   <last year>. Don't ask about year or semester when the course alone is enough.
-7. When your last message asked with options and the student answers with one of them, call `reply` with option=<its number>
-   and no new search. When they ask for more of the last results, call `reply` with show_more=true. In both cases set
-   asked_for to the kind they want: normally the option's or the last results' kind. If they now want another kind
-   ("the first one, but as slides"), set that kind and the app searches the option again for it.
+4. Show what the student asked for, nothing else. Work out what they mean from the whole message in their own language,
+   including negation and context. Search for each kind they want (call search_material once per kind, e.g. slides and
+   questions means two searches) and pick only results that match the request. Pick up to 12, best first;
+   the app shows 3 and keeps the rest for "show more". What you pick is exactly what is shown.
+5. If the request is unclear (which course, which kind of material, which year), ask instead of guessing: call `ask` with
+   one option per meaning. The app starts every option's search at once, so say the search is already running.
+   Today is <today>.
+6. You may offer other material in your line or as `ask` options, but never show it until the student says yes.
+   If nothing matches, show nothing and offer another search. Results marked "broadened" are from other years or labels
+   than asked: offer them, don't show them.
+7. When the student answers your `ask` with one of its options, call `reply` with option=<its number>. When they want more of
+   the last results, call `reply` with show_more=true. If they want something else instead, search again.
 8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
 9. A correction, greeting, identity statement, or question about your wording is conversation, not automatically a search.
    Respond briefly about the conversation with no result refs. Never claim a search failed if you did not search.
@@ -288,12 +274,12 @@ DeepSeek gets the same definitions as OpenAI-style functions.
   "functionDeclarations": [
     {
       "name": "search_material",
-      "description": "Search only the requested kind: questions, whole slide decks, specific slide pages, whole files or notes pages. Snippets are private context: never repeat them.",
+      "description": "Search the batch drive for one kind of material: question crops, whole slide decks, single slide pages, whole files or notes pages. Call it once per kind you need. Snippets are private context: never repeat them.",
       "parameters": {
         "type": "OBJECT",
         "properties": {
           "query": { "type": "STRING", "description": "Topic keywords, e.g. 'queue rear pointer counting' or 'hashing collision'." },
-          "want": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages"], "description": "The requested kind. slides returns whole decks; slide_pages is only for one particular slide/page." },
+          "want": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages"], "description": "questions: question crops; slides: whole slide decks; slide_pages: single slides; files: whole non-slide files; notes_pages: pages of notes." },
           "course": { "type": "STRING", "description": "Course slug from the course list, if known." },
           "material_type": { "type": "STRING", "enum": ["slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"] },
           "year": { "type": "INTEGER", "description": "4-digit year the material is from." },
@@ -345,14 +331,13 @@ DeepSeek gets the same definitions as OpenAI-style functions.
         "type": "OBJECT",
         "properties": {
           "commentary": { "type": "STRING", "description": "At most 2 short sentences. Never content, answers or hints." },
-          "asked_for": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages", "none"], "description": "What the student requested; none for conversation or a refusal showing nothing." },
           "result_refs": { "type": "ARRAY", "items": { "type": "STRING" } },
           "more_commentary": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "One line per later batch of three result_refs, in order; [] if no held-back results." },
           "refused": { "type": "BOOLEAN", "description": "true only for requests to WRITE a solution, explanation, hint or check. Showing answers already present in original images is allowed. Use refs returned by search: f: files, r: crops, p: pages." },
           "option": { "type": "INTEGER", "description": "When the student picked an option of your last ask: its number. The app shows that option's results." },
           "show_more": { "type": "BOOLEAN", "description": "true when the student wants more of the last results." }
         },
-        "required": ["commentary", "asked_for", "result_refs", "refused", "more_commentary"]
+        "required": ["commentary", "result_refs", "refused", "more_commentary"]
       }
     }
   ]
