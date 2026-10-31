@@ -48,6 +48,13 @@ public partial class ApiTests
             Assert.Equal(2, files[ids["retrying"].ToString()]!["attempt"]!.GetValue<int>());
             Assert.NotNull(files[ids["queued"].ToString()]!["ahead"]);
 
+            // A held file can be released with Resume; it then waits in the normal queue.
+            (await client.PostAsync($"/api/files/{ids["held"]}/resume", null)).EnsureSuccessStatusCode();
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, (await client.PostAsync($"/api/files/{ids["queued"]}/resume", null)).StatusCode);
+            var after = (await client.GetFromJsonAsync<JsonArray>("/api/uploads"))!.Single(f => f!["id"]!.GetValue<string>() == ids["held"].ToString())!;
+            Assert.Equal("queued", after["wait"]!["reason"]!.GetValue<string>());
+            Assert.False((await app.SignInAsync("25-8894")).PostAsync($"/api/files/{ids["paused"]}/resume", null).Result.IsSuccessStatusCode);
+
             // A stuck file can be queued again with Retry.
             (await client.PostAsync($"/api/files/{ids["stuck"]}/process", null)).EnsureSuccessStatusCode();
             using var scope = app.Services.CreateScope();
