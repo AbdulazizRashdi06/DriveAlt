@@ -302,6 +302,10 @@ namespace DriveAlt.Api.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("parent_id");
 
+                    b.Property<bool>("Recursive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("recursive");
+
                     b.PrimitiveCollection<string[]>("Segments")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -342,6 +346,35 @@ namespace DriveAlt.Api.Data.Migrations
                         .HasDatabaseName("ix_drive_sync_items_folder_id");
 
                     b.ToTable("drive_sync_items", (string)null);
+                });
+
+            modelBuilder.Entity("DriveAlt.Api.Data.DriveSyncSeenFile", b =>
+                {
+                    b.Property<string>("FolderId")
+                        .HasColumnType("text")
+                        .HasColumnName("folder_id");
+
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Importable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("importable");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("SeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("seen_at");
+
+                    b.HasKey("FolderId", "Id")
+                        .HasName("pk_drive_sync_seen_files");
+
+                    b.ToTable("drive_sync_seen_files", (string)null);
                 });
 
             modelBuilder.Entity("DriveAlt.Api.Data.DriveSyncState", b =>

@@ -20,6 +20,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<DriveSyncState> DriveSyncStates => Set<DriveSyncState>();
     public DbSet<DriveSyncFolder> DriveSyncFolders => Set<DriveSyncFolder>();
     public DbSet<DriveSyncItem> DriveSyncItems => Set<DriveSyncItem>();
+    public DbSet<DriveSyncSeenFile> DriveSyncSeenFiles => Set<DriveSyncSeenFile>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -27,11 +28,12 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         b.Entity<DriveSyncState>().Property(x => x.Id).ValueGeneratedNever();
         b.Entity<DriveSyncFolder>().HasIndex(x => x.ParentId);
         b.Entity<DriveSyncItem>().HasIndex(x => x.FolderId);
+        b.Entity<DriveSyncSeenFile>().HasKey(x => new { x.FolderId, x.Id });
 
         // Guid ids are assigned in code (new() => Guid.NewGuid()), so EF must treat unknown ones as inserts.
         foreach (var entity in b.Model.GetEntityTypes())
         {
-            var key = entity.FindPrimaryKey()?.Properties.SingleOrDefault();
+            var key = entity.FindPrimaryKey()?.Properties is { Count: 1 } single ? single[0] : null;
             if (key?.ClrType == typeof(Guid)) b.Entity(entity.ClrType).Property(key.Name).ValueGeneratedNever();
         }
 

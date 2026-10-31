@@ -22,9 +22,21 @@ public sealed class DriveSyncFolder
     public required string Name { get; set; }
     public string[] Segments { get; set; } = [];
     public bool Enabled { get; set; }
+    /// <summary>With <see cref="Enabled"/>: every folder below this one syncs too, including ones added later.</summary>
+    public bool Recursive { get; set; }
     public bool Available { get; set; } = true;
     public DateTime? CheckedAt { get; set; }
     public string? Error { get; set; }
+}
+
+/// <summary>A file seen in a Drive folder at the last scan, so folder upload status needs no live Drive listing.</summary>
+public sealed class DriveSyncSeenFile
+{
+    public required string FolderId { get; set; }
+    public required string Id { get; set; }
+    public required string Name { get; set; }
+    public bool Importable { get; set; }
+    public DateTime SeenAt { get; set; } = DateTime.UtcNow;
 }
 
 public sealed class DriveSyncItem

@@ -5,8 +5,11 @@ import { api } from '../lib/api'
 import { useApp } from '../lib/app'
 import { IconFolder } from './Icons'
 
-interface Folder { id: string; name: string; segments: string[]; enabled: boolean; available: boolean; checkedAt: string | null; error: string | null }
-interface DriveFile { id: string; name: string; importable: boolean; fileId: string | null }
+interface FolderStatus { state: 'missing' | 'working' | 'done' | 'unknown'; files: number; missing: number; working: number; failed: number }
+interface Folder { id: string; parentId?: string | null; name: string; segments: string[]; enabled: boolean; recursive?: boolean; available: boolean; checkedAt: string | null; error: string | null; status?: FolderStatus | null }
+interface DriveFile { id: string; name: string; importable: boolean; fileId: string | null; fileStatus?: string | null }
+type Mode = 'off' | 'only' | 'all'
+type SetMode = (f: Folder, mode: Mode) => void
 interface SyncState { enabled: boolean; scanRequested: boolean; startedAt: string | null; finishedAt: string | null; error: string | null; imported: number; folders: Folder[] }
 
 export function DriveSyncPanel() {
@@ -25,6 +28,13 @@ export function DriveSyncPanel() {
     } catch (e) { toast((e as Error).message) }
     finally { setBusy(false) }
   }
+  const setMode: SetMode = (f, mode) => {
+    setBusy(true)
+    api.put(`/api/admin/drive-sync/folders/${encodeURIComponent(f.id)}`, { mode })
+      .then(() => qc.invalidateQueries({ queryKey: ['drive-sync'] }))
+      .catch(e => toast((e as Error).message))
+      .finally(() => setBusy(false))
+  }
   const s = sync.data
   const scanning = !!s && (s.scanRequested || (!!s.startedAt && !s.finishedAt && Date.now() - new Date(s.startedAt).getTime() < 15 * 60 * 1000))
   const known = s?.folders.filter(f => f.available) ?? []
@@ -38,7 +48,7 @@ export function DriveSyncPanel() {
       <label className="drive-sync-toggle"><input type="checkbox" role="switch" aria-label="Automatic Drive sync" checked={s?.enabled ?? false}
         disabled={busy || !s} onChange={e => void change('/api/admin/drive-sync/', e.target.checked)} />{s?.enabled ? 'Auto-sync on' : 'Auto-sync paused'}</label>
     </div>
-    <p>Select folders, then turn on auto-sync. Each switch covers that folder’s files only. Subfolders and new folders stay off until selected. Pausing stops new imports; current processing finishes.</p>
+    <p>Pick folders, then turn on auto-sync. “This folder” imports only its own files; “+ Subfolders” also imports everything below it, including folders added later. Red folders have files that aren’t in the app yet, yellow ones are still processing or failed, green ones are all in. Pausing stops new imports; current processing finishes.</p>
     <div className="drive-sync-head">
       <button type="button" className="candy c-blue sm" disabled={busy || scanning || !s} onClick={() => void change('/api/admin/drive-sync/scan')}>
         {scanning ? 'Checking Drive…' : s?.enabled ? 'Sync now' : 'Discover folders'}
@@ -58,31 +68,59 @@ export function DriveSyncPanel() {
       {filter
         ? <div className="drive-sync-folders">
             {s.folders.filter(f => [f.name, ...f.segments].join('/').toLowerCase().includes(filter.toLowerCase())).map(f =>
-              <FolderRow key={f.id} folder={f} busy={busy} onToggle={change} onOpen={() => { setPath(f.segments); setFilter('') }} showPath />)}
+              <FolderRow key={f.id} folder={f} folders={s.folders} busy={busy} onMode={setMode} onOpen={() => { setPath(f.segments); setFilter('') }} showPath />)}
           </div>
-        : <FolderView folders={s.folders} path={path} busy={busy} onToggle={change} onNavigate={setPath} />}
+        : <FolderView folders={s.folders} path={path} busy={busy} onMode={setMode} onNavigate={setPath} />}
     </>}
     <p>Files already in the app stay available. Editing or deleting a Drive file does not change its imported copy.</p>
   </section>
 }
 
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x.toLowerCase() === b[i].toLowerCase())
-const label = (f: Folder) => f.segments.join(' / ') || 'Year 2'
 
-function FolderRow({ folder: f, busy, onToggle, onOpen, showPath = false }: { folder: Folder; busy: boolean; onToggle: (path: string, enabled: boolean) => void; onOpen: () => void; showPath?: boolean }) {
-  return <div className="drive-sync-folder">
-    <input type="checkbox" role="switch" aria-label={`Sync ${f.segments.join(' / ') || f.name}`} checked={f.enabled} disabled={busy || !f.available}
-      onChange={e => onToggle(`/api/admin/drive-sync/folders/${encodeURIComponent(f.id)}`, e.target.checked)} />
+const modeOf = (f: Folder): Mode => !f.enabled ? 'off' : f.recursive ? 'all' : 'only'
+/** The folder above (by parent link) that syncs everything below it, if any. */
+function coveredBy(folders: Folder[], f: Folder) {
+  for (let p = folders.find(o => o.id === f.parentId), depth = 0; p && depth < 25; p = folders.find(o => o.id === p!.parentId), depth++)
+    if (p.enabled && p.recursive) return p
+}
+
+function ModePicker({ folder: f, folders, busy, onMode }: { folder: Folder; folders: Folder[]; busy: boolean; onMode: SetMode }) {
+  const mode = modeOf(f)
+  const parent = mode === 'off' ? coveredBy(folders, f) : undefined
+  return <div className="drive-sync-mode">
+    <div className="segs" role="group" aria-label={`Sync ${f.segments.join(' / ') || 'Year 2'}`}>
+      {([['off', 'Off'], ['only', 'This folder'], ['all', '+ Subfolders']] as const).map(([m, text]) =>
+        <button key={m} type="button" className={`seg ${mode === m ? 'on' : ''}`} aria-pressed={mode === m} disabled={busy || !f.available}
+          onClick={() => mode !== m && onMode(f, m)}>{text}</button>)}
+    </div>
+    {parent && <small>On through {parent.name || 'Year 2'}</small>}
+  </div>
+}
+
+function StatusBadge({ status }: { status?: FolderStatus | null }) {
+  const s = status ?? { state: 'unknown', files: 0, missing: 0, working: 0, failed: 0 }
+  const text = s.state === 'missing' ? `${s.missing} not uploaded`
+    : s.state === 'working' ? [s.working && `${s.working} processing`, s.failed && `${s.failed} failed`].filter(Boolean).join(', ')
+    : s.state === 'done' ? `All ${s.files} uploaded` : 'Not scanned yet'
+  return <span className={`drive-sync-status ${s.state}`}><i aria-hidden="true" />{text}</span>
+}
+
+function FolderRow({ folder: f, folders, busy, onMode, onOpen, showPath = false }: { folder: Folder; folders: Folder[]; busy: boolean; onMode: SetMode; onOpen: () => void; showPath?: boolean }) {
+  return <div className={`drive-sync-folder status-${f.status?.state ?? 'unknown'}`}>
     <button type="button" className="drive-sync-open" onClick={onOpen}>
-      <b><IconFolder size={18} /> {f.name}</b>{(showPath || !f.available) && <small>{showPath ? f.segments.slice(0, -1).join(' / ') || 'Year 2' : ''}{!f.available ? ' · no longer listed' : ''}</small>}
+      <b><IconFolder size={18} /> {f.name}</b>
+      <StatusBadge status={f.status} />
+      {(showPath || !f.available) && <small>{showPath ? f.segments.slice(0, -1).join(' / ') || 'Year 2' : ''}{!f.available ? ' · no longer listed' : ''}</small>}
     </button>
+    <ModePicker folder={f} folders={folders} busy={busy} onMode={onMode} />
     {f.error && <p role="status">{f.error}</p>}
   </div>
 }
 
 /** One Drive folder at a time: breadcrumbs, its own switch and files, then its subfolders. */
-function FolderView({ folders, path, busy, onToggle, onNavigate }: { folders: Folder[]; path: string[]; busy: boolean;
-  onToggle: (path: string, enabled: boolean) => void; onNavigate: (path: string[]) => void }) {
+function FolderView({ folders, path, busy, onMode, onNavigate }: { folders: Folder[]; path: string[]; busy: boolean;
+  onMode: SetMode; onNavigate: (path: string[]) => void }) {
   const current = folders.find(f => same(f.segments, path))
   const children = folders.filter(f => f.segments.length === path.length + 1 && same(f.segments.slice(0, path.length), path))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
@@ -99,15 +137,15 @@ function FolderView({ folders, path, busy, onToggle, onNavigate }: { folders: Fo
       <button type="button" className="crumb" onClick={() => onNavigate([])}>Year 2</button>
       {path.map((p, i) => <span key={i}> › <button type="button" className="crumb" onClick={() => onNavigate(path.slice(0, i + 1))}>{p}</button></span>)}
     </nav>
-    {current && <div className="drive-sync-folder drive-sync-current">
-      <input type="checkbox" role="switch" aria-label={`Sync ${label(current)}`} checked={current.enabled} disabled={busy || !current.available}
-        onChange={e => onToggle(`/api/admin/drive-sync/folders/${encodeURIComponent(current.id)}`, e.target.checked)} />
-      <span><b>Sync files in {path.at(-1) ?? 'Year 2'}</b><small>Only this folder’s own files; subfolders have their own switch.</small></span>
+    {current && <div className={`drive-sync-folder drive-sync-current status-${current.status?.state ?? 'unknown'}`}>
+      <span><b>Sync {path.at(-1) ?? 'Year 2'}</b><StatusBadge status={current.status} />
+        <small>This folder: only its own files. + Subfolders: everything below it too, including folders added later.</small></span>
+      <ModePicker folder={current} folders={folders} busy={busy} onMode={onMode} />
       <a href={`https://drive.google.com/drive/folders/${encodeURIComponent(current.id)}`} target="_blank" rel="noreferrer">Open Drive</a>
       {current.error && <p role="status">{current.error}</p>}
     </div>}
     {children.length > 0 && <div className="drive-sync-folders" aria-label="Subfolders" role="group">
-      {children.map(f => <FolderRow key={f.id} folder={f} busy={busy} onToggle={onToggle} onOpen={() => onNavigate(f.segments)} />)}
+      {children.map(f => <FolderRow key={f.id} folder={f} folders={folders} busy={busy} onMode={onMode} onOpen={() => onNavigate(f.segments)} />)}
     </div>}
     {current && <div className="drive-sync-files" role="group" aria-label="Files in this folder">
       {files.isPending && <p>Listing files on Drive…</p>}
@@ -127,7 +165,9 @@ function FolderView({ folders, path, busy, onToggle, onNavigate }: { folders: Fo
               {shown.map(f => <li key={f.id} className="drive-sync-file">
                 <span className="ellipsis" title={f.name}>{f.name}</span>
                 {f.fileId
-                  ? <Link className="tg drive-sync-up" to={`/files/${f.fileId}`}>Uploaded</Link>
+                  ? f.fileStatus && f.fileStatus !== 'ready'
+                    ? <Link className="tg drive-sync-working" to={`/files/${f.fileId}`}>{f.fileStatus === 'failed' ? 'Failed' : 'Processing'}</Link>
+                    : <Link className="tg drive-sync-up" to={`/files/${f.fileId}`}>Uploaded</Link>
                   : <span className={`tg ${f.importable ? 'drive-sync-down' : 'drive-sync-skip'}`}>{f.importable ? 'Not uploaded' : 'Skipped type'}</span>}
               </li>)}
             </ul>
