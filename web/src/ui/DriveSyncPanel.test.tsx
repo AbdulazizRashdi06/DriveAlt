@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { DriveSyncPanel } from './DriveSyncPanel'
 import { MemoryRouter } from 'react-router'
@@ -11,8 +11,9 @@ const state = { enabled: false, scanRequested: false, startedAt: null, finishedA
   folders: [{ id: 'ds', name: 'Data Structures', segments: ['semester 1', 'Data Structures'], enabled: false, available: true },
     { id: 'sem2', name: 'semester 2', segments: ['semester 2'], enabled: false, available: true }] }
 const tree = [{ id: 'root', name: 'Year 2 Drive', segments: [], enabled: false, available: true },
-  { id: 'sem1', name: 'semester 1', segments: ['semester 1'], enabled: false, available: true }, ...state.folders]
-const get = (folders = tree, files: Record<string, unknown[]> = {}) => vi.mocked(api.get).mockImplementation(async (url: string) =>
+  { id: 'sem1', parentId: 'root', name: 'semester 1', segments: ['semester 1'], enabled: false, available: true },
+  { ...state.folders[0], parentId: 'sem1' }, { ...state.folders[1], parentId: 'root' }]
+const get = (folders: unknown[] = tree, files: Record<string, unknown[]> = {}) => vi.mocked(api.get).mockImplementation(async (url: string) =>
   url.includes('/files') ? files[decodeURIComponent(url.split('/folders/')[1].split('/files')[0])] ?? [] : { ...state, folders })
 function mount() { return render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DriveSyncPanel /></QueryClientProvider></MemoryRouter>) }
 describe('Drive folder controls', () => {
@@ -34,30 +35,45 @@ describe('Drive folder controls', () => {
     expect(await screen.findByText('Scan queued…')).toBeTruthy()
     expect(screen.getByRole('progressbar').hasAttribute('value')).toBe(false)
   })
-  it('starts paused and changes only the chosen folder', async () => {
+  it('starts paused and sets one folder to off, this folder or with subfolders', async () => {
     get()
     vi.mocked(api.put).mockResolvedValue({})
     mount()
-    expect(await screen.findByRole('switch', { name: 'Sync semester 1' })).toBeTruthy()
-    expect(screen.queryByRole('switch', { name: 'Sync semester 1 / Data Structures' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /semester 1/ }))
-    const ds = await screen.findByRole('switch', { name: 'Sync semester 1 / Data Structures' })
+    const sem1 = await screen.findByRole('group', { name: 'Sync semester 1' })
+    expect(within(sem1).getByRole('button', { name: 'Off' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('group', { name: 'Sync semester 1 / Data Structures' })).toBeNull()
     expect((screen.getByRole('switch', { name: 'Automatic Drive sync' }) as HTMLInputElement).checked).toBe(false)
-    fireEvent.click(ds)
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/admin/drive-sync/folders/ds', { enabled: true }))
-    fireEvent.click(screen.getByRole('button', { name: 'Year 2' }))
-    expect((await screen.findByRole('switch', { name: 'Sync semester 2' }) as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(within(sem1).getByRole('button', { name: '+ Subfolders' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/admin/drive-sync/folders/sem1', { mode: 'all' }))
+    fireEvent.click(screen.getByRole('button', { name: /semester 1/ }))
+    const ds = await screen.findByRole('group', { name: 'Sync semester 1 / Data Structures' })
+    fireEvent.click(within(ds).getByRole('button', { name: 'This folder' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/admin/drive-sync/folders/ds', { mode: 'only' }))
+    expect(api.put).toHaveBeenCalledTimes(2)
+  })
+  it('colours folders by what is missing below them and shows when a parent covers them', async () => {
+    const status = (state: string, extra = {}) => ({ state, files: 4, missing: 0, working: 0, failed: 0, ...extra })
+    get([tree[0], { ...tree[1], enabled: true, recursive: true, status: status('missing', { missing: 2 }) },
+      { ...tree[2], status: status('working', { working: 1, failed: 1 }) }, { ...tree[3], status: status('done') }])
+    mount()
+    expect(await screen.findByText('2 not uploaded')).toBeTruthy()
+    expect(screen.getByText('All 4 uploaded')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /semester 1/ }))
+    expect(await screen.findByText('1 processing, 1 failed')).toBeTruthy()
+    expect(screen.getByText('On through semester 1')).toBeTruthy()
   })
   it('walks Year 2 → semester → course and marks each file uploaded or not', async () => {
     get(tree, { ds: [
-      { id: 'a', name: 'Quiz 1.pdf', importable: true, fileId: 'f-1' },
+      { id: 'a', name: 'Quiz 1.pdf', importable: true, fileId: 'f-1', fileStatus: 'ready' },
+      { id: 'd', name: 'Quiz 3.pdf', importable: true, fileId: 'f-3', fileStatus: 'reading' },
       { id: 'b', name: 'Quiz 2.pdf', importable: true, fileId: null },
       { id: 'c', name: 'lecture.mp4', importable: false, fileId: null },
     ] })
     mount()
     fireEvent.click(await screen.findByRole('button', { name: /semester 1/ }))
     fireEvent.click(await screen.findByRole('button', { name: /Data Structures/ }))
-    expect(await screen.findByText('1 of 3 uploaded')).toBeTruthy()
+    expect(await screen.findByText('2 of 4 uploaded')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Processing' }).getAttribute('href')).toBe('/files/f-3')
     expect(screen.getByRole('link', { name: 'Uploaded' }).getAttribute('href')).toBe('/files/f-1')
     expect(screen.getByText('Not uploaded', { selector: 'span' })).toBeTruthy()
     expect(screen.getByText('Skipped type')).toBeTruthy()

@@ -166,6 +166,46 @@ public partial class ApiTests
         Assert.Null(files[2]!["fileId"]);
         Assert.True(files[2]!["importable"]!.GetValue<bool>());
     }
+
+    [Fact]
+    public async Task With_subfolders_syncs_everything_below_and_folders_show_what_is_missing()
+    {
+        var admin = await app.SignInAsync(ApiFactory.Uploader);
+        app.Drive.Folders[DriveImporter.Year2FolderId] = [new("rec-sem", "semester 1", "folder", null)];
+        app.Drive.Folders["rec-sem"] = [new("rec-ds", "Data Structures", "folder", null)];
+        app.Drive.Folders["rec-ds"] = [new("rec-top", "top paper.pdf", "file", null), new("rec-sub", "Quizzes", "folder", null)];
+        app.Drive.Folders["rec-sub"] = [new("rec-deep", "deep quiz.pdf", "file", null), new("rec-video", "talk.mp4", "file", null)];
+        try
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+            var sync = scope.ServiceProvider.GetRequiredService<DriveSyncService>();
+            await admin.PostAsJsonAsync("/api/admin/drive-sync/scan", new { });
+            await sync.RunOnceAsync(default); // discovery only: everything is off
+
+            JsonObject Folder(JsonObject state, string id) => state["folders"]!.AsArray().Single(f => f!["id"]!.GetValue<string>() == id)!.AsObject();
+            var before = (await admin.GetFromJsonAsync<JsonObject>("/api/admin/drive-sync/"))!;
+            Assert.Equal("missing", Folder(before, "rec-ds")["status"]!["state"]!.GetValue<string>());
+            Assert.Equal(2, Folder(before, "rec-ds")["status"]!["missing"]!.GetValue<int>()); // its own file + the subfolder's (videos don't count)
+            Assert.Equal(2, Folder(before, "rec-sem")["status"]!["missing"]!.GetValue<int>());
+
+            Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/admin/drive-sync/folders/rec-ds", new { mode = "bogus" })).StatusCode);
+            (await admin.PutAsJsonAsync("/api/admin/drive-sync/folders/rec-ds", new { mode = "all" })).EnsureSuccessStatusCode();
+            await admin.PutAsJsonAsync("/api/admin/drive-sync/", new { enabled = true });
+            db.ChangeTracker.Clear();
+            await sync.RunOnceAsync(default);
+
+            // The subfolder was never switched on itself, but its parent covers it.
+            Assert.True(await db.DriveSyncItems.AnyAsync(i => i.Id == "rec-deep"));
+            Assert.True(await db.DriveSyncItems.AnyAsync(i => i.Id == "rec-top"));
+            var after = (await admin.GetFromJsonAsync<JsonObject>("/api/admin/drive-sync/"))!;
+            Assert.True(Folder(after, "rec-ds")["recursive"]!.GetValue<bool>());
+            Assert.False(Folder(after, "rec-sub")["enabled"]!.GetValue<bool>());
+            Assert.Equal(0, Folder(after, "rec-ds")["status"]!["missing"]!.GetValue<int>());
+            Assert.Equal("working", Folder(after, "rec-ds")["status"]!["state"]!.GetValue<string>()); // imported, not processed yet
+        }
+        finally { await admin.PutAsJsonAsync("/api/admin/drive-sync/", new { enabled = false }); }
+    }
 }
 
 public class DriveSyncTests

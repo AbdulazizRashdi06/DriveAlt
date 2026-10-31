@@ -103,6 +103,11 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
                         if (listing.Error is { } error) throw error;
                         var items = listing.Items!;
                         folder.CheckedAt = DateTime.UtcNow;
+                        // Remember what this folder holds, so the panel can colour folders without listing Drive again.
+                        await db.DriveSyncSeenFiles.Where(f => f.FolderId == entry.Id).ExecuteDeleteAsync(ct);
+                        db.DriveSyncSeenFiles.AddRange(items.Where(i => i.Kind != "folder").DistinctBy(i => i.Id).Select(i =>
+                            new DriveSyncSeenFile { FolderId = entry.Id, Id = i.Id, Name = i.Name, Importable = DriveImporter.CanImport(i) }));
+                        await db.SaveChangesAsync(ct);
                         foreach (var child in items.Where(i => i.Kind == "folder").OrderBy(i => i.Name))
                             queue.Enqueue((child.Id, entry.Id, child.Name, [.. entry.Segments, child.Name.Trim()]));
                         var fresh = items.Where(i => DriveImporter.CanImport(i) && !seenFiles.Contains(i.Id))
@@ -118,7 +123,7 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
                             var on = await db.DriveSyncStates.AsNoTracking().Where(s => s.Id == 1 && s.Enabled)
                                 .Select(s => s.UploaderId).FirstOrDefaultAsync(ct);
                             if (on is not { } uploader || !await db.Users.AnyAsync(u => u.Id == uploader && u.Role == Roles.Uploader, ct)
-                                || !await db.DriveSyncFolders.AsNoTracking().AnyAsync(f => f.Id == folder.Id && f.Enabled, ct)) break;
+                                || !await IsActiveAsync(db, folder.Id, ct)) break;
                             Guid? fileId;
                             try { fileId = await importer.ImportNewAsync(batch, entry.Segments, uploader, ct); }
                             catch (Exception e) when (!ct.IsCancellationRequested)
@@ -187,6 +192,25 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
         }
     }
 
+    /// <summary>A folder syncs when its own switch is on, or a folder above it is on "with subfolders".</summary>
+    public static async Task<bool> IsActiveAsync(AppDb db, string folderId, CancellationToken ct)
+    {
+        var current = await db.DriveSyncFolders.AsNoTracking().Where(f => f.Id == folderId)
+            .Select(f => new { f.Enabled, f.ParentId }).FirstOrDefaultAsync(ct);
+        if (current is null) return false;
+        if (current.Enabled) return true;
+        var parentId = current.ParentId;
+        for (var depth = 0; parentId is not null && depth < 25; depth++)
+        {
+            var parent = await db.DriveSyncFolders.AsNoTracking().Where(f => f.Id == parentId)
+                .Select(f => new { f.Enabled, f.Recursive, f.ParentId }).FirstOrDefaultAsync(ct);
+            if (parent is null) return false;
+            if (parent.Enabled && parent.Recursive) return true;
+            parentId = parent.ParentId;
+        }
+        return false;
+    }
+
     public static HashSet<string> KnownIds(IEnumerable<string> sourceRefs, IEnumerable<string> tracked) =>
         sourceRefs.Where(s => s.StartsWith("gdrive:")).SelectMany(s => s[7..].Split('+')).Concat(tracked).ToHashSet();
 }
@@ -227,6 +251,57 @@ public sealed class DriveSyncWorker(IServiceScopeFactory scopes, ILogger<DriveSy
 public static class DriveSyncEndpoints
 {
     public sealed record ToggleBody(bool Enabled);
+    /// <summary>A folder's switch: "off", "only" (its own files) or "all" (it and every folder below it).</summary>
+    public sealed record FolderBody(bool? Enabled = null, string? Mode = null);
+
+    /// <summary>
+    /// Upload state of a folder and everything below it, from the files seen at the last scan: <c>missing</c> (some file
+    /// isn't in the app), <c>working</c> (all are in, some still processing or failed), <c>done</c> (all in and ready)
+    /// or <c>unknown</c> (no files seen yet).
+    /// </summary>
+    public sealed record FolderStatus(string State, int Files, int Missing, int Working, int Failed);
+
+    internal static async Task<Dictionary<string, FolderStatus>> StatusesAsync(AppDb db, List<DriveSyncFolder> folders, CancellationToken ct)
+    {
+        var seen = await db.DriveSyncSeenFiles.AsNoTracking().Where(f => f.Importable).ToListAsync(ct);
+        var matcher = await DriveUploadMatcher.LoadAsync(db, ct);
+        var byId = folders.ToDictionary(f => f.Id);
+        var own = new Dictionary<string, (int Files, int Missing, int Working, int Failed)>();
+        foreach (var file in seen)
+        {
+            if (!byId.TryGetValue(file.FolderId, out var folder)) continue;
+            var app = matcher.Find(folder.Segments, file.Id, file.Name);
+            var c = own.GetValueOrDefault(file.FolderId);
+            c.Files++;
+            if (app is null) c.Missing++;
+            else if (app.Status == FileStatuses.Failed) c.Failed++;
+            else if (app.Status != FileStatuses.Ready) c.Working++;
+            own[file.FolderId] = c;
+        }
+        // Each folder counts its own files plus every folder below it (by parent link), so a parent shows where files are missing.
+        var children = folders.Where(f => f.ParentId is not null).GroupBy(f => f.ParentId!).ToDictionary(g => g.Key, g => g.Select(f => f.Id).ToList());
+        var totals = new Dictionary<string, (int Files, int Missing, int Working, int Failed)>();
+        (int Files, int Missing, int Working, int Failed) Total(string id, int depth)
+        {
+            if (totals.TryGetValue(id, out var done)) return done;
+            var t = own.GetValueOrDefault(id);
+            if (depth < 25)
+                foreach (var child in children.GetValueOrDefault(id) ?? [])
+                {
+                    var c = Total(child, depth + 1);
+                    t = (t.Files + c.Files, t.Missing + c.Missing, t.Working + c.Working, t.Failed + c.Failed);
+                }
+            return totals[id] = t;
+        }
+        var result = new Dictionary<string, FolderStatus>();
+        foreach (var f in folders)
+        {
+            var t = Total(f.Id, 0);
+            var state = t.Files == 0 ? "unknown" : t.Missing > 0 ? "missing" : t.Working + t.Failed > 0 ? "working" : "done";
+            result[f.Id] = new FolderStatus(state, t.Files, t.Missing, t.Working, t.Failed);
+        }
+        return result;
+    }
     public static void Map(WebApplication app)
     {
         var g = app.MapGroup("/api/admin/drive-sync").RequireAuthorization(AuthEndpoints.UploaderPolicy);
@@ -234,8 +309,13 @@ public static class DriveSyncEndpoints
         {
             var state = await sync.StateAsync(ct);
             var folders = await db.DriveSyncFolders.AsNoTracking().ToListAsync(ct);
+            var statuses = await StatusesAsync(db, folders, ct);
             return Results.Ok(new { state.Enabled, state.ScanRequested, state.StartedAt, state.FinishedAt, state.Error, state.Imported,
-                folders = folders.OrderBy(f => string.Join('/', f.Segments), StringComparer.OrdinalIgnoreCase) });
+                folders = folders.OrderBy(f => string.Join('/', f.Segments), StringComparer.OrdinalIgnoreCase).Select(f => new
+                {
+                    f.Id, f.ParentId, f.Name, f.Segments, f.Enabled, f.Recursive, f.Available, f.CheckedAt, f.Error,
+                    Status = statuses.GetValueOrDefault(f.Id),
+                }) });
         });
         g.MapPut("/", async (ToggleBody body, HttpContext http, DriveSyncService sync, AppDb db, CancellationToken ct) =>
         {
@@ -272,35 +352,24 @@ public static class DriveSyncEndpoints
                 return Results.Problem("Couldn't list this folder on Drive. Check its sharing and try again.", statusCode: 502);
             }
             var files = items.Where(i => i.Kind != "folder").OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
-            var ids = files.Select(f => f.Id).ToList();
-            var imported = await db.DriveSyncItems.AsNoTracking().Where(i => ids.Contains(i.Id))
-                .ToDictionaryAsync(i => i.Id, i => i.FileId, ct);
-            // Files from the original Drive import are only recorded in source_ref ("gdrive:id1+id2").
-            foreach (var f in await db.Files.AsNoTracking().Where(f => f.SourceRef != null && f.SourceRef.StartsWith("gdrive:"))
-                         .Select(f => new { f.Id, f.SourceRef }).ToListAsync(ct))
-                foreach (var driveId in f.SourceRef![7..].Split('+'))
-                    imported.TryAdd(driveId, f.Id);
-            // Anything else counts as uploaded when the app has a file with the same name in the same course, however it
-            // got there (uploaded by hand, or a renamed copy). Same name rule as the upload duplicate check.
-            var courses = await db.Courses.AsNoTracking().ToListAsync(ct);
-            var courseId = Heuristics.FromPath(string.Join('/', folder.Segments), courses).Course?.Id;
-            var byName = new Dictionary<string, Guid>();
-            foreach (var f in await db.Files.AsNoTracking().Where(f => courseId == null || f.CourseId == courseId)
-                         .OrderByDescending(f => f.CreatedAt).Select(f => new { f.Id, f.Title, f.OriginalName }).ToListAsync(ct))
-                foreach (var name in new[] { f.Title, f.OriginalName })
-                    if (Heuristics.CanonicalTitle(name) is { Length: > 0 } key) byName.TryAdd(key, f.Id);
+            var matcher = await DriveUploadMatcher.LoadAsync(db, ct);
             return Results.Ok(files.Select(f =>
             {
-                var fileId = imported.TryGetValue(f.Id, out var exact) ? exact
-                    : byName.TryGetValue(Heuristics.CanonicalTitle(f.Name), out var named) ? named : (Guid?)null;
-                return new { f.Id, f.Name, Importable = DriveImporter.CanImport(f), FileId = fileId };
+                var app = matcher.Find(folder.Segments, f.Id, f.Name);
+                return new { f.Id, f.Name, Importable = DriveImporter.CanImport(f), FileId = app?.Id, FileStatus = app?.Status };
             }));
         });
-        g.MapPut("/folders/{id}", async (string id, ToggleBody body, AppDb db, CancellationToken ct) =>
+        g.MapPut("/folders/{id}", async (string id, FolderBody body, AppDb db, CancellationToken ct) =>
         {
             var folder = await db.DriveSyncFolders.FindAsync([id], ct);
             if (folder is null) return Results.NotFound();
-            folder.Enabled = body.Enabled;
+            switch (body.Mode ?? (body.Enabled == true ? "only" : body.Enabled == false ? "off" : null))
+            {
+                case "off": folder.Enabled = false; folder.Recursive = false; break;
+                case "only": folder.Enabled = true; folder.Recursive = false; break;
+                case "all": folder.Enabled = true; folder.Recursive = true; break;
+                default: return Results.BadRequest(new { error = "mode must be off, only or all." });
+            }
             await db.SaveChangesAsync(ct);
             return Results.Ok();
         });

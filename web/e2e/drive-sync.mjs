@@ -14,7 +14,16 @@ try {
     const state = { enabled: false, scanRequested: false, startedAt: null, finishedAt: null, error: null, imported: 0,
       folders: ['semester 1/Data Structures/past papers', 'semester 1/AI/ITS', 'semester 2/CS/Efficient Algorithms/slides',
         '', 'semester 1', 'semester 1/Data Structures', 'semester 1/AI', 'semester 2', 'semester 2/CS', 'semester 2/CS/Efficient Algorithms']
-        .map((p, i) => ({ id: `${i}`, name: p.split('/').at(-1) || 'Year 2 Drive', segments: p ? p.split('/') : [], enabled: false, available: true })) }
+        .map((p, i) => ({ id: `${i}`, name: p.split('/').at(-1) || 'Year 2 Drive', segments: p ? p.split('/') : [], enabled: false, recursive: false, available: true })) }
+    // Parent links and upload status, as the API sends them.
+    for (const f of state.folders) {
+      const parent = state.folders.find(o => o.segments.join('/') === f.segments.slice(0, -1).join('/') && o.segments.length === f.segments.length - 1)
+      f.parentId = f.segments.length ? parent?.id ?? null : null
+      const s = f.segments.join('/')
+      f.status = s.startsWith('semester 1/Data Structures') || s === 'semester 1' || s === '' ? { state: 'missing', files: 3, missing: 1, working: 0, failed: 0 }
+        : s.startsWith('semester 1/AI') ? { state: 'working', files: 2, missing: 0, working: 1, failed: 0 }
+        : s.startsWith('semester 2') ? { state: 'done', files: 9, missing: 0, working: 0, failed: 0 } : null
+    }
     const known = state.folders.length
     page.on('pageerror', e => errors.push(e.message))
     await page.route('**/api/**', async route => {
@@ -26,13 +35,16 @@ try {
       if (path === '/api/admin/stats') return json({ files: 403, ready: 212, processing: 190, failed: 1, pages: 9673, questions: 1105, users: 1 })
       if (path === '/api/reports') return json({ items: [], total: 0, page: 1, pageSize: 30 })
       if (path.endsWith('/files')) return json(path.includes('/folders/0/') ? [
-        { id: 'a', name: 'Midterm 1 2024.pdf', importable: true, fileId: 'file-1' },
+        { id: 'a', name: 'Midterm 1 2024.pdf', importable: true, fileId: 'file-1', fileStatus: 'ready' },
         { id: 'b', name: 'Midterm 2 2024 with a very long name that should wrap or cut off on a phone.pdf', importable: true, fileId: null },
         { id: 'c', name: 'Review session.mp4', importable: false, fileId: null }] : [])
       if (path.startsWith('/api/admin/drive-sync')) {
         if (req.method() === 'PUT') {
           changes.push({ path, ...req.postDataJSON() })
-          if (path.includes('/folders/')) state.folders.find(f => f.id === path.split('/').at(-1)).enabled = req.postDataJSON().enabled
+          if (path.includes('/folders/')) {
+            const f = state.folders.find(f => f.id === path.split('/').at(-1)), mode = req.postDataJSON().mode
+            f.enabled = mode !== 'off'; f.recursive = mode === 'all'
+          }
           else state.enabled = req.postDataJSON().enabled
         }
         return json(state)
@@ -40,7 +52,8 @@ try {
       return json([])
     })
     await page.goto(`${base}/admin`)
-    await expect(page.getByRole('switch', { name: 'Sync semester 1 / Data Structures / past papers', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('group', { name: 'Sync semester 1 / Data Structures / past papers', exact: true })).toHaveCount(0)
+    await page.screenshot({ path: join(out, `${name}-root.png`), fullPage: true })
     await page.getByRole('button', { name: /semester 1/ }).click()
     await page.getByRole('button', { name: /Data Structures/ }).click()
     await page.screenshot({ path: join(out, `${name}-course.png`), fullPage: true })
@@ -52,14 +65,14 @@ try {
     await expect(page.getByText('Review session.mp4')).toHaveCount(0)
     await page.screenshot({ path: join(out, `${name}-missing.png`), fullPage: true })
     await page.getByRole('button', { name: 'All', exact: true }).click()
-    const ds = page.getByRole('switch', { name: 'Sync semester 1 / Data Structures / past papers', exact: true })
-    await expect(ds).not.toBeChecked()
-    await ds.click()
-    await expect(ds).toBeChecked()
+    const ds = page.getByRole('group', { name: 'Sync semester 1 / Data Structures / past papers', exact: true })
+    await expect(ds.getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true')
+    await ds.getByRole('button', { name: '+ Subfolders' }).click()
+    await expect(ds.getByRole('button', { name: '+ Subfolders' })).toHaveAttribute('aria-pressed', 'true')
     await page.getByRole('heading', { name: 'Google Drive sync' }).scrollIntoViewIfNeeded()
     await page.screenshot({ path: join(out, `${name}-files.png`), fullPage: true })
     await page.getByRole('navigation', { name: 'Drive folder path' }).getByRole('button', { name: 'Year 2' }).click()
-    await expect(page.getByRole('switch', { name: 'Sync semester 2', exact: true })).not.toBeChecked()
+    await expect(page.getByRole('group', { name: 'Sync semester 2', exact: true }).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('switch', { name: 'Automatic Drive sync' })).not.toBeChecked()
     state.startedAt = new Date().toISOString()
     state.folders[0].checkedAt = new Date(Date.now() + 1000).toISOString()
