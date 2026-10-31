@@ -23,13 +23,14 @@ public class MaterialKindTests
     }
 
     [Fact]
-    public void Tool_schemas_require_the_contract_on_search_options_and_reply()
+    public void Search_and_options_name_a_kind_and_replies_have_no_asked_for()
     {
         var tools = (JsonArray)typeof(ChatService).GetField("Tools", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
         var declarations = tools[0]!["functionDeclarations"]!.AsArray();
         JsonNode Parameters(string name) => declarations.Single(d => d!["name"]!.GetValue<string>() == name)!["parameters"]!;
         Assert.Contains("want", Parameters("search_material")["required"]!.AsArray().Select(n => n!.GetValue<string>()));
-        Assert.Contains("asked_for", Parameters("reply")["required"]!.AsArray().Select(n => n!.GetValue<string>()));
+        // No asked_for: what the model picks is what is shown.
+        Assert.DoesNotContain("asked_for", tools.ToJsonString());
         var option = Parameters("ask")["properties"]!["options"]!["items"]!;
         Assert.Contains("want", option["required"]!.AsArray().Select(n => n!.GetValue<string>()));
         Assert.DoesNotContain("result_kind", tools.ToJsonString());
