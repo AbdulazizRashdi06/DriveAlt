@@ -24,7 +24,10 @@ public sealed record ChatStream(Func<ChatStatus, Task> Status, Func<MessageDto, 
 public sealed class ChatOption
 {
     public string Label { get; set; } = "";
+    /// <summary>Legacy free-text query of options saved before the model wrote meaning/keywords itself.</summary>
     public string Query { get; set; } = "";
+    public string? Meaning { get; set; }
+    public string[]? Keywords { get; set; }
     public string? Course { get; set; }
     public string? Type { get; set; }
     public int? Year { get; set; }
@@ -268,7 +271,7 @@ public sealed partial class ChatService(
         if (options.All(o => !string.IsNullOrWhiteSpace(o.FoundCommentary) && !string.IsNullOrWhiteSpace(o.EmptyCommentary)
             && o.MoreCommentary.Count >= 3 && o.MoreCommentary.Take(3).All(s => !string.IsNullOrWhiteSpace(s)))) return;
         var context = ReplyContext(turn);
-        context["options"] = new JsonArray(options.Select(o => (JsonNode)new JsonObject { ["label"] = o.Label, ["query"] = o.Query }).ToArray());
+        context["options"] = new JsonArray(options.Select(o => (JsonNode)new JsonObject { ["label"] = o.Label, ["meaning"] = o.Meaning ?? o.Query }).ToArray());
         JsonArray? generated = null;
         try
         {
@@ -390,8 +393,8 @@ public sealed partial class ChatService(
 
     private async Task<List<string>> SearchOptionAsync(ChatOption o, IReadOnlyList<Course> courses, CancellationToken ct)
     {
-        var (hits, _) = await SearchWantedAsync(o.Want, o.Query, ResolveCourse(o.Course, courses), o.Type is null ? null : MaterialTypes.Normalize(o.Type),
-            o.Year, o.AssessmentLabel, MaxResults, ct);
+        var hits = await SearchWantedAsync(o.Want, o.Meaning, o.Keywords, o.Query, ResolveCourse(o.Course, courses),
+            o.Type is null ? null : MaterialTypes.Normalize(o.Type), o.Year, o.AssessmentLabel, MaxResults, ct);
         return hits.Select(h => h.Ref).ToList();
     }
 
@@ -443,8 +446,10 @@ public sealed partial class ChatService(
                one option per meaning. The app starts every option's search at once, so say the search is already running.
                Today is {{today:yyyy-MM-dd}}.
             6. You may offer other material in your line or as `ask` options, but never show it until the student says yes.
-               If nothing matches, show nothing and offer another search. Results marked "broadened" are from other years or labels
-               than asked: offer them, don't show them.
+               If nothing matches, show nothing and offer another search. Write each search yourself: `meaning` is a sentence for the
+               semantic search and `keywords` are exact words or phrases (in the language the material is written in); filters are
+               optional. A search returns exactly what matches, with no retries: if a year or label finds nothing, you may search
+               again without it, then offer what you find.
             7. When the student answers your `ask` with one of its options, call `reply` with option=<its number>. When they want more of
                the last results, call `reply` with show_more=true. If they want something else instead, search again.
             8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
@@ -470,14 +475,15 @@ public sealed partial class ChatService(
               "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                  "query": { "type": "STRING", "description": "Topic keywords, e.g. 'queue rear pointer counting' or 'hashing collision'." },
+                  "meaning": { "type": "STRING", "description": "One sentence describing the material you are looking for, for the semantic search, e.g. 'exam questions about how the rear pointer moves in a circular queue'. Empty when the filters alone say what is wanted (e.g. all 2026 Data Structures past papers)." },
+                  "keywords": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Exact words or short phrases for the keyword search, e.g. ['circular queue', 'rear']. Any one may match; a phrase must match whole. [] to rely on meaning and filters only." },
                   "want": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages"], "description": "questions: question crops; slides: whole slide decks; slide_pages: single slides; files: whole non-slide files; notes_pages: pages of notes." },
                   "course": { "type": "STRING", "description": "Course slug from the course list, if known." },
                   "material_type": { "type": "STRING", "enum": ["slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"] },
                   "year": { "type": "INTEGER", "description": "4-digit year the material is from." },
                   "assessment_label": { "type": "STRING", "description": "e.g. 'Quiz 3', 'Midterm 1', 'Final'." }
                 },
-                "required": ["query", "want"]
+                "required": ["meaning", "keywords", "want"]
               }
             },
             {
@@ -502,14 +508,15 @@ public sealed partial class ChatService(
                         "found_commentary": { "type": "STRING", "description": "Your natural line if this option finds results, without assuming the count." },
                         "empty_commentary": { "type": "STRING", "description": "Your natural line if no results are found yet." },
                         "more_commentary": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Three natural lines for successive later batches, without assuming batch size or claiming the last batch." },
-                        "query": { "type": "STRING", "description": "Topic keywords; may be empty when choosing whole files without a topic." },
+                        "meaning": { "type": "STRING", "description": "What this option searches for, as a sentence for the semantic search; empty for whole files chosen by filters only." },
+                        "keywords": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Exact words or phrases for the keyword search; [] for none." },
                         "want": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages"] },
                         "course": { "type": "STRING", "description": "Course slug from the course list, if known." },
                         "material_type": { "type": "STRING", "enum": ["slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"] },
                         "year": { "type": "INTEGER", "description": "4-digit year the material is from." },
                         "assessment_label": { "type": "STRING", "description": "e.g. 'Quiz 3', 'Midterm 1', 'Final'." }
                       },
-                      "required": ["label", "query", "want", "found_commentary", "empty_commentary", "more_commentary"]
+                      "required": ["label", "meaning", "keywords", "want", "found_commentary", "empty_commentary", "more_commentary"]
                     }
                   }
                 },
@@ -612,6 +619,8 @@ public sealed partial class ChatService(
                 {
                     Label = o.Str("label") ?? "",
                     Query = o.Str("query") ?? "",
+                    Meaning = o.Str("meaning") ?? "",
+                    Keywords = Lines(o["keywords"]).Where(k => !string.IsNullOrWhiteSpace(k)).ToArray(),
                     Course = o.Str("course"),
                     Type = o.Str("material_type"),
                     Year = o.Int("year"),
@@ -681,41 +690,39 @@ public sealed partial class ChatService(
         return new Reply(null, [], false);
     }
 
-    /// <summary>Every retry retains the requested kind and all course/type filters.</summary>
-    private async Task<(List<SearchHit> Hits, bool Broadened)> SearchWantedAsync(string want, string query, Course? course,
-        string? type, int? year, string? label, int limit, CancellationToken ct)
+    /// <summary>
+    /// Runs exactly the search the model asked for. With meaning/keywords the model's own wording is used as is; a legacy
+    /// option with only a free-text query uses the older text processing. No retries: an empty result goes back to the model.
+    /// </summary>
+    private async Task<List<SearchHit>> SearchWantedAsync(string want, string? meaning, IReadOnlyList<string>? keywords, string legacyQuery,
+        Course? course, string? type, int? year, string? label, int limit, CancellationToken ct)
     {
-        if (!MaterialWants.IsSearch(want)) return ([], false);
-        var q = new SearchQuery(query, course is null ? null : [course.Id],
+        if (!MaterialWants.IsSearch(want)) return [];
+        var authored = meaning is not null || keywords is not null;
+        var q = new SearchQuery(authored ? meaning ?? "" : legacyQuery, course is null ? null : [course.Id],
             want == MaterialWants.Slides ? [MaterialTypes.Slides]
                 : type is not null ? [type] : want == MaterialWants.Files ? MaterialTypes.All.Where(t => t != MaterialTypes.Slides).ToArray() : null,
             year, label, Limit: limit,
             PageKind: want == MaterialWants.SlidePages ? PageKinds.Slide : want == MaterialWants.NotesPages ? PageKinds.Notes : null,
-            QuestionsOnly: want == MaterialWants.Questions);
-        if (want is MaterialWants.Slides or MaterialWants.Files)
-        {
-            // Files is the non-slide whole-file kind. Slide decks always use slides.
-            return (await search.SearchFilesAsync(q, ct), false);
-        }
-        var found = await search.SearchAsync(q, ct);
-        if (found.Count > 0 || (year is null && label is null)) return (found, false);
-        found = await search.SearchAsync(q with { Year = null, AssessmentLabel = null }, ct);
-        return (found, found.Count > 0);
+            QuestionsOnly: want == MaterialWants.Questions,
+            Meaning: authored ? meaning ?? "" : null, Keywords: authored ? keywords ?? [] : null);
+        // Files is the non-slide whole-file kind. Slide decks always use slides.
+        return want is MaterialWants.Slides or MaterialWants.Files ? await search.SearchFilesAsync(q, ct) : await search.SearchAsync(q, ct);
     }
 
     private async Task<JsonObject> ToolSearchAsync(JsonObject args, IReadOnlyList<Course> courses, Turn turn, Func<ChatStatus, Task> status, CancellationToken ct)
     {
-        var query = args.Str("query") ?? "";
+        var meaning = args.Str("meaning") ?? args.Str("query") ?? "";
+        var keywords = Lines(args["keywords"]).Where(k => !string.IsNullOrWhiteSpace(k)).ToList();
         var course = ResolveCourse(args.Str("course"), courses);
         var type = args.Str("material_type") is { } t ? MaterialTypes.Normalize(t) : null;
         var year = args.Int("year");
         var label = args.Str("assessment_label");
         await status(new ChatStatus(StatusLine(course, type)));
 
-        // Too narrow a year/label: the retry lets the model tell the student what does exist, and ask before showing it.
         var want = args.Str("want");
         if (!MaterialWants.IsSearch(want)) return new JsonObject { ["error"] = "want must name the requested material kind" };
-        var (hits, broadened) = await SearchWantedAsync(want!, query, course, type, year, label, 16, ct);
+        var hits = await SearchWantedAsync(want!, meaning, keywords, "", course, type, year, label, 16, ct);
 
         var results = new JsonArray();
         if (hits.Count > 0)
@@ -735,11 +742,6 @@ public sealed partial class ChatService(
             ["reminder"] = want is MaterialWants.Slides or MaterialWants.Files ? "Return f: refs for the matching whole files. Each is one complete file with open/download actions; never describe them as question crops."
                 : "Pick the refs that match what the student asked for via reply.result_refs. Never repeat snippets or type answers.",
         };
-        if (broadened)
-        {
-            output["broadened"] = true;
-            output["note"] = "Nothing matched the year or label asked, so these are from other years or labels. Don't show them unasked: tell the student and ask.";
-        }
         return output;
     }
 

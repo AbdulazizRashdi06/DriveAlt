@@ -17,7 +17,16 @@ public sealed record SearchQuery(
     Guid? FileId = null,
     int Limit = 12,
     string? PageKind = null,
-    bool QuestionsOnly = false);
+    bool QuestionsOnly = false,
+    string? Meaning = null,
+    IReadOnlyList<string>? Keywords = null)
+{
+    /// <summary>
+    /// True when the chat model wrote the search itself: <see cref="Meaning"/> is embedded as written and
+    /// <see cref="Keywords"/> are matched as given, with no stop words, boosts or topic extraction applied.
+    /// </summary>
+    public bool Authored => Meaning is not null || Keywords is not null;
+}
 
 public sealed record SearchHit(string Ref, Guid PageId, Guid? RegionId, double Score);
 
@@ -50,15 +59,24 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
         return words.Count == 0 ? null : string.Join(" | ", words);
     }
 
+    /// <summary>The model's keywords as a tsquery: each keyword (one word or a phrase) must match whole, any keyword may match.</summary>
+    public static string? KeywordTsQuery(IEnumerable<string> keywords)
+    {
+        var groups = keywords.Select(k => Token().Matches(k.ToLowerInvariant()).Select(m => m.Value).ToList())
+            .Where(t => t.Count > 0).Select(t => t.Count == 1 ? t[0] : "(" + string.Join(" & ", t) + ")").Distinct().Take(16).ToList();
+        return groups.Count == 0 ? null : string.Join(" | ", groups);
+    }
+
     public async Task<List<SearchHit>> SearchAsync(SearchQuery q, CancellationToken ct)
     {
-        var ts = OrTsQuery(q.Text);
+        var ts = q.Authored ? (q.Keywords is null ? null : KeywordTsQuery(q.Keywords)) : OrTsQuery(q.Text);
+        var embedText = q.Authored ? q.Meaning : q.Text;
         Vector? vec = null;
-        if (ai.Online && !string.IsNullOrWhiteSpace(q.Text))
+        if (ai.Online && !string.IsNullOrWhiteSpace(embedText))
         {
             try
             {
-                var v = (await ai.EmbedAsync([q.Text], query: true, ct))[0];
+                var v = (await ai.EmbedAsync([embedText], query: true, ct))[0];
                 if (v is not null) vec = new Vector(v);
             }
             catch (Exception e) when (e is not OperationCanceledException)
@@ -66,6 +84,9 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
                 log.LogWarning(e, "Query embedding failed; keyword search only");
             }
         }
+
+        // The model's sentence only reaches the semantic search; if embeddings are unavailable, its words are the fallback.
+        if (q.Authored && ts is null && vec is null && !string.IsNullOrWhiteSpace(q.Meaning)) ts = OrTsQuery(q.Meaning);
 
         var pages = FilterPages(db.Pages.AsNoTracking(), q);
         var regions = FilterRegions(db.Regions.AsNoTracking(), q);
@@ -100,9 +121,9 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
             lists.Add((regionVec.Select(r => ("r:" + r.Id, r.PageId, (Guid?)r.Id)).ToList(), 1.1));
         }
 
-        if (ts is null && vec is null)
+        if (ts is null && vec is null && (!q.Authored || (string.IsNullOrWhiteSpace(q.Meaning) && q.Keywords is not { Count: > 0 })))
         {
-            // No usable words (e.g. just filters): newest material first.
+            // No search words (e.g. the model asked only for "Midterm 1, 2023" by filters): everything matching, newest first.
             var recent = await pages.OrderByDescending(p => p.File!.AcademicYear).ThenBy(p => p.File!.Title).ThenBy(p => p.Number)
                 .Select(p => new { p.Id }).Take(Candidates).ToListAsync(ct);
             lists.Add((recent.Select(p => ("p:" + p.Id, p.Id, (Guid?)null)).ToList(), 1.0));
@@ -125,7 +146,7 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
 
         // Boost exact question-number matches ("Q2", "question 3").
         var qref = QuestionRef().Match(q.Text);
-        if (qref.Success && scores.Keys.Any(k => k.StartsWith("r:")))
+        if (!q.Authored && qref.Success && scores.Keys.Any(k => k.StartsWith("r:")))
         {
             var num = qref.Groups[1].Value.ToLowerInvariant();
             var regionIds = scores.Values.Where(v => v.RegionId is not null).Select(v => v.RegionId!.Value).ToList();
@@ -166,20 +187,25 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
         var courseQuery = db.Courses.AsNoTracking();
         if (q.CourseIds is { Count: > 0 } selected) courseQuery = courseQuery.Where(c => selected.Contains(c.Id));
         var selectedCourses = await courseQuery.ToListAsync(ct);
-        var topic = FileTopic(q.Text, selectedCourses, q.AssessmentLabel);
+        // The model's own search is used as written; Browse-style text still has its file words stripped.
+        var topic = q.Authored ? string.Join(' ', q.Keywords ?? []) : FileTopic(q.Text, selectedCourses, q.AssessmentLabel);
+        var hasTopic = q.Authored ? !string.IsNullOrWhiteSpace(q.Meaning) || topic.Length > 0 : topic.Length > 0;
         Dictionary<Guid, double>? scores = null;
         var bestPages = new Dictionary<Guid, Guid>();
-        if (topic.Length > 0)
+        if (hasTopic)
         {
-            var hits = await SearchAsync(q with { Text = topic, Limit = Candidates * 2 }, ct);
+            var hits = await SearchAsync(q.Authored ? q with { Limit = Candidates * 2 } : q with { Text = topic, Limit = Candidates * 2 }, ct);
             var pageIds = hits.Select(h => h.PageId).Distinct().ToList();
             var pageFiles = await db.Pages.AsNoTracking().Where(p => pageIds.Contains(p.Id)).Select(p => new { p.Id, p.FileId }).ToDictionaryAsync(p => p.Id, ct);
             scores = hits.Where(h => pageFiles.ContainsKey(h.PageId)).GroupBy(h => pageFiles[h.PageId].FileId).ToDictionary(g => g.Key, g => g.Max(h => h.Score));
             bestPages = hits.Where(h => pageFiles.ContainsKey(h.PageId)).GroupBy(h => pageFiles[h.PageId].FileId)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(h => h.Score).First().PageId);
             // An original can be found by its filename even while its AI/text indexing is held.
-            var titleMatches = await files.Where(f => EF.Functions.ILike(f.Title, $"%{topic}%")).Select(f => f.Id).Take(Candidates).ToListAsync(ct);
-            foreach (var id in titleMatches) scores[id] = Math.Max(scores.GetValueOrDefault(id), 1);
+            foreach (var term in q.Authored ? (q.Keywords ?? []).Where(k => !string.IsNullOrWhiteSpace(k)).Take(8) : topic.Length > 0 ? [topic] : [])
+            {
+                var titleMatches = await files.Where(f => EF.Functions.ILike(f.Title, $"%{term.Trim()}%")).Select(f => f.Id).Take(Candidates).ToListAsync(ct);
+                foreach (var id in titleMatches) scores[id] = Math.Max(scores.GetValueOrDefault(id), 1);
+            }
             var ids = scores.Keys.ToArray();
             files = files.Where(f => ids.Contains(f.Id));
         }

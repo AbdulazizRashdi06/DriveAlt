@@ -210,7 +210,16 @@ Return JSON only, following the schema:
 
 ### Search kinds (`search_material.want`)
 
-The model chooses what to search; the server only runs the search it asked for.
+The model writes each search itself and the server runs it as written (owner, 2026-10-31: *"for the semantic search the ai should be the one prompting"*):
+- `meaning`: a sentence the model writes for the semantic search. It is embedded exactly as written (Gemini embeddings). Empty when filters alone describe the request.
+- `keywords`: exact words or phrases for the Postgres keyword search. Any keyword may match; a phrase must match whole. No stop-word list, no file-word stripping, no question-number boost.
+- Filters (course, type, year, label, `want`) are optional and applied exactly. There is no silent retry: a year or label that matches nothing returns 0 results, and the model decides whether to search again without it.
+- Fallbacks: if embeddings are unavailable, the words of `meaning` are used as keywords. With no `meaning` and no `keywords`, everything matching the filters is listed, newest first.
+- Keyword and semantic results are merged with reciprocal-rank fusion (k = 60); question crops weigh 1.1, pages 1.0.
+- Browse's search box still uses the older text processing (stop words, file words, Q-number boost); only the chat AI writes its own searches.
+- Old saved options that only have a `query` use the older processing too.
+
+Search kinds:
 - `questions`: question crops, plus exam pages with no question boxes yet.
 - `slides`: one whole file per slide deck, opening at its best-matching slide (`f:<id>?page=N`).
 - `slide_pages`: single slide pages. `notes_pages`: pages of notes.
@@ -248,8 +257,10 @@ Hard rules, no exceptions:
    one option per meaning. The app starts every option's search at once, so say the search is already running.
    Today is <today>.
 6. You may offer other material in your line or as `ask` options, but never show it until the student says yes.
-   If nothing matches, show nothing and offer another search. Results marked "broadened" are from other years or labels
-   than asked: offer them, don't show them.
+   If nothing matches, show nothing and offer another search. Write each search yourself: `meaning` is a sentence for the
+   semantic search and `keywords` are exact words or phrases (in the language the material is written in); filters are
+   optional. A search returns exactly what matches, with no retries: if a year or label finds nothing, you may search
+   again without it, then offer what you find.
 7. When the student answers your `ask` with one of its options, call `reply` with option=<its number>. When they want more of
    the last results, call `reply` with show_more=true. If they want something else instead, search again.
 8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
@@ -278,14 +289,15 @@ DeepSeek gets the same definitions as OpenAI-style functions.
       "parameters": {
         "type": "OBJECT",
         "properties": {
-          "query": { "type": "STRING", "description": "Topic keywords, e.g. 'queue rear pointer counting' or 'hashing collision'." },
+          "meaning": { "type": "STRING", "description": "One sentence describing the material you are looking for, for the semantic search, e.g. 'exam questions about how the rear pointer moves in a circular queue'. Empty when the filters alone say what is wanted (e.g. all 2026 Data Structures past papers)." },
+          "keywords": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Exact words or short phrases for the keyword search, e.g. ['circular queue', 'rear']. Any one may match; a phrase must match whole. [] to rely on meaning and filters only." },
           "want": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages"], "description": "questions: question crops; slides: whole slide decks; slide_pages: single slides; files: whole non-slide files; notes_pages: pages of notes." },
           "course": { "type": "STRING", "description": "Course slug from the course list, if known." },
           "material_type": { "type": "STRING", "enum": ["slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"] },
           "year": { "type": "INTEGER", "description": "4-digit year the material is from." },
           "assessment_label": { "type": "STRING", "description": "e.g. 'Quiz 3', 'Midterm 1', 'Final'." }
         },
-        "required": ["query", "want"]
+        "required": ["meaning", "keywords", "want"]
       }
     },
     {
@@ -310,14 +322,15 @@ DeepSeek gets the same definitions as OpenAI-style functions.
                 "found_commentary": { "type": "STRING", "description": "Your natural line if this option finds results, without assuming the count." },
                 "empty_commentary": { "type": "STRING", "description": "Your natural line if no results are found yet." },
                 "more_commentary": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Three natural lines for successive later batches, without assuming batch size or claiming the last batch." },
-                "query": { "type": "STRING", "description": "Topic keywords; may be empty when choosing whole files without a topic." },
+                "meaning": { "type": "STRING", "description": "What this option searches for, as a sentence for the semantic search; empty for whole files chosen by filters only." },
+                "keywords": { "type": "ARRAY", "items": { "type": "STRING" }, "description": "Exact words or phrases for the keyword search; [] for none." },
                 "want": { "type": "STRING", "enum": ["questions", "slides", "slide_pages", "files", "notes_pages"] },
                 "course": { "type": "STRING", "description": "Course slug from the course list, if known." },
                 "material_type": { "type": "STRING", "enum": ["slides", "past_paper", "quiz", "exercise", "lab", "notes", "other"] },
                 "year": { "type": "INTEGER", "description": "4-digit year the material is from." },
                 "assessment_label": { "type": "STRING", "description": "e.g. 'Quiz 3', 'Midterm 1', 'Final'." }
               },
-              "required": ["label", "query", "want", "found_commentary", "empty_commentary", "more_commentary"]
+              "required": ["label", "meaning", "keywords", "want", "found_commentary", "empty_commentary", "more_commentary"]
             }
           }
         },

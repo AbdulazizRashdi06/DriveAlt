@@ -726,7 +726,8 @@ public partial class ApiTests(ApiFactory app) : IClassFixture<ApiFactory>
         var courses = await db.Courses.AsNoTracking().ToListAsync();
         var course = Heuristics.MatchCourse(lower, courses);
         var want = lower.Contains("full") && lower.Contains("papers") ? MaterialWants.Files : MaterialWants.Questions;
-        var args = new JsonObject { ["query"] = text, ["want"] = want };
+        // Like the real model: a whole-file request described fully by filters has no search text of its own.
+        var args = new JsonObject { ["meaning"] = want == MaterialWants.Files ? "" : text, ["keywords"] = new JsonArray(), ["want"] = want };
         if (course is not null) args["course"] = course.Slug;
         if (Heuristics.MaterialType(lower) is { } type) args["material_type"] = type;
         if (Heuristics.Year(text) is { } year) args["year"] = year;
