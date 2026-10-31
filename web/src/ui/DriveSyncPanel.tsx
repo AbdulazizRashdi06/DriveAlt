@@ -91,6 +91,9 @@ function FolderView({ folders, path, busy, onToggle, onNavigate }: { folders: Fo
     queryFn: () => api.get<DriveFile[]>(`/api/admin/drive-sync/folders/${encodeURIComponent(current!.id)}/files`),
   })
   const uploaded = files.data?.filter(f => f.fileId).length ?? 0
+  // Kept while moving between folders, so you can walk the tree looking only at what's missing.
+  const [missingOnly, setMissingOnly] = useState(false)
+  const shown = files.data?.filter(f => !missingOnly || (!f.fileId && f.importable)) ?? []
   return <div className="drive-sync-tree">
     <nav aria-label="Drive folder path" className="drive-sync-crumbs">
       <button type="button" className="crumb" onClick={() => onNavigate([])}>Year 2</button>
@@ -112,9 +115,16 @@ function FolderView({ folders, path, busy, onToggle, onNavigate }: { folders: Fo
       {files.data && (files.data.length === 0
         ? <p>No files directly in this folder.</p>
         : <>
-            <p className="drive-sync-count">{uploaded} of {files.data.length} uploaded</p>
+            <div className="drive-sync-filter">
+              <p className="drive-sync-count">{uploaded} of {files.data.length} uploaded</p>
+              <div className="segs" aria-label="Show files">
+                {([false, true] as const).map(m => <button key={String(m)} type="button" className={`seg ${missingOnly === m ? 'on' : ''}`}
+                  aria-pressed={missingOnly === m} onClick={() => setMissingOnly(m)}>{m ? 'Not uploaded' : 'All'}</button>)}
+              </div>
+            </div>
+            {missingOnly && shown.length === 0 && <p>Everything in this folder is uploaded.</p>}
             <ul>
-              {files.data.map(f => <li key={f.id} className="drive-sync-file">
+              {shown.map(f => <li key={f.id} className="drive-sync-file">
                 <span className="ellipsis" title={f.name}>{f.name}</span>
                 {f.fileId
                   ? <Link className="tg drive-sync-up" to={`/files/${f.fileId}`}>Uploaded</Link>
