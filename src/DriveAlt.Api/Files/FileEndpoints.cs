@@ -15,7 +15,14 @@ public sealed record FileDto(
     Guid Id, string Title, string OriginalName, string SourceKind, long SizeBytes, int PageCount,
     string Status, int Step, int Progress, string? Error,
     int? CourseId, string? CourseSlug, string? CourseName, string? CourseColor, string MaterialType, int? Year, string? AssessmentLabel,
-    string? Folder, string[] Guessed, DateTime CreatedAt, string? ThumbUrl, int Parts);
+    string? Folder, string[] Guessed, DateTime CreatedAt, string? ThumbUrl, int Parts, FileWait? Wait = null);
+
+/// <summary>
+/// Why an unfinished file isn't moving, from its processing job: <c>reading</c> (a worker has it now), <c>queued</c>
+/// (<c>Ahead</c> jobs before it), <c>paused</c> (AI usage limit or AI unavailable, until <c>Until</c>), <c>retrying</c>
+/// (after an error, at <c>Until</c>), <c>held</c> (put on hold by an admin) or <c>stuck</c> (no job at all).
+/// </summary>
+public sealed record FileWait(string Reason, string? Detail = null, DateTime? Until = null, int? Ahead = null, int? Attempt = null);
 
 public sealed record PageRegionDto(Guid Id, string? QuestionNumber, float X, float Y, float W, float H, bool Saved = false);
 
@@ -40,6 +47,33 @@ public static class FileEndpoints
         return new FileDto(f.Id, f.Title, f.OriginalName, f.SourceKind, f.SizeBytes, f.PageCount, f.Status, FileStatuses.Step(f.Status),
             f.Progress, f.Error, f.CourseId, f.Course?.Slug, f.Course?.Name, f.Course?.Color, f.MaterialType, f.AcademicYear,
             f.AssessmentLabel, f.Folder, f.Guessed, f.CreatedAt, thumb, f.Parts.Length);
+    }
+
+    /// <summary>The reason each in-progress file is waiting, read from its latest processing job.</summary>
+    internal static async Task<Dictionary<Guid, FileWait>> WaitsAsync(AppDb db, IReadOnlyCollection<Guid> fileIds, CancellationToken ct)
+    {
+        if (fileIds.Count == 0) return [];
+        var now = DateTime.UtcNow;
+        var jobs = (await db.Jobs.AsNoTracking().Where(j => fileIds.Contains(j.FileId) && j.Kind == JobKinds.Process
+                && (j.State == "queued" || j.State == "running")).ToListAsync(ct))
+            .GroupBy(j => j.FileId).ToDictionary(g => g.Key, g => g.OrderByDescending(j => j.Id).First());
+        // Due jobs are claimed in id order, so a job's place in line is the due jobs before it.
+        var due = await db.Jobs.AsNoTracking().Where(j => j.State == "queued" && j.RunAfter <= now).Select(j => j.Id).ToListAsync(ct);
+        var result = new Dictionary<Guid, FileWait>();
+        foreach (var id in fileIds)
+        {
+            if (!jobs.TryGetValue(id, out var j)) { result[id] = new FileWait("stuck"); continue; }
+            result[id] = j switch
+            {
+                { State: "running" } => new FileWait("reading"),
+                { Error: { } e } when e.StartsWith("Held") || j.RunAfter.Year >= 2100 => new FileWait("held", e),
+                { Error: { } e } when e.StartsWith("Paused:") && j.RunAfter > now => new FileWait("paused", e["Paused:".Length..].Trim(), j.RunAfter),
+                { Error: { } e } when j.RunAfter > now => new FileWait("retrying", e.Length > 300 ? e[..300] : e, j.RunAfter, Attempt: j.Attempts),
+                _ when j.RunAfter > now => new FileWait("queued", Until: j.RunAfter),
+                _ => new FileWait("queued", Ahead: due.Count(d => d < j.Id)),
+            };
+        }
+        return result;
     }
 
     public static void Map(WebApplication app)
@@ -132,7 +166,8 @@ public static class FileEndpoints
             if (all != true) q = q.Where(f => f.UploadedById == uid);
             // Inspect (all=true) browses the whole drive as a tree, so it needs every file, not just the latest 200.
             var files = await q.OrderByDescending(f => f.CreatedAt).Take(all == true ? 10_000 : 200).ToListAsync(ct);
-            return files.Select(ToDto);
+            var waits = await WaitsAsync(db, files.Where(f => FileStatuses.InProgress(f.Status)).Select(f => f.Id).ToList(), ct);
+            return files.Select(f => ToDto(f) with { Wait = waits.GetValueOrDefault(f.Id) });
         });
 
         up.MapPatch("/files/{id:guid}", async (Guid id, FilePatch patch, AppDb db, CancellationToken ct) =>
@@ -169,7 +204,10 @@ public static class FileEndpoints
             var f = await db.Files.Include(x => x.Course).FirstOrDefaultAsync(x => x.Id == id, ct);
             if (f is null) return Results.NotFound();
             if (f.CourseId is null) return Results.BadRequest(new { error = "Pick a course first." });
-            if (FileStatuses.InProgress(f.Status)) return Results.Ok(ToDto(f));
+            // In progress with a live job: nothing to do. In progress with no job at all (stuck): queue it again.
+            if (FileStatuses.InProgress(f.Status) && await db.Jobs.AnyAsync(j => j.FileId == id && j.Kind == JobKinds.Process
+                    && (j.State == "queued" || j.State == "running"), ct))
+                return Results.Ok(ToDto(f));
             f.Guessed = f.Guessed.Where(g => g is "year" or "label").ToArray();
             f.Status = FileStatuses.Queued;
             f.Error = null;

@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, count, formatBytes, TYPE_ORDER, TYPE_SINGULAR, type Course, type FileDto, type UploadCheckItem, type UploadCheckResult } from '../lib/api'
+import { api, count, formatBytes, TYPE_ORDER, TYPE_SINGULAR, type Course, type FileDto, type FileWait, type UploadCheckItem, type UploadCheckResult } from '../lib/api'
 import { useApp } from '../lib/app'
 import { FileBadge } from './Browse'
 import { IconCamera, IconRefresh, IconTrash } from '../ui/Icons'
@@ -32,14 +32,33 @@ export function Pipeline({ file }: { file: FileDto }) {
   const label = file.status === 'queued' ? 'Queued…'
     : file.status === 'ready' ? (file.error ? 'Ready (some pages read without AI)' : 'Ready, and searchable')
     : `Step ${step} of 5 · ${STEPS[step - 1]}${file.status === 'reading' && file.pageCount ? ` ${file.progress}/${file.pageCount}` : ''}…`
+  const why = file.status !== 'ready' ? waitText(file.wait) : null
   return (
-    <div className="steps" role="status" aria-label={label}>
+    <div className="steps" role="status" aria-label={why ? `${label} ${why}` : label}>
       <div className="bar" aria-hidden="true">
         {STEPS.map((s, i) => <i key={s} className={file.status === 'ready' || i + 1 < step ? 'done' : i + 1 === step ? 'now' : ''} />)}
       </div>
       <span style={file.status === 'ready' ? { color: '#1E8F64' } : undefined}>{label}</span>
+      {why && <span className={`wait-why ${file.wait?.reason ?? ''}`} title={file.wait?.detail ?? undefined}>{why}</span>}
     </div>
   )
+}
+
+const clock = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
+
+/** The server's reason for an unfinished file, in plain words. */
+export function waitText(w?: FileWait | null): string | null {
+  if (!w) return null
+  switch (w.reason) {
+    case 'reading': return 'The AI is reading it now. A batch of up to 8 pages takes a few minutes.'
+    case 'queued': return w.until ? `Starts at ${clock(w.until)}.` : !w.ahead ? 'Next in line.' : `Waiting in line: ${count(w.ahead, 'file')} ahead.`
+    case 'paused': return /429|limit/i.test(w.detail ?? '')
+      ? `Paused: the AI's usage limit was reached. Resumes about ${clock(w.until)}.`
+      : `Paused: the AI service isn't available right now. Tries again about ${clock(w.until)}.`
+    case 'retrying': return `Hit an error, trying again at ${clock(w.until)} (attempt ${w.attempt ?? 1} of 3)${w.detail ? `: ${w.detail}` : '.'}`
+    case 'held': return `On hold${w.detail ? `: ${w.detail.replace(/^Held:?\s*/i, '')}` : '.'}`
+    case 'stuck': return "Not in the processing queue, so it won't move. Press Retry."
+  }
 }
 
 function CourseSelect({ courses, value, onChange, id }: { courses: Course[]; value: number | null; onChange: (v: number) => void; id: string }) {
@@ -102,7 +121,7 @@ function UploadRow({ file, courses, onChange }: { file: FileDto; courses: Course
             onClick={() => void act(() => api.post(`/api/files/${file.id}/process`))}>Process</button>
         )}
         {(file.status === 'ready' || (file.status === 'failed' && file.pageCount > 0)) && <Link className="candy c-white sm" to={`/inspect/${file.id}`}>Inspect</Link>}
-        {file.status === 'failed' && (
+        {(file.status === 'failed' || file.wait?.reason === 'stuck') && (
           <button className="candy c-white sm" type="button" disabled={busy} onClick={() => void act(() => api.post(`/api/files/${file.id}/process`))}>
             <IconRefresh size={16} />Retry
           </button>
