@@ -61,7 +61,7 @@ public partial class ApiTests
 
     private static JsonObject SearchKind(KindFixture f, string want) => new()
     {
-        ["query"] = f.Topic, ["course"] = "data-structures", ["want"] = want,
+        ["meaning"] = "material about " + f.Topic, ["keywords"] = new JsonArray(f.Topic), ["course"] = "data-structures", ["want"] = want,
         ["year"] = 2028, ["assessment_label"] = "Contract fixture",
     };
 
@@ -152,7 +152,7 @@ public partial class ApiTests
         var chat = (await (await student.PostAsync("/api/chats", null)).Content.ReadFromJsonAsync<JsonObject>())!["id"]!.GetValue<string>();
         JsonObject Option(string want) => new()
         {
-            ["label"] = want, ["want"] = want, ["query"] = f.Topic, ["course"] = "data-structures",
+            ["label"] = want, ["want"] = want, ["meaning"] = "material about " + f.Topic, ["keywords"] = new JsonArray(f.Topic), ["course"] = "data-structures",
             ["found_commentary"] = "Here is the material you selected.", ["empty_commentary"] = "Nothing found yet.",
             ["more_commentary"] = new JsonArray("More.", "Next.", "Another."),
         };
@@ -242,5 +242,25 @@ public partial class ApiTests
         var reply = await SendAsync(await app.SignInAsync("25-8894"), chat, pick ? "the first one" : "more", prepared: true);
         Assert.Equal(pick ? [ResultRefs.Region(f.Crop), ResultRefs.Page(f.Bare)] : [ResultRefs.Page(f.Bare)],
             reply["results"]!.AsArray().Select(r => r!["ref"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task A_year_that_matches_nothing_returns_nothing_instead_of_a_silent_retry()
+    {
+        var f = await KindMaterialAsync();
+        var chat = await KindChatAsync(f);
+        var args = SearchKind(f, "questions");
+        args["year"] = 2099;
+        app.ChatModel.EnqueueTool("search_material", args);
+        JsonObject? output = null;
+        app.ChatModel.Enqueue(request =>
+        {
+            output = JsonNode.Parse(request["messages"]!.AsArray().Last(m => m?["role"]?.GetValue<string>() == "tool")!["content"]!
+                .GetValue<string>())!.AsObject();
+            return ScriptedChatModel.Tool("reply", KindReply("questions"));
+        });
+        await SendAsync(await app.SignInAsync("25-8894"), chat, "questions from 2099", prepared: true);
+        Assert.Equal(0, output!["count"]!.GetValue<int>());
+        Assert.Null(output["broadened"]);
     }
 }

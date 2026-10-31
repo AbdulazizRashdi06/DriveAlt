@@ -48,4 +48,13 @@ public class MaterialKindTests
         Assert.False(ResultRefs.TryParseFile($"f:{id}?page=-1", out _));
         Assert.False(ResultRefs.TryParseFile($"f:{id}?page=2?other=x", out _));
     }
+
+    [Fact]
+    public void Model_keywords_are_used_as_written()
+    {
+        // Phrases must match whole, any keyword may match; nothing is dropped as a stop word.
+        Assert.Equal("(circular & queue) | rear | questions", SearchService.KeywordTsQuery(["circular queue", "rear", "Questions", ""]));
+        Assert.Equal("(طابور & دائري)", SearchService.KeywordTsQuery(["طابور دائري"]));
+        Assert.Null(SearchService.KeywordTsQuery([]));
+    }
 }
