@@ -66,6 +66,8 @@ jobs:
         env:
           DRIVEALT_TEST_PG: Host=localhost;Username=postgres;Password=postgres;Database=postgres
         run: dotnet test
+      - name: Verify HEIC decoding in the production converter image
+        run: docker build --target converters -f deploy/Dockerfile .
       - name: Validate gateway deployment script
         run: bash -n deploy/ensure-terra-gateway.sh && node deploy/test-terra-gateway-patch.mjs
       - name: Frontend tests and build
