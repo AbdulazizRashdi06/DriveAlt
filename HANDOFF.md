@@ -4,9 +4,7 @@
 
 ## 1. Header
 
-**Current update: 2026-11-07, Codex, `codex/heif-codec-fix`; base `afde373` (open docs PR #54), main code/live image `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`.** Investigating the owner's upload error `heif-convert ... Unsupported codec`. This branch must merge after #54. No merge, deployment, requeue or VPS write is authorized. The dated snapshots below are historical; this update and the first entry in section 2 take precedence.
-
-**Current update: 2026-11-07, Claude Code, `claude/handoff-scan-interval-live`:** PR #53 is **merged and deployed** as `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`. Automatic Drive sync scans now start one minute after the previous scan finishes instead of five minutes after it started (see section 3, 2026-11-07). **Caution:** the rest of this header and section 2 still describe 2026-10-30 and were not reconciled with PRs #47–#52, which merged after it.
+**Current update: 2026-11-07, Codex, `codex/verify-latest-deployment` (PR #56); base main `bbf5633` (PR #55):** owner requested "merge latest and deploy". PR #54 merged with [skip ci]; latest code PR #55 merged and deployed as `bbf5633a07b170795ada2382f32bd90bcc70ec76`. Main run `42384722126` passed test/build/deploy. Independent SSH confirms the running image, libde265 decoder and healthy public/AI endpoints. This docs-only follow-up merges after #54/#55 with [skip ci]. Older dated claims below are historical; the current snapshot at the start of section 2 takes precedence.
 
 **Previous update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; owner now requires AI-only interpretation with no keyword overrides. AI-only code `94046e1` passed full GitHub CI; this final update records the results. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
 
@@ -14,21 +12,27 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/heif-codec-fix`, based on docs PR #54 `afde373` above main `4d40acf`. |
-| Updated | 2026-11-07, Codex; HEIC decoder repair |
+| Branch / base | `codex/verify-latest-deployment` (docs only), based on PR #54 `afde373`, integrated main `bbf5633` (PR #55). |
+| Updated | 2026-11-07, Codex; latest merge and production verification |
 
-| Purpose of this update | Restore HEIC conversion by installing its missing runtime decoder and checking real decoding in CI. |
+| Purpose of this update | Reconcile latest PR/deployment and replace stale resume expectations. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** production `4d40acf` is healthy but lacks a HEIC decoder; the repair is prepared on this branch, awaiting online validation and owner-approved deployment.
+**In one line:** HEIC repair PR #55 is deployed as `bbf5633`; decoder availability and health are verified. Existing failed files still need uploader Retry. PR #21 remains separate open work.
 ## 2. State of the world
 
-**HEIC repair prepared (2026-11-07, Codex):** read-only `docker exec drivealt-app-1 heif-convert --list-decoders` prints an empty `HEIC decoders:` section; installed packages show `libheif-examples` 1.17.6-1ubuntu4.9 and AV1/aom, with `libheif-plugin-libde265` absent. Production runs Ubuntu Noble. Thirteen failed jobs across seven distinct files contain the owner's exact `Unsupported codec` error; retries have exhausted three attempts. `deploy/Dockerfile` now installs `libheif-plugin-libde265` explicitly alongside `libheif-examples` under `--no-install-recommends`. Its shared `converters` stage decodes a synthetic 533-byte HEVC fixture as `app` at build time; PR CI builds that exact stage. No app/AI/database behavior changes. After owner-approved merge/deploy, the new image supports HEIC, but existing failed files still need uploader Retry (or separately authorized targeted requeue); deployment does not requeue them. Validation: `git diff --check` passed; online tests pending; no local tests run. No production changes performed.
+**HEIC rollout complete, 2026-11-07 (Codex):** PR #55 adds Ubuntu Noble's missing libheif-plugin-libde265 decoder. Its shared production/CI converter stage decodes a synthetic HEVC fixture as the app user; build-only mounts keep test input/output out of the shipped image. PR run 42384502342, job 128438928395, passed: backend `Failed: 0, Passed: 109, Skipped: 0, Total: 109`; gateway `tests 3 / pass 3 / fail 0`; frontend `10 passed` files / `33 passed` tests; TypeScript/build passed; converter log says `File contains 1 image` and `Written to /tmp/heif-smoke.jpg`. Main run `42384722126` passed build (`128439584430`), test (`128439584561`) and deploy (`128440191153`). Main test output repeats the same 109 backend / 33 frontend / 3 gateway passes and real conversion success. Independent SSH: both configured and running image equal `bbf5633a07b170795ada2382f32bd90bcc70ec76`, container is `running`, and `heif-convert --list-decoders` now prints `libde265 HEVC decoder, version 1.0.15`. Public health is `{"ok":true}`, home HTTP 200, gateway `{"signedIn":true}`, gateway SHA256 prefix still `ef0e322e17be2943`. Existing failed files are not automatically retried; a full authenticated HEIC upload/processing flow was not exercised.
 
-**Verified 2026-11-07, Codex (read-only resume checks):** `git fetch -q` passed; main contains `1e13a87` and PRs #45-#53. Latest first-parent code commit and live `DRIVEALT_IMAGE` both equal `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`. Public health returned `{"ok":true}`, gateway health `{"signedIn":true}`, gateway SHA256 prefix `ef0e322e17be2943`. GitHub connector lists open PRs #21 and docs #54 only; #46 is merged and its later server-kind-filter removal is deployed. `AutoScanGap` count is **2**, correcting the old expected 3+. Local Zarqa contains `abebc56`. SQL: files 404 ready / 8 failed, 9,675 pages; pages 9,673 read_ok / 2 with errors; jobs 488 done / 14 failed, no queued/held/paused jobs; zero unread Semester 1 pages excluding ITS; 2,700 question regions; messages has `more_commentary`; last-24h `AI paused` log count 0. Historical held-job counts are superseded by these reads; Codex did not release any jobs. No local tests run, per the owner's online-only testing decision. HEIF cause and repair remain under investigation.
+**HEIC diagnosis from PR #55:** read-only production inspection before deployment showed an empty HEIC decoder list and the plugin absent; thirteen failed jobs across seven distinct files contained `Unsupported codec`. This explains seven of the eight failed zero-page files; the remaining failure is separate. Codex did not retry or release jobs in this rollout. Historical pre-repair deployment and SQL evidence follows.
+
+**Pre-HEIC-rollout snapshot, 2026-11-07 (Codex):** `git log --first-parent origin/main` shows PRs #44–#53 merged (including #45/#46). Latest code commit and both VPS `DRIVEALT_IMAGE` and `docker inspect drivealt-app-1` equal `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`; container state is `running`. Public `/api/health` returns `{"ok":true}`, gateway `/health` returns `{"signedIn":true}`, gateway SHA256 prefix is `ef0e322e17be2943`. Main run `42383464227` has successful test/build/deploy jobs. Test job `128435785090` reports `Failed: 0, Passed: 109, Skipped: 0, Total: 109`, gateway `tests 3 / pass 3 / fail 0`, frontend `10 passed` test files; TypeScript and production build passed. PR #54 run `42383999640` also completed successfully. No local application tests were run for this Markdown-only task.
+
+Read-only resume SQL now reports files `404 ready / 9675 pages`, `8 failed / 0 pages`; pages `9673 read_ok / 2 with error`; jobs `488 done / 14 failed`, with **no queued, held or paused job rows**. All six Semester 1 courses excluding ITS have zero unread pages; regions contain `2700 question`; `messages.more_commentary` exists. These counts supersede the 2026-10-30 snapshot. Why earlier held jobs disappeared was not investigated; Codex did not release, retry, import or delete anything. The non-HEIC failure cause, actual one-minute scan timing and current sync switches remain **unknown**. The latest pause-log count was not returned by the SSH check and remains **unknown**. Local Zarqa still contains Caddy fix `abebc56` (ancestor exit 0).
+
+**Historical implementation notes follow.** Their old "open", "not deployed", authorization and held-job counts are superseded by the dated snapshot above and current sections 7–9. PR #48 removed the kind overrides introduced by #46/#47; PR #49 lets the AI author semantic meaning/keywords. PRs #50/#51/#52 supply upload wait reasons, individual Resume, and recursive folder status. PR #53 supplies the one-minute scan gap. PR #21 has not merged.
 
 **Drive sync: folder colours and "+ Subfolders" (Claude Code, 2026-10-31, branch `claude/sync-folder-status`; written for after it merges and deploys):** owner: *"folders who have files that are not uploaded should be red, mid uploading/error yellow, all uploaded green even if the file is in a subfolder … activating mother folder should activate subfolders also … or make it 3 option"*.
 - Each folder's switch is now **Off / This folder / + Subfolders** (`PUT /api/admin/drive-sync/folders/{id}` with `mode` off|only|all; `enabled` still accepted). "+ Subfolders" (`drive_sync_folders.recursive`) makes every folder below sync too, including ones discovered later (`DriveSyncService.IsActiveAsync` walks parent links).
@@ -345,9 +349,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
-**2026-11-07, Codex - HEIC repair prepared:** confirmed the missing production plugin via the decoder list and package inventory; added it to the runtime image plus a real HEIC-to-JPEG build check shared by PR CI and production builds. Authored a four-colour synthetic fixture without student content. No source image, file data, jobs, AI prompts, secrets or VPS configuration changed.
+**2026-11-07, Codex — HEIC preparation and rollout:** the separate codex/heif-codec-fix branch confirmed the missing decoder, added the explicit dependency and authored a synthetic four-colour fixture. This rollout merged docs #54 and code #55 after online CI success under the owner's "merge latest and deploy" request. Main run 42384722126 passed test/build/deploy; SSH verified running image bbf5633 and the installed libde265 decoder, public health and home HTTP 200, and signed-in gateway health. Merged docs #54 with [skip ci] and prepared PR #56 as the final docs-only record, also for [skip ci]. Production jobs, originals, AI prompts and secrets were not changed.
 
-**2026-11-07, Codex - HEIF investigation started:** reconciled stale deployment/PR/count claims using GitHub, Git and read-only SSH. Created isolated `codex/heif-codec-fix` from docs PR #54's `afde373`, preserving Claude's checkout and unrelated `external-prep/`.
+**2026-11-07, Codex — initial latest merge/deployment verification (before PR #55 appeared):** checked GitHub open PRs (#54 documentation, #21 older code), PR #54 CI success, and main deployment run `42383464227` success. Independently verified running image `4d40acf`, public/gateway health, gateway hash and aggregate database state over read-only SSH. Prepared this docs-only correction on top of #54 so both facts survive the ordered `[skip ci]` merges. Latest application code was already deployed; this task requires no rebuild or production mutation. `git diff --check` is the documentation validation. No import, retry, job release, secret, DNS or Caddy change was made.
 
 **2026-11-07, Claude Code - PR #53 merged and deployed:** owner said "Merge after CI". PR CI run `42383287320` passed (test job: backend `Passed: 109, Failed: 0`, frontend 10 test files passed). It was merged as `4d40acf7c9336de629e3555b1cb28c296a5bc2ea` (GitHub auto-merge is disabled for this repo, so it was merged by hand once CI passed). Main run `42383464227` passed build, test and deploy (finished 2026-11-07 14:56 UTC). `/api/health` returned HTTP 200, and the live bundle `/assets/index-DuC0iQk6.js` contains the new panel text "about once a minute". Not checked: an actual one-minute scan cycle in production (needs uploader login and sync on), and SSH/SQL state.
 
@@ -524,7 +528,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
-- **2026-11-07, HEIF error:** owner supplied the retry message `heif-convert ... Unsupported codec`; diagnosis and a repair PR are in scope. New merge/deployment and retrying production jobs still require owner approval under AGENTS.md.
+- **2026-11-07, latest merge/deployment:** owner said "merge latest and deploy". This authorizes merging latest PR #55, docs #54 and the necessary handoff reconciliation. PR #55 appeared while initial verification was running and is the latest code repair. Merge code normally; follow the required `[skip ci]` merge for documentation. PR #21 is not the latest and remains outside this request.
 
 - **2026-11-07, Drive scan interval:** the owner thought scans ran hourly. When told the interval was five minutes and that scans are free, they asked for it "as low as we can" and then chose "More often" over less often. Merge and deploy still need the owner's OK.
 
@@ -616,7 +620,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 6. File inventory
 
-**HEIC repair:** `deploy/Dockerfile` shared `converters` stage explicitly installs the HEVC decoder and smoke-decodes `tests/fixtures/heic/color-blocks.heic`; `.github/workflows/deploy.yml` builds that stage on PRs; fixture provenance/regeneration are in `tests/fixtures/heic/{README.md,generate.py}`. No migration or application source change.
+**HEIC repair from PR #55:** `deploy/Dockerfile` shared converters stage installs libheif-plugin-libde265 and smoke-decodes `tests/fixtures/heic/color-blocks.heic`; `.github/workflows/deploy.yml` builds the same stage on PRs; fixture provenance/regeneration are in `tests/fixtures/heic/{README.md,generate.py}`. No migration or application source change.
+
+**Current correction:** only `HANDOFF.md` changes on `codex/verify-latest-deployment`, stacked on PR #54. No application, deployment or AI prompt files change. Older inventory status labels below are historical.
 
 **Asked-for contract:** `Files/MaterialWants.cs`, `Files/Heuristics.cs`, `Chat/ChatService.cs`, `Search/{SearchService,ResultCards}.cs`, `web/src/ui/ResultCard.tsx`; regressions in `MaterialKind{,Api}Tests.cs`, `ApiTests.cs`, `ResultCard.test.tsx`; `docs/AI-AGENTS.md` has the updated chat contract, prompt and tool JSON. No migrations or AI/deployment configuration changes.
 
@@ -631,7 +637,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 | Path | Role | Status |
 |---|---|---|
 | `AGENTS.md`, `CLAUDE.md` | Rules for every agent; `CLAUDE.md` imports `AGENTS.md` | current |
-| `HANDOFF.md` | This page | reconciled with 2026-10-28 read-only checks |
+| `HANDOFF.md` | This page | current snapshot reconciled with 2026-11-07 GitHub/VPS checks |
 | `src/DriveAlt.Api/Files/{FileEndpoints,Heuristics}.cs`, `src/DriveAlt.Api/Browse/BrowseEndpoints.cs` | Page regions on `/api/files/{id}`, `/api/uploads/check`, `/api/cards`, fallback-safe `MediaCacheControl`, decimal/assessment-safe `CanonicalTitle` | deployed in PR #32; full CI 67 backend tests pass |
 | `web/src/screens/{FileView,Upload,Features567.test}.tsx`, `web/src/ui/{Viewer,ResultCard}.tsx`, `web/src/lib/app.tsx`, `web/e2e/features-567.mjs` | Instant page-strip reader (#5), `?ref=` deep-link sharing (#6) and duplicate preflight UI (#7) | deployed in PR #32; 20 frontend tests + desktop/phone Playwright smoke pass |
 | `src/DriveAlt.Api/Reports/ReportEndpoints.cs`, report entity/config and `20261028062003_MaterialReports` | Student reporting and uploader review, with report-only schema migration | deployed in PR #27 |
@@ -663,11 +669,13 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Claimed: Codex, `codex/heif-codec-fix`:** diagnose and prepare a tested fix for unsupported HEIF decoding. Built on docs PR #54; merge #54 first. Online CI only. No production changes authorized.
+**HEIC rollout complete:** PR #55 passed CI and is deployed as bbf5633. PR #56 is this final docs-only reconciliation, merged after #54/#55 with [skip ci]. Failed uploads still need uploader Retry; no automatic retry was performed. Authenticated upload/processing behavior remains unverified.
 
 **Unverified after deploy, PR #53:** with sync on, the uploader panel's "Last checked" time should move about once a minute. Nobody has watched it in production yet.
 
-**Completed/superseded: PRs #45-#52:** Git history confirms they merged; the later AI-only-picks decision removed server kind filtering. Do not resume or reimplement the old pasted #46 request. PR #21 remains separately owned by Claude; docs #54 is this branch's dependency.
+**Latest state:** PRs #44–#55 are merged; #55 deployment is verified. This dependent docs correction merges with [skip ci]; PR #21 remains open. The Year 1 ownership/checkpoints below are historical claims not revalidated by this deployment task; do not overlap their files or treat preparation as import-ready.
+
+**Current failures:** eight failed files have zero pages and fourteen jobs are failed (read-only SQL, 2026-11-07). PR #55 diagnosed thirteen jobs across seven files as missing HEIC decoding; the remaining failure was not investigated. Earlier references to one failed file and two held queued jobs are obsolete; there are currently no queued/held/paused rows. Investigate separately without implicit retry or deletion.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
@@ -691,36 +699,18 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 1. **PR #21 — Claude Code, `claude/pick-fix-and-owner-login`:** the typed-pick fix, fixed-code student login and login subtitle removal remain open. It modifies `ChatService.cs` and writes a canned pick line, which conflicts with the owner's newer AI-written-replies decision. Coordinate/reconcile with the chat feature before either overlapping change is merged; do not edit or push to Claude's branch. Owner approval is required to merge.
 2. **Caddy guard retirement:** Zarqa PR #6 (`abebc56`) is merged and present in local `C:/Projects/LostraAi` (ancestor check passed 2026-10-28). A later Zarqa deploy retaining the route has not been verified. After an owner-authorized Zarqa deploy, verify health remains good and the guard reports “Caddy already routes drivealt.tryzarqa.com”; only then propose removal of the temporary guard in a separate PR. Never run Zarqa's `deploy/deploy.sh`.
 3. **Gateway process leak and configuration drift** (the PID-cap half is fixed by Zarqa PR #7, `pids_limit: 1024`; the leak itself is still open)**:** the last reviewed gateway could leave native Codex children running after timeout, and its live PID cap was raised to 1024 while the compose file still used 256 (2026-10-25 evidence above). Gateway source hash is unchanged; no fix is confirmed here. If health says signed out, inspect process pressure before asking for another login. The deployed `codex-model-choice` branch's merge status has not been rechecked in this orientation. Its limit matcher (`usage limit|rate limit|quota|too many requests`) may miss a plain 502; offline fallback handling needs review if such a response occurs.
-4. **Failed document:** SQL still reports one Database Systems file with zero pages and failed status. Earlier diagnosis was `pdftoppm … Document stream is empty`. Repair/replacement needs a separate task; nothing was deleted or requeued.
+4. **Historical failed document:** the 2026-10-30 snapshot reported one Database Systems file with zero pages and failed status. Current aggregate failures are recorded above; individual identities were not rechecked. Earlier diagnosis was `pdftoppm … Document stream is empty`. Repair/replacement needs a separate task; nothing was deleted or requeued.
 5. **Answer text in local imports (hypothesis):** historical `import-local` copied PDF text from solution sheets. All in-scope pages are now read, but this does not prove all indexed answer text was removed or that every crop is visually correct. No answer content was retrieved in these checks. The rule remains: show intact paper/crops; no AI writes answers in any text field.
-6. **Usage-limit report:** actual 429 pauses occurred during the import (dated evidence in section 2). The exact cumulative wall-clock delay and last in-scope completion time are unknown. Current queued jobs are held by owner instruction, not AI pauses; do not relaunch or requeue them. Do not add overlapping per-file retry intervals as independent elapsed time. Earlier notes named the automation `monitor-drivealt-import-and-codex-usage-limits`; its present configuration was not checked here.
+6. **Usage-limit report:** actual 429 pauses occurred during the import (dated evidence in section 2). The exact cumulative wall-clock delay and last in-scope completion time are unknown. The 2026-11-07 snapshot has no queued/held/paused jobs; do not infer who released earlier held jobs or requeue anything. Do not add overlapping per-file retry intervals as independent elapsed time. Earlier notes named the automation `monitor-drivealt-import-and-codex-usage-limits`; its present configuration was not checked here.
 7. **README and embeddings:** README's model table is current, but deploy instructions and the Gemini secret/offline descriptions need review. The 2026-10-24 import finished 105 files without embeddings using keyword search; present embedding coverage was not queried. Paid Gemini usage remains an owner decision.
 8. **Other-checkout prompt (unverified):** the 2026-10-24 note about `C:/Users/abdul/DriveAlt` had a prompt excluding answers from boxes. That checkout belongs to another agent and was not inspected or changed here.
 9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
 
-**Current, 2026-11-07:** investigate HEIF conversion, prepare repair and regression coverage, publish for GitHub CI, then hand back for owner review. Merge docs #54 first; merge/deploy/VPS changes require owner approval. Older #46 continuation entries are historical and already completed/superseded.
+Latest rollout is complete: PR #55 merged/deployed as bbf5633, main run 42384722126 passed, running image/HEIC decoder/health verified. Docs #54 merged first with [skip ci]; PR #56 records final evidence and also merges with [skip ci]. Resume checks below compare the live image with the latest first-parent code commit so subsequent docs merges do not require a restart.
 
-**Current task:** PR #46 AI-only intent code `94046e1` passed full online CI; only this final documentation result record is newer. Once its routine CI rerun passes, stop monitoring and hand back for owner review without another documentation commit. No local testing; no merge/deploy authorization. Merge #45 first. Unscripted live checks in English/Arabic, including negation and file requests, remain for an authorized deployment.
-
-**Current:** server rollout is complete (run `40878875382`); this new docs-only restart record needs a PR and an owner-approved `[skip ci]` merge. Continue `/root/terra_year1_resume` locally with the workload audit, timed photo batches and checkpoints. Before Year 1 website import, validate finished artifacts/flags and design separate study-year/course mapping; never shoehorn it into Year 2 courses. Verify the next Zarqa deployment retains the gateway source and model/PID override. Do not rerun old papers or release held jobs implicitly.
-
-**Completed documentation, Codex (PR #33 merged `60090bf` with `[skip ci]`):** PR #32 passed full CI (run `40826739134`, test job `123291392748`: 67 backend / 20 frontend) and merged under owner authorization. Main deploy run `40826986882` passed test/build/deploy. Public health and home returned HTTP 200 and served the new bundle. Merge this docs-only reconciliation with `[skip ci]` so it does not restart processing. Preserve PR #21 and unrelated `external-prep/` files.
-
-**Historical PR #29 validation (deployment complete):** local backend build passed with 0 warnings/errors; 20 backend unit tests passed; 16 frontend tests, TypeScript and production build passed. EF reports no pending model changes. Full CI run `40661496361` on `83e7b26` passed: `Failed: 0, Passed: 51, Skipped: 0, Total: 51`, including two scripted-Drive/database cases, and frontend `16 passed`. `node e2e/drive-sync.mjs` passed on desktop and phone using a stand-in API; both screenshots were visually inspected after controls were styled. The final code head `d2be664` also passed full CI run `40661879269` (test job `122726648712`); this includes the disabled-folder assertion, original-name preservation and styled controls. Subsequent commits only record results/owner decisions. Docker is unavailable locally. No live import or paid AI call was made. Owner-authorized deployment is complete (run `40662469965`). Next: the owner can discover folders while paused, select desired folders and enable sync; Semester 2/ITS should stay off until explicitly selected.
-
-**Follow-up:** From an unrestricted network, verify the running image, report table, `messages.more_commentary`, and held jobs. Confirm normal Cloudflare access from outside the university network and test DeepSeek behavior when authorized. Keep PR #21 coordinated with Claude Code.
-
-| # | Step | Owner | Verify |
-|---|---|---|---|
-| 1 | **Done:** orient and reconcile stale handoff from GitHub/VPS evidence; docs-only correction | Codex, `codex/refresh-handoff-state` | `git diff --check`; Markdown-only diff; owner's eventual merge uses `[skip ci]` |
-| 2 | **Owner decision:** PR #21 | Claude Code owns implementation; owner merges | Review CI on its current head; after authorized merge, verify typed course selection and student-view login |
-| 3 | **Done for existing in-scope pages:** Semester 1 without ITS; preserve held work | Claude Code retains import ownership | 192 ready files, one empty failed document; zero unread in-scope pages; 190 jobs held |
-| 4 | Verify the next authorized Zarqa deploy preserves Caddy, then consider retiring guard | owner, then agent | Local Zarqa contains `abebc56`; public health good; guard reports no repair needed |
-| 5 | Diagnose gateway leak/config drift in the Zarqa repo, without deploying implicitly | unclaimed separate task | Tests plus comparison with live gateway and compose; owner approves VPS changes |
-| 6 | Recover usage-limit timing if retained logs allow it; otherwise keep duration unknown | unclaimed separate task | Non-overlapping wall-clock intervals, with log timestamps |
-| 7 | Review README, failed document and remaining text/crop risks | unclaimed separate tasks | Follow the answers rule; do not print solution content |
+Existing failed HEIC files still need uploader Retry (or a separately authorized targeted requeue); no retry occurred in this task. Other follow-ups: investigate the remaining non-HEIC failure; watch a real one-minute scan cycle with uploader access; reconcile separately owned PR #21 with later AI-only behavior before any separately approved merge; validate Year 1 checkpoints and the random-15 gate before import; verify a future authorized Zarqa deployment preserves Caddy/gateway settings. Year 1 worker claims are historical and not confirmed active in this session; do not overlap their files.
 
 ## 9. Resume check
 
@@ -734,16 +724,16 @@ git status --short --branch
 git merge-base --is-ancestor 1e13a87ec9b5833e14ee893f8db7b5df90c4349c origin/main
 # Expect exit 0: main contains the PR #34 features and PR #37 corrective rollout.
 git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
-# Expect count 2 (PR #53, merged 2026-11-07).
+# Expect count 2 (PR #53, merged 2026-11-07), unless later code changes it.
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
-# Latest verified code/image: 4d40acf7c9336de629e3555b1cb28c296a5bc2ea (2026-11-07).
+# Latest verified code/image: bbf5633a07b170795ada2382f32bd90bcc70ec76 (2026-11-07).
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
-# Latest open PRs: #21, #54 (docs dependency). Re-check rather than assuming this list is fixed.
-# PRs #25–#29 are merged; PR #21 remains open. Later deployment handoff PRs are docs only.
+# After ordered docs merges, #21 remains open. Re-check rather than assuming this list is fixed.
+# PRs #25–#55 are merged; this dependent correction is a docs-only [skip ci] merge.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```
@@ -755,6 +745,8 @@ grep -o '^DRIVEALT_IMAGE=.*' .env
 curl --max-time 15 -s https://drivealt.tryzarqa.com/api/health
 docker exec zarqa-codex-1 node -e 'fetch("http://127.0.0.1:8090/health").then(r=>r.text()).then(console.log)'
 sha256sum /opt/zarqa/deploy/codex/gateway.mjs | cut -c1-16
+docker exec drivealt-app-1 heif-convert --list-decoders
+# Expect HEIC decoder libde265 1.0.15 (or a later explicitly installed decoder).
 # Expect image tag equal to the last first-parent code commit above after its authorized deployment,
 # {"ok":true}, {"signedIn":true}, and ef0e322e17be2943.
 docker compose --env-file generated.env --env-file .env exec -T db psql -U drivealt -d drivealt \
@@ -764,17 +756,16 @@ docker compose --env-file generated.env --env-file .env exec -T db psql -U drive
   -c "select state, count(*), count(*) filter (where error like 'Held:%') held, count(*) filter (where error like 'Paused:%') paused from jobs group by state order by state" \
   -c "select c.slug, count(*) filter (where not p.extracted) unread from pages p join files f on f.id=p.file_id join courses c on c.id=f.course_id where c.semester=1 and c.slug <> 'its' group by c.slug order by c.slug" \
   -c "select label, count(*) from regions group by label order by 1"
-# Latest verified image: 4d40acf; read-only laptop SSH succeeded 2026-11-07.
-# Latest SQL (2026-11-07): files ready 404, failed 8; pages read_ok 9673, with errors 2;
-# jobs done 488, failed 14; no queued/held/paused jobs; question regions 2700.
-# Historical SQL before PR #32: files ready 400, reading 2, failed 1; pages extracted 9666, unread 7
-# (note: 322 Terra-imported slide pages without regions have empty text, and not every page has an embedding);
-# jobs: done 484, queued 2, failed 1; Drive sync folders: 2 enabled of 118.
-# After the owner merges/deploys the chat feature, messages also has more_commentary;
-# after the report feature, to_regclass('public.material_reports') returns material_reports.
-# After PR #29, drive_sync_states has id=1, enabled=false, scan_requested=false (until the owner changes it).
+# Latest verified image: bbf5633; read-only laptop SSH succeeded 2026-11-07.
+# Snapshot (dynamic, investigate changes rather than requiring exact counts):
+# files ready 404 / 9675 pages, failed 8 / 0 pages;
+# pages read_ok 9673 / with error 2; regions question 2700;
+# jobs done 488, failed 14, no queued/held/paused rows.
+# Semester 1 excluding ITS: zero unread; messages.more_commentary exists.
+# Earlier held-job/sync-switch counts are historical; current sync switches were not queried.
+# These aggregate checks do not establish answer-text safety or crop quality.
 docker compose --env-file generated.env --env-file .env logs --since 24h --no-log-prefix app 2>&1 | grep -c 'AI paused'
-# Last verified: 0. grep exits 1 when there are no matches; that is expected.
+# Count unknown on 2026-11-07 (SSH returned no count). grep exits 1 for zero matches.
 ```
 
 SSH identity: `~/.ssh/zarqa_vps`, account `deploy@173.249.40.122`. Port 22 can be blocked on campus Wi-Fi. These checks are reads; rollback commands below mutate the VPS and require owner approval.
