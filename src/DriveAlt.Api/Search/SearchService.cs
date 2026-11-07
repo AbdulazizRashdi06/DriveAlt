@@ -67,6 +67,42 @@ public sealed partial class SearchService(AppDb db, IMaterialAi ai, ILogger<Sear
         return groups.Count == 0 ? null : string.Join(" | ", groups);
     }
 
+    /// <summary>
+    /// Which of the model's keywords each hit really contains (same stemming as the keyword search). Semantic search always
+    /// returns its nearest neighbours, so this is the model's evidence for telling a real match from a near miss. It is
+    /// information only: nothing is filtered here. Question crops are checked on their own text, pages and files on their
+    /// page (files also on their title).
+    /// </summary>
+    public async Task<Dictionary<string, List<string>>> MatchedKeywordsAsync(IReadOnlyList<SearchHit> hits, IReadOnlyList<string> keywords, CancellationToken ct)
+    {
+        var result = hits.ToDictionary(h => h.Ref, _ => new List<string>());
+        if (hits.Count == 0) return result;
+        var pageIds = hits.Where(h => h.RegionId is null).Select(h => h.PageId).Distinct().ToList();
+        var regionIds = hits.Where(h => h.RegionId is not null).Select(h => h.RegionId!.Value).ToList();
+        var filePages = hits.Where(h => h.Ref.StartsWith("f:")).Select(h => h.PageId).Distinct().ToList();
+        var titles = filePages.Count == 0 ? [] : await db.Pages.AsNoTracking().Where(p => filePages.Contains(p.Id))
+            .Select(p => new { p.Id, p.File!.Title }).ToDictionaryAsync(p => p.Id, p => Token().Matches(p.Title.ToLowerInvariant()).Select(m => m.Value).ToHashSet(), ct);
+
+        foreach (var keyword in keywords.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.OrdinalIgnoreCase).Take(16))
+        {
+            if (KeywordTsQuery([keyword]) is not { } ts) continue;
+            var pages = pageIds.Count == 0 ? [] : (await db.Pages.AsNoTracking()
+                .Where(p => pageIds.Contains(p.Id) && p.Search!.Matches(EF.Functions.ToTsQuery("english", ts)))
+                .Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+            var regions = regionIds.Count == 0 ? [] : (await db.Regions.AsNoTracking()
+                .Where(r => regionIds.Contains(r.Id) && r.Search!.Matches(EF.Functions.ToTsQuery("english", ts)))
+                .Select(r => r.Id).ToListAsync(ct)).ToHashSet();
+            var words = Token().Matches(keyword.ToLowerInvariant()).Select(m => m.Value).ToList();
+            foreach (var h in hits)
+            {
+                var hit = h.RegionId is { } rid ? regions.Contains(rid)
+                    : pages.Contains(h.PageId) || (titles.TryGetValue(h.PageId, out var title) && words.All(title.Contains));
+                if (hit) result[h.Ref].Add(keyword);
+            }
+        }
+        return result;
+    }
+
     public async Task<List<SearchHit>> SearchAsync(SearchQuery q, CancellationToken ct)
     {
         var ts = q.Authored ? (q.Keywords is null ? null : KeywordTsQuery(q.Keywords)) : OrTsQuery(q.Text);

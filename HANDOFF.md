@@ -4,6 +4,8 @@
 
 ## 1. Header
 
+**Current update: 2026-11-07, Claude Code, `claude/chat-show-only-asked`, stacked on PR #59 (`claude/embeddings-backfill-handoff`); merge #59 first.** Owner: "take over the fact that the agent gave me stuff i didnt ask for". The chat prompt now treats search results as nearest neighbours, not matches, and keeps offering and showing in separate turns. Each search result also tells the model which of its keywords it really contains. Written for after it merges and deploys; merge needs the owner's OK. Real DeepSeek behaviour is unverified until live use.
+
 **Current update: 2026-11-07, Claude Code, `claude/embeddings-backfill-handoff`; merged with main `4c0212c` (PR #58, docs) on live code `b839ab0` (PR #57):** owner-approved production embeddings backfill is finished (every page and question box now has a vector; section 2). This branch adds "not embedded" markers to Inspect and the upload list and reconciles this page with live data. Written for after it merges and deploys; merge needs the owner's OK. Owner set Year 1 aside on 2026-11-07 (section 4).
 
 **Current update: 2026-11-07, Codex, `codex/handoff-inspect-live`; base/latest main code/live image `b839ab03ddd941890a3e51cb002226da186b29d0` (PR #57).** Owner-authorized Inspect rollout is complete: main run `42391021555` passed test/build/deploy, live image and public/AI health independently verified. This follow-up changes only Markdown and merges with `[skip ci]` to avoid another restart. The empty PDF still needs a valid replacement; no source replacement or job retry was performed.
@@ -33,6 +35,14 @@
 
 **In one line (Codex, PR #58):** Inspect repair PR #57 is deployed as `b839ab0`, with passing CI and healthy public/AI endpoints. Seven earlier HEIC failures are ready; the remaining zero-byte PDF needs a valid replacement. PR #21 remains separate open work.
 ## 2. State of the world
+
+**Chat shows only what was asked (Claude Code, `claude/chat-show-only-asked`, not deployed):** cause, from the DS maps conversation (section 3): semantic search (`SearchService.SearchAsync`, vector `OrderBy(CosineDistance)…Take`) always returns the nearest pages even when none is relevant, and the model got no sign of match strength. Prompt rule 6 already forbade showing offered material, but the model offered and showed in the same turn. Changes:
+- prompt rule 4: being returned is not a match; judge by topic, tags, snippet and `matched_keywords`; a passing mention in a list or heading doesn't count; widening a search keeps the topic and kind.
+- rule 6: offering and showing are separate turns, so a line that offers something else has `result_refs: []`; when nothing matches, say where it looked.
+- rule 8: may say plainly that nothing it searched matched, naming what it searched (it used to be told never to say something doesn't exist).
+- tool output: each result has `matched_keywords` (`SearchService.MatchedKeywordsAsync`, same stemming as the keyword search) and a `note` that results are nearest matches, not confirmed ones.
+
+The server still filters nothing (owner's AI-only rule, section 4, 2026-10-30/31). `docs/AI-AGENTS.md` is updated with the verbatim prompt. New test `Search_results_tell_the_model_which_of_its_keywords_each_result_contains` runs in CI; locally only `dotnet build` passed (0 errors).
 
 **Embeddings backfill done, 2026-11-07 (Claude Code, owner said "Yes, queue them"):** before it, 4,129 of 9,682 pages and 992 of 2,719 question boxes had no embedding, so semantic search could not see them (keyword search still could). 137 whole files (all `ready`, imported 2026-10-23/25) had no page vectors; 22 more had page vectors but question boxes without one (includes DS `midterm 1 (photos)` / `midterm 2 (photos)`, `DB final2025`). Fix used the existing `reembed` job, no code change: rows were inserted into `jobs` (`kind='reembed'`) by SQL over SSH in three rounds (137 files, then 2 files that hit a short Gemini 429, then the 22 question-box files). The app's workers ran all 161 to `done`. Re-check over SSH afterwards: `pages 9682 / missing 0`, `questions 2719 / missing 0`, reembed jobs `done 161`. Estimated cost about 1.3–1.8M input tokens (~5.3M characters) at Gemini's listed $0.15 per 1M; actual billing not checked. **Gotcha:** `ProcessingService.EmbedAsync` (`src/DriveAlt.Api/Processing/ProcessingService.cs:276-281`) catches a Gemini 429 or `HttpRequestException`, logs `Embeddings skipped for <file>` and still marks the job `done`, so a quota hit leaves silent gaps. That is how the 2026-10-23 import lost its vectors (hypothesis: matches handoff thread 7's "105 files without embeddings"; the original logs are gone).
 
@@ -375,6 +385,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Claude Code - chat stops showing unasked-for material:** traced the maps conversation's off-topic results to nearest-neighbour search plus offer-and-show in one turn. Changed the prompt (rules 4, 6, 8) and added `matched_keywords` evidence to search results, with no server filtering. Stacked on PR #59 because that PR also edits this page.
+
 **2026-11-07, Claude Code - embeddings backfill, unembedded markers, maps chat review:** ran the Resume check (all matched; PR #56 had already merged as `fc9cef7`; counts had moved, see section 2). Owner asked about a chat (user 24-0161, conversation `f378493a…`, "Any questions about maps in the past ds papers"). Read-only SQL found **no DS question about maps in the app**: DS past papers are only `midterm 1 (photos)`, `midterm 2 (photos)` and `time complexity (photos)` (2024), and quizzes 1–3; none of their topics or tags mention maps, hashing or sets. There is no DS final on the Drive (`final rev` holds only a recording, which the app skips), and Sets and Maps is lecture 16. The bot's first "couldn't find any" was correct. Its later picks were misses: DS - Summary pages 2 and 4 (tables of contents that merely contain the word), cpp4 Q5 (unrelated), Sets and Maps slide 13 and Hashing exercises. It also never said plainly that maps aren't in any DS paper. The investigation found the missing embeddings, which were backfilled in production with the owner's OK (section 2). On request ("app should show unembeded pages as unembeded"), added the markers on this branch.
 
 **2026-11-07, Codex - deployed PR #57:** merged the tested head under the owner's `deploy` instruction; watched main test/build/deploy success; independently verified the running image, app/AI health and the actual public bundle's failed-file recovery copy. Prepared this docs-only post-deployment reconciliation; it merges with `[skip ci]` to avoid restarting active jobs again. Browser access stopped at sign-in, so authenticated live interaction remains unverified.
@@ -562,6 +574,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-07, unasked-for results:** owner: "take over the fact that the agent gave me stuff i didnt ask for". Fixed in the prompt plus evidence for the model, keeping the AI-only rule (no server filter). Merge and deploy need the owner's OK.
 - **2026-11-07, Year 1 set aside:** owner: "ignore year one files i have other issues now". Don't work on Year 1 preparation, the random-15 gate or a Year 1 import unless the owner brings it back. The Year 1 notes below stay as history.
 - **2026-11-07, embeddings backfill:** owner chose "Embeddings backfill" and then "Yes, queue them" after being told the cost (about $0.20–0.30 of Gemini usage) and the SQL. This covered every page and question box that lacked a vector. It was done (section 2). It does not authorize other production writes.
 - **2026-11-07, show unembedded pages:** owner: "app should show unembeded pages as unembeded". Implemented on `claude/embeddings-backfill-handoff`; merge and deploy still need the owner's OK.
@@ -638,6 +651,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 5. Judgment calls (made without asking)
 
+- **2026-11-07, no relevance threshold:** a cosine-similarity cut-off would be the server deciding relevance, which the owner's AI-only rule forbids, and its value would need tuning. Instead the model gets evidence (`matched_keywords`, the "nearest, not confirmed" note) and decides. Rule 8's "never claim something doesn't exist" was softened so the model can say plainly that nothing it searched matched.
 - **2026-11-07, backfill rounds:** after the approved 137-file round, Claude Code queued two more rounds without asking again, because they covered gaps already inside the approved scope: 2 files whose embedding hit a short 429, and 22 files whose question boxes (part of the 992 counted at approval) lacked vectors.
 - **2026-11-07, what counts as "embedded":** a read page counts as embedded when it has a vector and every question box on it has one. Answer and other boxes never get vectors, so they don't count. Pages not read yet and files that aren't `ready` are never marked, because they're not expected to have vectors yet.
 
@@ -666,6 +680,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-28, Codex:** as explicitly directed, model text is passed through unchanged and the old server leak filter is removed. The no-written-answers instruction remains in the model prompt; compliance therefore relies on the model. This is a material change from the previous server guardrail and is not yet verified with live DeepSeek.
 
 ## 6. File inventory
+
+**Show-only-asked chat (`claude/chat-show-only-asked`):** `src/DriveAlt.Api/Chat/ChatService.cs` (prompt rules 4/6/8, tool `note`, `matched_keywords`), `src/DriveAlt.Api/Search/SearchService.cs` (`MatchedKeywordsAsync`), `docs/AI-AGENTS.md`, test `tests/DriveAlt.Api.Tests/ChatRelevanceApiTests.cs`.
 
 **Unembedded markers (this branch):** `src/DriveAlt.Api/Files/FileEndpoints.cs` (`FileDto.Unembedded`, `IsEmbedded`, `UnembeddedAsync`), `src/DriveAlt.Api/Inspect/InspectEndpoints.cs` (`InspectPageDto.Embedded`), `web/src/lib/api.ts`, `web/src/screens/Inspect.tsx`, `web/src/styles/app.css` (`.pdot.unemb`, `.badge.unemb`); tests `tests/DriveAlt.Api.Tests/UnembeddedApiTests.cs`, `web/src/screens/InspectTree.test.tsx`. No migration.
 
@@ -723,7 +739,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **New, 2026-11-07 (Claude Code):**
 - **Silent embedding skips:** a Gemini 429 during tagging still marks the job `done` with no vectors (`ProcessingService.cs:276-281`). Once this branch deploys, Inspect shows such pages; nothing re-queues them automatically yet. A possible fix is to re-queue a `reembed` job with a delay instead of finishing; that needs owner approval.
 - **400-page cap truncates textbooks:** `Processing:MaxPagesPerFile = 400` (`appsettings.json`, `Infrastructure/Options.cs:82`). Exactly two files hit it, both Probability and Statistics books in the `book` folder: *Introductory Statistics (7th Ed)* and Walpole's *Probability & Statistics for Engineers & Scientists (9th Ed)*. **Hypothesis:** the real books are longer, so their later pages were never imported. Not checked against the PDFs. Raising the cap means more processing and Terra usage; that is the owner's call.
-- **Chat says "no match" poorly:** in the maps conversation (section 3) the bot kept offering wider searches and attached loose results instead of saying plainly that no DS paper covers maps. Under the owner's AI-only rule, a fix belongs in the prompt, not a server filter. Not started.
+- **Chat says "no match" poorly:** fixed in the prompt on `claude/chat-show-only-asked` (stacked on PR #59), not deployed. After deploy, re-ask "any questions about maps in the past ds papers" and check that it shows nothing unrelated and says no DS paper matched.
 - **DS - Summary is in the app twice** (Drive has both a Google Doc and a PDF copy, 121 and 88 pages). Not changed.
 - **Year 1:** set aside by the owner (section 4).
 
@@ -767,6 +783,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
+
+**2026-11-07, Claude Code, `claude/chat-show-only-asked`:** PR stacked on #59. Merge #59 first, then this one (both are code, so normal merges). After deploy, repeat the maps conversation live and record what the bot does.
 
 **2026-11-07, Claude Code, `claude/embeddings-backfill-handoff`:** PR #59 is open for the unembedded markers; once CI passes it waits for the owner's merge OK (code change, so a normal merge, not `[skip ci]`). After deploy, Inspect should show no "not embedded" markers, because the backfill left zero gaps. Next candidates, each needing the owner: re-queue embedding on 429 instead of skipping; the 400-page cap; the chat's no-match wording. Year 1 is paused by the owner.
 
