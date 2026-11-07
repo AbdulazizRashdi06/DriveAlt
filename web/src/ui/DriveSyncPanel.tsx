@@ -44,7 +44,7 @@ export function DriveSyncPanel() {
   return <section className="drive-sync" aria-labelledby="drive-sync-heading">
     <div className="drive-sync-head">
       <div><h2 className="disp" id="drive-sync-heading">Google Drive sync</h2>
-        <p>Choose which Year 2 folders to import. New files in selected folders are checked every five minutes.</p></div>
+        <p>Choose which Year 2 folders to import. New files in selected folders are checked about once a minute.</p></div>
       <label className="drive-sync-toggle"><input type="checkbox" role="switch" aria-label="Automatic Drive sync" checked={s?.enabled ?? false}
         disabled={busy || !s} onChange={e => void change('/api/admin/drive-sync/', e.target.checked)} />{s?.enabled ? 'Auto-sync on' : 'Auto-sync paused'}</label>
     </div>

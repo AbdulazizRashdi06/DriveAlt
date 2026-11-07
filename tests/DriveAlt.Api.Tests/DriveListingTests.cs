@@ -1,9 +1,28 @@
+using DriveAlt.Api.Data;
 using DriveAlt.Api.Import;
 
 namespace DriveAlt.Api.Tests;
 
 public class DriveListingTests
 {
+    [Fact]
+    public void Automatic_scan_waits_one_minute_after_the_previous_scan_finishes()
+    {
+        var now = new DateTime(2026, 11, 7, 12, 0, 0, DateTimeKind.Utc);
+        DriveSyncState S(bool on, double? startedAgo, double? finishedAgo) => new()
+        {
+            Enabled = on,
+            StartedAt = startedAgo is { } s ? now.AddSeconds(-s) : null,
+            FinishedAt = finishedAgo is { } f ? now.AddSeconds(-f) : null,
+        };
+        Assert.True(DriveSyncService.AutoScanDue(S(true, null, null), now));      // never scanned
+        Assert.False(DriveSyncService.AutoScanDue(S(false, null, null), now));    // paused
+        Assert.False(DriveSyncService.AutoScanDue(S(true, 600, 30), now));        // long scan just ended: wait
+        Assert.True(DriveSyncService.AutoScanDue(S(true, 120, 61), now));         // a minute has passed
+        Assert.False(DriveSyncService.AutoScanDue(S(true, 30, null), now));       // interrupted scan: wait from its start
+        Assert.True(DriveSyncService.AutoScanDue(S(true, 90, null), now));
+    }
+
     [Fact]
     public async Task Listings_overlap_with_a_bound_and_keep_results_in_input_order()
     {
