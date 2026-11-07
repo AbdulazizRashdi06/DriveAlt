@@ -4,7 +4,7 @@
 
 ## 1. Header
 
-**Current update: 2026-11-07, Codex, `codex/heif-codec-fix`; base `afde373` (open docs PR #54), main code/live image `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`.** Investigating the owner's upload error `heif-convert ... Unsupported codec`. This branch must merge after #54. No merge, deployment, requeue or VPS write is authorized. The dated snapshots below are historical; this update and the first entry in section 2 take precedence.
+**Current update: 2026-11-07, Codex, `codex/heif-codec-fix`, PR #55; base `afde373` (open docs PR #54), main code/live image `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`.** Missing HEIC decoder repaired; code `80dfffc` passed full GitHub CI, including actual HEVC decoding in the production converter stage. This final documentation record changes no tested code. Merge #54 before #55. No merge, deployment, requeue or VPS write is authorized. The dated snapshots below are historical; this update and the first entries in section 2 take precedence.
 
 **Current update: 2026-11-07, Claude Code, `claude/handoff-scan-interval-live`:** PR #53 is **merged and deployed** as `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`. Automatic Drive sync scans now start one minute after the previous scan finishes instead of five minutes after it started (see section 3, 2026-11-07). **Caution:** the rest of this header and section 2 still describe 2026-10-30 and were not reconciled with PRs #47–#52, which merged after it.
 
@@ -23,8 +23,10 @@
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** production `4d40acf` is healthy but lacks a HEIC decoder; the repair is prepared on this branch, awaiting online validation and owner-approved deployment.
+**In one line:** production `4d40acf` is healthy but lacks a HEIC decoder; PR #55 repairs it and passed online CI, awaiting owner-approved deployment.
 ## 2. State of the world
+
+**HEIC repair validated online (2026-11-07, Codex, PR #55):** GitHub run `42384502342`, job `128438928395`, passed on code `80dfffce87daee711b1cb18e9d885ea16dfd3d76`. Backend/API test step success; converter stage installed `libheif-plugin-libde265` 1.17.6-1ubuntu4.9 and logged `File contains 1 image`, `Written to /tmp/heif-smoke.jpg`, `DONE 0.1s`; gateway `tests 3 / pass 3 / fail 0`; frontend `Test Files 10 passed (10)`, `Tests 33 passed (33)`; TypeScript/Vite step success. The bounded job log omitted the backend count, so its exact count is unknown here. Image publication/deployment jobs were skipped for the PR. `git diff --check` passed. No local test execution or production mutation. The final docs-only result commit triggers ordinary CI again; after it passes, hand back without another docs commit.
 
 **HEIC repair prepared (2026-11-07, Codex):** read-only `docker exec drivealt-app-1 heif-convert --list-decoders` prints an empty `HEIC decoders:` section; installed packages show `libheif-examples` 1.17.6-1ubuntu4.9 and AV1/aom, with `libheif-plugin-libde265` absent. Production runs Ubuntu Noble. Thirteen failed jobs across seven distinct files contain the owner's exact `Unsupported codec` error; retries have exhausted three attempts. `deploy/Dockerfile` now installs `libheif-plugin-libde265` explicitly alongside `libheif-examples` under `--no-install-recommends`. Its shared `converters` stage decodes a synthetic 533-byte HEVC fixture as `app` at build time; PR CI builds that exact stage. No app/AI/database behavior changes. After owner-approved merge/deploy, the new image supports HEIC, but existing failed files still need uploader Retry (or separately authorized targeted requeue); deployment does not requeue them. Validation: `git diff --check` passed; online tests pending; no local tests run. No production changes performed.
 
@@ -345,6 +347,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Codex - PR #55 validated:** published and attached the repair PR, stacked on docs #54; full online run `42384502342` passed, including conversion as the unprivileged app user in the actual runtime stage. Updated the handoff and PR with observed output. Merge/deploy and retry of the seven affected files remain owner-controlled.
+
 **2026-11-07, Codex - HEIC repair prepared:** confirmed the missing production plugin via the decoder list and package inventory; added it to the runtime image plus a real HEIC-to-JPEG build check shared by PR CI and production builds. Authored a four-colour synthetic fixture without student content. No source image, file data, jobs, AI prompts, secrets or VPS configuration changed.
 
 **2026-11-07, Codex - HEIF investigation started:** reconciled stale deployment/PR/count claims using GitHub, Git and read-only SSH. Created isolated `codex/heif-codec-fix` from docs PR #54's `afde373`, preserving Claude's checkout and unrelated `external-prep/`.
@@ -663,7 +667,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Claimed: Codex, `codex/heif-codec-fix`:** diagnose and prepare a tested fix for unsupported HEIF decoding. Built on docs PR #54; merge #54 first. Online CI only. No production changes authorized.
+**Ready for owner review: Codex, `codex/heif-codec-fix`, PR #55:** missing HEIC plugin repaired; code `80dfffc` passed full online CI. Only the final docs record is newer. Merge docs #54 first with `[skip ci]`, then #55 normally after owner approval. After deploy, verify a nonempty HEIC decoder list. Seven affected failed files require Retry or an explicitly authorized targeted requeue; neither has happened.
 
 **Unverified after deploy, PR #53:** with sync on, the uploader panel's "Last checked" time should move about once a minute. Nobody has watched it in production yet.
 
@@ -700,7 +704,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current, 2026-11-07:** investigate HEIF conversion, prepare repair and regression coverage, publish for GitHub CI, then hand back for owner review. Merge docs #54 first; merge/deploy/VPS changes require owner approval. Older #46 continuation entries are historical and already completed/superseded.
+**Current, 2026-11-07:** PR #55 code `80dfffc` passed full online CI. Watch only the final documentation rerun, then stop without another result commit. Owner approval is required to merge docs #54 with `[skip ci]`, merge/deploy #55 normally and retry affected files. Older #46 continuation entries are historical and already completed/superseded.
 
 **Current task:** PR #46 AI-only intent code `94046e1` passed full online CI; only this final documentation result record is newer. Once its routine CI rerun passes, stop monitoring and hand back for owner review without another documentation commit. No local testing; no merge/deploy authorization. Merge #45 first. Unscripted live checks in English/Arabic, including negation and file requests, remain for an authorized deployment.
 
@@ -742,7 +746,7 @@ git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
-# Latest open PRs: #21, #54 (docs dependency). Re-check rather than assuming this list is fixed.
+# Latest open PRs: #21, #54 (docs dependency), #55 (HEIC repair). Re-check rather than assuming this list is fixed.
 # PRs #25–#29 are merged; PR #21 remains open. Later deployment handoff PRs are docs only.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
