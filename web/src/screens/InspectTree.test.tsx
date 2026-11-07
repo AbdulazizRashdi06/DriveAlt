@@ -24,10 +24,11 @@ function mount(files: FileDto[], ui: React.ReactNode, at = '/') {
     if (path === '/api/config') return { name: 'DriveAlt', emailDomain: '@student.gutech.edu.om', aiOnline: true }
     if (path === '/api/courses') return courses
     if (path.startsWith('/api/uploads')) return files
+    if (path.startsWith('/api/inspect/files/')) return { file: files.find(f => f.id === path.split('/').at(-1)), pages: [] }
     return []
   })
   render(<MemoryRouter initialEntries={[at]}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <AppProvider><Routes><Route path="*" element={ui} /></Routes></AppProvider></QueryClientProvider></MemoryRouter>)
+    <AppProvider><Routes><Route path="/inspect/:id" element={ui} /><Route path="*" element={ui} /></Routes></AppProvider></QueryClientProvider></MemoryRouter>)
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
@@ -79,6 +80,37 @@ describe('Inspect folder tree', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter files' }), { target: { value: 'final' } })
     expect(await screen.findByRole('link', { name: /Final/ })).toBeTruthy()
     expect(screen.queryByRole('link', { name: /Midterm 1/ })).toBeNull()
+  })
+  it('includes failed zero-page files in the tree, problem counts and filename search', async () => {
+    mount([file('broken', 'Empty paper', 1, { status: 'failed', pageCount: 0, sizeBytes: 0,
+      originalName: 'Document from عذاري العبري.pdf', error: 'Document stream is empty' })], <Inspect />, '/inspect')
+    const semester = await screen.findByRole('button', { name: /Semester 1/ })
+    expect(semester.textContent).toContain('1 with problems')
+    fireEvent.click(semester)
+    fireEvent.click(await screen.findByRole('button', { name: /ALL/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Data Structures/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Past papers/i }))
+    expect((await screen.findByRole('link', { name: /Empty paper.*Failed/ })).getAttribute('href')).toBe('/inspect/broken')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter files' }), { target: { value: 'عذاري' } })
+    expect(await screen.findByRole('link', { name: /Empty paper.*Failed/ })).toBeTruthy()
+  })
+  it('shows an empty file failure and replacement action instead of waiting for pages or re-running AI', async () => {
+    const error = 'pdftoppm exited with 1: Syntax Error: Document stream is empty'
+    mount([file('broken', 'Empty paper', 1, { status: 'failed', pageCount: 0, sizeBytes: 0, error })], <Inspect />, '/inspect/broken')
+    expect((await screen.findByRole('alert')).textContent).toContain(error)
+    expect(screen.getByText(/The uploaded file is empty \(0 bytes\)/)).toBeTruthy()
+    expect(screen.getByText('No pages are available to inspect because processing failed.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Upload a replacement' }).getAttribute('href')).toBe('/upload')
+    expect(screen.queryByRole('button', { name: 'Re-run AI' })).toBeNull()
+    expect(screen.queryByText(/This file is still failed/)).toBeNull()
+  })
+  it('keeps nonempty failed files inspectable and links to upload management for recovery', async () => {
+    mount([file('broken', 'Broken paper', 1, { status: 'failed', pageCount: 0, error: 'Conversion failed' })], <Inspect />, '/inspect/broken')
+    expect((await screen.findByRole('alert')).textContent).toContain('Conversion failed')
+    expect(screen.getByRole('link', { name: 'Manage upload' }).getAttribute('href')).toBe('/upload')
+    expect(screen.getByRole('link', { name: 'Open original' })).toBeTruthy()
+    expect(screen.queryByText(/empty \(0 bytes\)/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Re-run AI' })).toBeNull()
   })
 })
 

@@ -297,12 +297,19 @@ function InspectFile({ id }: { id: string }) {
           <span style={{ font: "800 14px/1.2 'Nunito', sans-serif", color: '#7A5A3A' }}>Check what I cut out, and fix anything I got wrong.</span>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <Link className="candy c-white sm" to={`/files/${file.id}?page=${current}`}><IconExternal size={16} />Open original</Link>
-          <button className="candy c-cream sm" type="button" onClick={() => void rerun()}><IconRefresh size={16} />Re-run AI</button>
+          {file.sizeBytes > 0 && <Link className="candy c-white sm" to={`/files/${file.id}?page=${current}`}><IconExternal size={16} />Open original</Link>}
+          {file.status === 'failed'
+            ? <Link className="candy c-cream sm" to="/upload">{file.sizeBytes === 0 ? 'Upload a replacement' : 'Manage upload'}</Link>
+            : <button className="candy c-cream sm" type="button" onClick={() => void rerun()}><IconRefresh size={16} />Re-run AI</button>}
         </div>
       </div>
 
-      {file.status !== 'ready' && <div className="err" style={{ background: '#FFF3C4', color: '#5E4329' }}>This file is still {file.status}. Pages appear here as they're read.</div>}
+      {file.status === 'failed'
+        ? <div className="err" role="alert" style={{ overflowWrap: 'anywhere' }}>
+            <b>Processing failed.</b>{file.error && <p>{file.error}</p>}
+            {file.sizeBytes === 0 && <p>The uploaded file is empty (0 bytes). Upload a valid copy to continue.</p>}
+          </div>
+        : file.status !== 'ready' && <div className="err" style={{ background: '#FFF3C4', color: '#5E4329' }}>This file is still {file.status}. Pages appear here as they're read.</div>}
       {unembedded > 0 && <div className="err" role="status" style={{ background: '#FFF3C4', color: '#5E4329' }}>
         {unembedded === pages.length ? `None of the ${count(pages.length, 'page')} are` : `${unembedded} of ${pages.length} pages aren't`} embedded yet.
         Students can still find {unembedded === 1 ? 'it' : 'them'} by keyword, but not by meaning.</div>}
@@ -310,7 +317,7 @@ function InspectFile({ id }: { id: string }) {
         <PageEditor key={page.id + (page.editedAt ?? '')} page={page} ready={ready}
           onSaved={p => qc.setQueryData<{ file: FileDto; pages: InspectPage[] }>(['inspect', id], old => old && { ...old, pages: old.pages.map(x => (x.id === p.id ? p : x)) })} />
       ) : (
-        <div className="empty"><Mascot size={84} />No pages read yet.</div>
+        <div className="empty"><Mascot size={84} />{file.status === 'failed' ? 'No pages are available to inspect because processing failed.' : 'No pages read yet.'}</div>
       )}
 
       {pages.length > 1 && (
@@ -348,7 +355,7 @@ function InspectList() {
   const q = useQuery({ queryKey: ['uploads', 'all'], queryFn: () => api.get<FileDto[]>('/api/uploads?all=true') })
   const courses = useQuery({ queryKey: ['courses'], queryFn: () => api.get<Course[]>('/api/courses') })
   const byCourse = useMemo(() => new Map((courses.data ?? []).map(c => [c.id, c])), [courses.data])
-  const all = useMemo(() => (q.data ?? []).filter(x => x.status === 'ready' || x.pageCount > 0)
+  const all = useMemo(() => (q.data ?? []).filter(x => x.status === 'ready' || x.status === 'failed' || x.pageCount > 0)
     .map(f => ({ f, p: treePath(f, byCourse) })), [q.data, byCourse])
   const f = filter.trim().toLowerCase()
   const under = all.filter(x => path.every((s, i) => x.p[i] === s))
@@ -358,7 +365,7 @@ function InspectList() {
   const folders = f ? [] : [...under.filter(x => x.p.length > path.length).reduce((m, x) => {
     const name = x.p[path.length]
     const e = m.get(name) ?? { name, files: 0, issues: 0, unembedded: 0 }
-    e.files++; if (x.f.error) e.issues++; if (x.f.unembedded) e.unembedded++
+    e.files++; if (x.f.error || x.f.status === 'failed') e.issues++; if (x.f.unembedded) e.unembedded++
     return m.set(name, e)
   }, new Map<string, { name: string; files: number; issues: number; unembedded: number }>()).values()]
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
@@ -394,8 +401,8 @@ function InspectList() {
             <FileBadge file={x} />
             <span className="meta"><b title={x.title}>{x.title}</b><span>{[...(f ? [p.join(' › ')] : [fileMeta(x)]),
               x.unembedded ? `${count(x.unembedded, 'page')} not embedded` : ''].filter(Boolean).join(' · ')}</span></span>
-            {x.error && <span className="badge" title={x.error}>!</span>}
-            {!x.error && x.unembedded ? <span className="badge unemb" title="Some pages aren't embedded: keyword search only">!</span> : null}
+            {x.status === 'failed' ? <span className="badge" title={x.error ?? undefined}>Failed</span> : x.error && <span className="badge" title={x.error}>!</span>}
+            {x.status !== 'failed' && !x.error && x.unembedded ? <span className="badge unemb" title="Some pages aren't embedded: keyword search only">!</span> : null}
           </Link>
         ))}
       </div>

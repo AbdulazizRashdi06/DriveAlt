@@ -66,19 +66,22 @@ describe('Drive folder controls', () => {
     get(tree, { ds: [
       { id: 'a', name: 'Quiz 1.pdf', importable: true, fileId: 'f-1', fileStatus: 'ready' },
       { id: 'd', name: 'Quiz 3.pdf', importable: true, fileId: 'f-3', fileStatus: 'reading' },
+      { id: 'e', name: 'Empty paper.pdf', importable: true, fileId: 'f-4', fileStatus: 'failed' },
       { id: 'b', name: 'Quiz 2.pdf', importable: true, fileId: null },
       { id: 'c', name: 'lecture.mp4', importable: false, fileId: null },
     ] })
     mount()
     fireEvent.click(await screen.findByRole('button', { name: /semester 1/ }))
     fireEvent.click(await screen.findByRole('button', { name: /Data Structures/ }))
-    expect(await screen.findByText('2 of 4 uploaded')).toBeTruthy()
+    expect(await screen.findByText('3 of 5 uploaded')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Failed' }).getAttribute('href')).toBe('/inspect/f-4')
     expect(screen.getByRole('link', { name: 'Processing' }).getAttribute('href')).toBe('/files/f-3')
     expect(screen.getByRole('link', { name: 'Uploaded' }).getAttribute('href')).toBe('/files/f-1')
     expect(screen.getByText('Not uploaded', { selector: 'span' })).toBeTruthy()
     expect(screen.getByText('Skipped type')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Not uploaded' }))
     expect(screen.queryByText('Quiz 1.pdf')).toBeNull()
+    expect(screen.queryByText('Empty paper.pdf')).toBeNull()
     expect(screen.queryByText('lecture.mp4')).toBeNull()
     expect(screen.getByText('Quiz 2.pdf')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
