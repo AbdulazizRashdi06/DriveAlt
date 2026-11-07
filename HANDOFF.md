@@ -4,6 +4,8 @@
 
 ## 1. Header
 
+**Current update: 2026-11-07, Codex, `codex/inspect-failed-files`; base main `fc9cef7` (docs PR #56), live code `bbf5633`.** Investigating the owner's failed PDF shown in Drive sync but difficult to find in Inspect. Resume checks confirm #56 merged; only #21 remains open. No production writes or merge/deployment authorized.
+
 **Current update: 2026-11-07, Codex, `codex/verify-latest-deployment` (PR #56); base main `bbf5633` (PR #55):** owner requested "merge latest and deploy". PR #54 merged with [skip ci]; latest code PR #55 merged and deployed as `bbf5633a07b170795ada2382f32bd90bcc70ec76`. Main run `42384722126` passed test/build/deploy. Independent SSH confirms the running image, libde265 decoder and healthy public/AI endpoints. This docs-only follow-up merges after #54/#55 with [skip ci]. Older dated claims below are historical; the current snapshot at the start of section 2 takes precedence.
 
 **Previous update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; owner now requires AI-only interpretation with no keyword overrides. AI-only code `94046e1` passed full GitHub CI; this final update records the results. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
@@ -23,6 +25,10 @@
 
 **In one line:** HEIC repair PR #55 is deployed as `bbf5633`; decoder availability and health are verified. Existing failed files still need uploader Retry. PR #21 remains separate open work.
 ## 2. State of the world
+
+**Failed PDF inspection fix prepared (2026-11-07, Codex):** remaining failed file `59dce332-fd3d-4495-9517-1e6d2e46275d` belongs to Database Systems; database `size_bytes=0`, `page_count=0`, and read-only `stat` on its stored original confirms `0 bytes`. Jobs 140 and 512 failed after three attempts with `pdftoppm exited with 1: Syntax Error: Document stream is empty`. Remote Drive source content has not been checked; do not infer it is also empty. Inspect hid the file because its list accepted only `ready` or `pageCount > 0` (`git show origin/main:web/src/screens/Inspect.tsx`, InspectList). The Drive sync Failed badge also linked to the normal reader. The repair includes zero-page failed files in the tree/search/problem counts, labels them Failed, routes the sync Failed badge to `/inspect/{id}`, shows `file.error` and the zero-byte explanation, and offers Upload a replacement for empty files / Manage upload for other failures. Failed files no longer offer destructive Re-run AI. No source replacement or production retry performed. Three new frontend regressions plus the Drive link regression are prepared; online CI pending. `git diff --check` and the Impeccable detector (`[]`) pass; no local application tests or browser run.
+
+**Resume verification for failed-file inspection (2026-11-07, Codex):** main contains HEIC fix `80dfffc`, docs #56 is merged, and live image still equals latest main code `bbf5633`. Public/gateway health good; decoder libde265 available; gateway hash prefix `ef0e322e17be2943`; AutoScanGap count 2; local Zarqa Caddy ancestor check exit 0. Read-only SQL now reports **411 ready / 1 failed**, 9,682 pages; pages 9,678 read_ok / 4 with errors; jobs 495 done / 15 failed, no queued/held/paused jobs; zero unread Semester 1 pages excluding ITS; 2,719 question regions; last-24h pause-log count 0. Seven previously HEIC-failed files have completed since the prior snapshot; Codex did not retry them. Remaining file's exact failure and Inspect visibility are being checked. No local tests or VPS changes.
 
 **HEIC rollout complete, 2026-11-07 (Codex):** PR #55 adds Ubuntu Noble's missing libheif-plugin-libde265 decoder. Its shared production/CI converter stage decodes a synthetic HEVC fixture as the app user; build-only mounts keep test input/output out of the shipped image. PR run 42384502342, job 128438928395, passed: backend `Failed: 0, Passed: 109, Skipped: 0, Total: 109`; gateway `tests 3 / pass 3 / fail 0`; frontend `10 passed` files / `33 passed` tests; TypeScript/build passed; converter log says `File contains 1 image` and `Written to /tmp/heif-smoke.jpg`. Main run `42384722126` passed build (`128439584430`), test (`128439584561`) and deploy (`128440191153`). Main test output repeats the same 109 backend / 33 frontend / 3 gateway passes and real conversion success. Independent SSH: both configured and running image equal `bbf5633a07b170795ada2382f32bd90bcc70ec76`, container is `running`, and `heif-convert --list-decoders` now prints `libde265 HEVC decoder, version 1.0.15`. Public health is `{"ok":true}`, home HTTP 200, gateway `{"signedIn":true}`, gateway SHA256 prefix still `ef0e322e17be2943`. Existing failed files are not automatically retried; a full authenticated HEIC upload/processing flow was not exercised.
 
@@ -349,6 +355,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Codex - failed-file discovery repaired:** diagnosed the remaining failed PDF as an empty stored original, then corrected Inspect's zero-page filter, failed detail state and Drive sync navigation. Preserved successful/processing navigation and existing page editing. Added tree/search/detail/error-action regressions; validation is online only.
+
 **2026-11-07, Codex — HEIC preparation and rollout:** the separate codex/heif-codec-fix branch confirmed the missing decoder, added the explicit dependency and authored a synthetic four-colour fixture. This rollout merged docs #54 and code #55 after online CI success under the owner's "merge latest and deploy" request. Main run 42384722126 passed test/build/deploy; SSH verified running image bbf5633 and the installed libde265 decoder, public health and home HTTP 200, and signed-in gateway health. Merged docs #54 with [skip ci] and prepared PR #56 as the final docs-only record, also for [skip ci]. Production jobs, originals, AI prompts and secrets were not changed.
 
 **2026-11-07, Codex — initial latest merge/deployment verification (before PR #55 appeared):** checked GitHub open PRs (#54 documentation, #21 older code), PR #54 CI success, and main deployment run `42383464227` success. Independently verified running image `4d40acf`, public/gateway health, gateway hash and aggregate database state over read-only SSH. Prepared this docs-only correction on top of #54 so both facts survive the ordered `[skip ci]` merges. Latest application code was already deployed; this task requires no rebuild or production mutation. `git diff --check` is the documentation validation. No import, retry, job release, secret, DNS or Caddy change was made.
@@ -528,6 +536,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-07, failed-file inspection:** owner reports a Drive sync file marked Failed cannot be found in Inspect. Diagnose and prepare the visibility/navigation/error-state repair; no merge, deployment, re-download, replacement or production retry instruction was given.
+
 - **2026-11-07, latest merge/deployment:** owner said "merge latest and deploy". This authorizes merging latest PR #55, docs #54 and the necessary handoff reconciliation. PR #55 appeared while initial verification was running and is the latest code repair. Merge code normally; follow the required `[skip ci]` merge for documentation. PR #21 is not the latest and remains outside this request.
 
 - **2026-11-07, Drive scan interval:** the owner thought scans ran hourly. When told the interval was five minutes and that scans are free, they asked for it "as low as we can" and then chose "More often" over less often. Merge and deploy still need the owner's OK.
@@ -596,6 +606,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 5. Judgment calls (made without asking)
 
+- **2026-11-07, failed-file recovery:** include failed zero-page files while preserving the existing visibility of other statuses. Use existing Upload management for recovery instead of adding a second retry implementation. An empty stored file needs a valid replacement, so do not suggest Re-run AI for it. Remote Drive content is unknown; do not replace or download it implicitly.
+
 - **2026-11-07, decoder dependency:** repair the missing Ubuntu plugin rather than replacing the converter or changing retry policy. Test the actual production converter stage with a small synthetic HEVC image; checking that the executable exists cannot detect a missing decoder.
 
 - **2026-11-07, one-minute gap after a scan finishes:** chosen as the shortest sensible interval. Continuous scanning would keep the panel permanently in "scanning", reset the `imported` count every few seconds and rewrite all ~118 folder rows constantly, for little gain. To change it, edit `AutoScanGap` in `DriveSync.cs`.
@@ -619,6 +631,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-28, Codex:** as explicitly directed, model text is passed through unchanged and the old server leak filter is removed. The no-written-answers instruction remains in the model prompt; compliance therefore relies on the model. This is a material change from the previous server guardrail and is not yet verified with live DeepSeek.
 
 ## 6. File inventory
+
+**Failed-file inspection repair:** `web/src/screens/Inspect.tsx` lists zero-page failures and shows their file error/recovery action; `web/src/ui/DriveSyncPanel.tsx` links failed imports to Inspect. `InspectTree.test.tsx` covers zero-page tree/search/problem counts, empty-copy diagnosis and nonempty recovery; `DriveSyncPanel.test.tsx` checks the Failed destination. No API, migration or processing changes.
 
 **HEIC repair from PR #55:** `deploy/Dockerfile` shared converters stage installs libheif-plugin-libde265 and smoke-decodes `tests/fixtures/heic/color-blocks.heic`; `.github/workflows/deploy.yml` builds the same stage on PRs; fixture provenance/regeneration are in `tests/fixtures/heic/{README.md,generate.py}`. No migration or application source change.
 
@@ -669,6 +683,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**Claimed: Codex, `codex/inspect-failed-files`:** diagnose the remaining failed PDF and prepare a fix for locating/inspecting failed files if needed. Preserve other agents' work and use online CI. No production mutation authorized.
+
 **HEIC rollout complete:** PR #55 passed CI and is deployed as bbf5633. PR #56 is this final docs-only reconciliation, merged after #54/#55 with [skip ci]. Failed uploads still need uploader Retry; no automatic retry was performed. Authenticated upload/processing behavior remains unverified.
 
 **Unverified after deploy, PR #53:** with sync on, the uploader panel's "Last checked" time should move about once a minute. Nobody has watched it in production yet.
@@ -707,6 +723,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
+
+**Current task (2026-11-07):** identify the failed Drive-sync PDF, explain the underlying error and resolve Inspect discoverability. Prepare reviewable code/tests if needed, update this handoff, run online CI and stop before owner-controlled merge/deploy.
 
 Latest rollout is complete: PR #55 merged/deployed as bbf5633, main run 42384722126 passed, running image/HEIC decoder/health verified. Docs #54 merged first with [skip ci]; PR #56 records final evidence and also merges with [skip ci]. Resume checks below compare the live image with the latest first-parent code commit so subsequent docs merges do not require a restart.
 
