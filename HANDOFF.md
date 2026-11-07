@@ -4,7 +4,7 @@
 
 ## 1. Header
 
-**Current update: 2026-11-07, Claude Code, `claude/drive-scan-interval` on `main` `bb38e1e` (PR #52):** automatic Drive sync scans now start one minute after the previous scan finishes instead of five minutes after it started (see section 3, 2026-11-07). Not merged or deployed; owner approval needed. **Caution:** the rest of this header and section 2 still describe 2026-10-30 and were not reconciled with PRs #47–#52, which merged after it.
+**Current update: 2026-11-07, Claude Code, `claude/handoff-scan-interval-live`:** PR #53 is **merged and deployed** as `4d40acf7c9336de629e3555b1cb28c296a5bc2ea`. Automatic Drive sync scans now start one minute after the previous scan finishes instead of five minutes after it started (see section 3, 2026-11-07). **Caution:** the rest of this header and section 2 still describe 2026-10-30 and were not reconciled with PRs #47–#52, which merged after it.
 
 **Previous update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; owner now requires AI-only interpretation with no keyword overrides. AI-only code `94046e1` passed full GitHub CI; this final update records the results. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
 
@@ -12,8 +12,8 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/drive-scan-interval`, based on `main` `bb38e1e` (PR #52). |
-| Updated | 2026-11-07, Claude Code; Drive sync scan interval |
+| Branch / base | `claude/handoff-scan-interval-live` (docs only), based on `main` `4d40acf` (PR #53). |
+| Updated | 2026-11-07, Claude Code; Drive sync scan interval deployed |
 
 | Purpose of this update | Check Drive for new files about once a minute instead of every five minutes. |
 
@@ -339,7 +339,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
-**2026-11-07, Claude Code - faster automatic Drive scans (`claude/drive-scan-interval`, not merged or deployed):** `DriveSyncService.AutoScanDue` (`src/DriveAlt.Api/Import/DriveSync.cs`) starts an automatic scan once sync is on and one minute has passed since the previous scan *finished* (or started, if it never recorded a finish). Before, scans started five minutes after the previous *start*. Counting from the finish means a slow scan never runs straight into the next one. The panel text and README now say about once a minute. Cost reasoning: a scan only lists folder metadata (`files.list`, fields `id,name,mimeType`, `DriveImporter.ApiListAsync`), which Google doesn't charge for. Known Drive IDs are skipped before any download (`DriveSync.cs`, `KnownIds`), and the course mapping is checked before downloading (`DriveImporter.ImportNewAsync`). Paid work (download, Terra, embeddings) happens only once, for new files in enabled folders. With about 118 folders, one scan is roughly 120 list requests. Local results: `dotnet test --filter` covering DriveListingTests, CodexTests, DeepSeekTests, MappingTests and GuardrailTests gave `Passed: 33, Failed: 0`; frontend `npx tsc -b` passed and `npm test` passed 10 files / 33 tests. Database/API tests were not run locally (no Postgres); CI runs them.
+**2026-11-07, Claude Code - PR #53 merged and deployed:** owner said "Merge after CI". PR CI run `42383287320` passed (test job: backend `Passed: 109, Failed: 0`, frontend 10 test files passed). It was merged as `4d40acf7c9336de629e3555b1cb28c296a5bc2ea` (GitHub auto-merge is disabled for this repo, so it was merged by hand once CI passed). Main run `42383464227` passed build, test and deploy (finished 2026-11-07 14:56 UTC). `/api/health` returned HTTP 200, and the live bundle `/assets/index-DuC0iQk6.js` contains the new panel text "about once a minute". Not checked: an actual one-minute scan cycle in production (needs uploader login and sync on), and SSH/SQL state.
+
+**2026-11-07, Claude Code - faster automatic Drive scans (`claude/drive-scan-interval`, PR #53, deployed):** `DriveSyncService.AutoScanDue` (`src/DriveAlt.Api/Import/DriveSync.cs`) starts an automatic scan once sync is on and one minute has passed since the previous scan *finished* (or started, if it never recorded a finish). Before, scans started five minutes after the previous *start*. Counting from the finish means a slow scan never runs straight into the next one. The panel text and README now say about once a minute. Cost reasoning: a scan only lists folder metadata (`files.list`, fields `id,name,mimeType`, `DriveImporter.ApiListAsync`), which Google doesn't charge for. Known Drive IDs are skipped before any download (`DriveSync.cs`, `KnownIds`), and the course mapping is checked before downloading (`DriveImporter.ImportNewAsync`). Paid work (download, Terra, embeddings) happens only once, for new files in enabled folders. With about 118 folders, one scan is roughly 120 list requests. Local results: `dotnet test --filter` covering DriveListingTests, CodexTests, DeepSeekTests, MappingTests and GuardrailTests gave `Passed: 33, Failed: 0`; frontend `npx tsc -b` passed and `npm test` passed 10 files / 33 tests. Database/API tests were not run locally (no Postgres); CI runs them.
 
 **2026-10-30, Codex - AI-only intent verified:** run `41072080669` passed 115 backend/API tests (including multilingual/negation and typed-follow-up regressions), 31 frontend tests, 3 gateway checks, TypeScript and production build on `94046e1`. Removed keyword-specific tests intentionally replaced by behavior tests that honor model declarations. Updated PR/handoff; no local tests, merge or deployment.
 
@@ -645,7 +647,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Ready for owner review: Claude Code, `claude/drive-scan-interval`:** automatic Drive scans start one minute after the previous scan finishes. Needs CI (database tests) and an owner-approved merge. After deployment, check the uploader panel's "Last checked" time moves about once a minute while sync is on.
+**Unverified after deploy, PR #53:** with sync on, the uploader panel's "Last checked" time should move about once a minute. Nobody has watched it in production yet.
 
 **Ready for owner review: Codex, `fix/chat-asked-material-kind`, PR #46:** contract, vocabulary corrections, best-slide file cards, regressions and AI docs are complete; AI-only intent code `94046e1` passed full online CI. Only this documentation result record is newer. Built on PR #45; merge #45 first. Leave #21/#44 branches intact. No production writes. Only final documentation CI and owner-controlled merge/deployment remain.
 
@@ -712,7 +714,7 @@ git status --short --branch
 git merge-base --is-ancestor 1e13a87ec9b5833e14ee893f8db7b5df90c4349c origin/main
 # Expect exit 0: main contains the PR #34 features and PR #37 corrective rollout.
 git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
-# After the claude/drive-scan-interval PR merges: a count of 3 or more. No output means it isn't merged yet.
+# Expect a count of 3 or more (PR #53, merged 2026-11-07).
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
 # Latest verified code/image: 083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc (2026-10-30).
 # Later docs-only merges must not change the running image.
