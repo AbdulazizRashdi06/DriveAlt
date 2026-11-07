@@ -17,7 +17,7 @@ public static class InspectEndpoints
 
     public sealed record InspectPageDto(
         Guid Id, int Number, int Width, int Height, string Kind, string Text, string AiSummary, string? Topic, string[] Tags,
-        int? Year, string? Error, DateTime? EditedAt, string OriginalUrl, string PageUrl, List<RegionDto> Regions);
+        int? Year, string? Error, DateTime? EditedAt, string OriginalUrl, string PageUrl, List<RegionDto> Regions, bool Embedded);
 
     public sealed record RegionEdit(Guid? Id, string Label, float X, float Y, float W, float H, string? QuestionNumber, string? Text);
 
@@ -29,7 +29,8 @@ public static class InspectEndpoints
         return new InspectPageDto(p.Id, p.Number, p.Width, p.Height, p.Kind, p.Text, p.AiSummary, p.Topic, p.Tags, p.AcademicYear, p.Error,
             p.EditedAt, $"/api/media/pages/{p.Id}/original?v={v}", $"/api/media/pages/{p.Id}?v={v}",
             p.Regions.OrderBy(r => r.Order).Select(r => new RegionDto(r.Id, r.Label, r.X, r.Y, r.W, r.H, r.QuestionNumber, r.Text, r.Order,
-                PageRenderer.HasCrop(r.Label) ? $"/api/media/crops/{r.Id}?v={v}" : null)).ToList());
+                PageRenderer.HasCrop(r.Label) ? $"/api/media/crops/{r.Id}?v={v}" : null)).ToList(),
+            FileEndpoints.IsEmbedded(p));
     }
 
     public static void Map(WebApplication app)

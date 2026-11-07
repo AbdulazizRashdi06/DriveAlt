@@ -404,6 +404,10 @@ a, button, input, textarea, select, label {
 .pdot:active { transform: scale(.94); }
 .pdot.on { background: var(--ink); color: var(--cream); }
 .pdot.warn { background: var(--pink); }
+/* Not embedded: found by keyword search only. Yellow ring, so a page can show both this and the pink AI-hiccup fill. */
+.pdot.unemb { box-shadow: inset 0 0 0 3px var(--yellow-d); }
+.pdot.on.unemb { box-shadow: inset 0 0 0 3px var(--yellow); }
+.badge.unemb { background: var(--yellow); }
 .compare { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 @media (max-width: 980px) { .compare { grid-template-columns: minmax(0, 1fr); } }
 .ai-box { padding: 14px 16px; border-radius: 18px; background: var(--cream-2); border-bottom: 3px solid var(--line-2); font: 700 14px/1.5 var(--font-body); color: var(--ink-soft); }

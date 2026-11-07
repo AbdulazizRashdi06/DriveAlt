@@ -4,6 +4,8 @@
 
 ## 1. Header
 
+**Current update: 2026-11-07, Claude Code, `claude/embeddings-backfill-handoff`; merged with main `4c0212c` (PR #58, docs) on live code `b839ab0` (PR #57):** owner-approved production embeddings backfill is finished (every page and question box now has a vector; section 2). This branch adds "not embedded" markers to Inspect and the upload list and reconciles this page with live data. Written for after it merges and deploys; merge needs the owner's OK. Owner set Year 1 aside on 2026-11-07 (section 4).
+
 **Current update: 2026-11-07, Codex, `codex/handoff-inspect-live`; base/latest main code/live image `b839ab03ddd941890a3e51cb002226da186b29d0` (PR #57).** Owner-authorized Inspect rollout is complete: main run `42391021555` passed test/build/deploy, live image and public/AI health independently verified. This follow-up changes only Markdown and merges with `[skip ci]` to avoid another restart. The empty PDF still needs a valid replacement; no source replacement or job retry was performed.
 
 **Deployment authorized, 2026-11-07, Codex:** owner said `deploy` for PR #57. Exact head `2a5b7fbd21c622e8a8b1f589257e00c43aceb49e` is mergeable and its final CI run `42390667253` test job `128457373595` passed. Merge and deployment are now authorized; source replacement and production job retries remain outside scope.
@@ -18,17 +20,25 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/handoff-inspect-live` (docs only), based on main `b839ab0` (PR #57). |
-| Updated | 2026-11-07, Codex; failed-file Inspect rollout verified |
+| Branch / base | `claude/embeddings-backfill-handoff` (code + docs, PR #59), main `4c0212c` merged in; live code `b839ab0` (PR #57). |
+| Updated | 2026-11-07, Claude Code; embeddings backfill and "not embedded" markers |
 
-| Purpose of this update | Record successful deployment of failed-file inspection and preserve pending source replacement. |
+| Purpose of this update | Record the production embeddings backfill, add the unembedded markers, refresh live counts and open threads. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** Inspect repair PR #57 is deployed as `b839ab0`, with passing CI and healthy public/AI endpoints. Seven earlier HEIC failures are ready; the remaining zero-byte PDF needs a valid replacement. PR #21 remains separate open work.
+**In one line (Claude Code, PR #59):** every page and question box is now embedded after the 2026-11-07 backfill; PR #59's Inspect "not embedded" markers are not deployed until it merges.
+
+**In one line (Codex, PR #58):** Inspect repair PR #57 is deployed as `b839ab0`, with passing CI and healthy public/AI endpoints. Seven earlier HEIC failures are ready; the remaining zero-byte PDF needs a valid replacement. PR #21 remains separate open work.
 ## 2. State of the world
+
+**Embeddings backfill done, 2026-11-07 (Claude Code, owner said "Yes, queue them"):** before it, 4,129 of 9,682 pages and 992 of 2,719 question boxes had no embedding, so semantic search could not see them (keyword search still could). 137 whole files (all `ready`, imported 2026-10-23/25) had no page vectors; 22 more had page vectors but question boxes without one (includes DS `midterm 1 (photos)` / `midterm 2 (photos)`, `DB final2025`). Fix used the existing `reembed` job, no code change: rows were inserted into `jobs` (`kind='reembed'`) by SQL over SSH in three rounds (137 files, then 2 files that hit a short Gemini 429, then the 22 question-box files). The app's workers ran all 161 to `done`. Re-check over SSH afterwards: `pages 9682 / missing 0`, `questions 2719 / missing 0`, reembed jobs `done 161`. Estimated cost about 1.3–1.8M input tokens (~5.3M characters) at Gemini's listed $0.15 per 1M; actual billing not checked. **Gotcha:** `ProcessingService.EmbedAsync` (`src/DriveAlt.Api/Processing/ProcessingService.cs:276-281`) catches a Gemini 429 or `HttpRequestException`, logs `Embeddings skipped for <file>` and still marks the job `done`, so a quota hit leaves silent gaps. That is how the 2026-10-23 import lost its vectors (hypothesis: matches handoff thread 7's "105 files without embeddings"; the original logs are gone).
+
+**Live counts, 2026-11-07 ~16:30 UTC (read-only SQL):** files `411 ready / 9682 pages`, `1 failed / 0 pages`; jobs `done 495 + 161 reembed`, `failed 15` (13 HEIC `Unsupported codec` jobs from before PR #55 plus 2 `pdftoppm … Document stream is empty`). Seven of the eight failed HEIC files were processed after PR #55 deployed; who retried them was not checked. No queued/held/paused rows. **The "85 queued / 2 running" jobs that Codex's pre-#57 snapshot could not explain were these reembed jobs** (161 in all, every one `done` by ~16:30 UTC).
+
+**Not embedded markers (this branch, not deployed):** `/api/uploads` returns `unembedded` per ready file and `/api/inspect/files/{id}` returns `embedded` per page (`FileEndpoints.IsEmbedded`: page vector present and every question box has one). Inspect shows "N not embedded" on folders and files, a yellow badge, a yellow ring on the page dot, a banner and a line in the AI box. Tests are written but have not run: CI runs them on the PR (`Pages_without_embeddings_are_shown_as_not_embedded`, two cases in `InspectTree.test.tsx`). Locally only `dotnet build` (0 errors) and `npx tsc -b` (exit 0) were run.
 
 **Inspect rollout complete, 2026-11-07 (Codex):** owner said `deploy`. Verified PR #57's exact head `2a5b7fbd21c622e8a8b1f589257e00c43aceb49e` passed final run `42390667253` (test job `128457373595`), then merged it normally as `b839ab03ddd941890a3e51cb002226da186b29d0`. Main run `42391021555` completed success: build `128458411454`, test `128458411609`, deploy `128458943563`. Independent SSH reports `ghcr.io/abdulazizrashdi06/drivealt:b839ab03ddd941890a3e51cb002226da186b29d0 running`; public health `{"ok":true}`, gateway `{"signedIn":true}`, gateway hash prefix `ef0e322e17be2943`. Home HTTP 200 serves `/assets/index-DCJAp7Nr.js`, which contains both the new failed-page explanation and `Upload a replacement` / zero-byte recovery copy. Authenticated live UI inspection is **unknown**: the in-app browser redirected to `/login` and no sign-in was attempted. Online regressions passed; no local tests were run. This docs-only record must merge with `[skip ci]`; live code/image stays `b839ab0` afterward. Empty Database Systems file `59dce332-fd3d-4495-9517-1e6d2e46275d` still needs a valid source copy. No file replacement or production retry occurred.
 
@@ -365,6 +375,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Claude Code - embeddings backfill, unembedded markers, maps chat review:** ran the Resume check (all matched; PR #56 had already merged as `fc9cef7`; counts had moved, see section 2). Owner asked about a chat (user 24-0161, conversation `f378493a…`, "Any questions about maps in the past ds papers"). Read-only SQL found **no DS question about maps in the app**: DS past papers are only `midterm 1 (photos)`, `midterm 2 (photos)` and `time complexity (photos)` (2024), and quizzes 1–3; none of their topics or tags mention maps, hashing or sets. There is no DS final on the Drive (`final rev` holds only a recording, which the app skips), and Sets and Maps is lecture 16. The bot's first "couldn't find any" was correct. Its later picks were misses: DS - Summary pages 2 and 4 (tables of contents that merely contain the word), cpp4 Q5 (unrelated), Sets and Maps slide 13 and Hashing exercises. It also never said plainly that maps aren't in any DS paper. The investigation found the missing embeddings, which were backfilled in production with the owner's OK (section 2). On request ("app should show unembeded pages as unembeded"), added the markers on this branch.
+
 **2026-11-07, Codex - deployed PR #57:** merged the tested head under the owner's `deploy` instruction; watched main test/build/deploy success; independently verified the running image, app/AI health and the actual public bundle's failed-file recovery copy. Prepared this docs-only post-deployment reconciliation; it merges with `[skip ci]` to avoid restarting active jobs again. Browser access stopped at sign-in, so authenticated live interaction remains unverified.
 
 **2026-11-07, Codex - PR #57 ready for owner review:** published/attached the repair, verified full online run `42390391704` passed on `4133fbb`, and recorded evidence. Preserved the empty original and all jobs; no merge/deploy or re-download. Exact counts unavailable due the job-log endpoint's 502; no guessed counts.
@@ -550,6 +562,10 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-07, Year 1 set aside:** owner: "ignore year one files i have other issues now". Don't work on Year 1 preparation, the random-15 gate or a Year 1 import unless the owner brings it back. The Year 1 notes below stay as history.
+- **2026-11-07, embeddings backfill:** owner chose "Embeddings backfill" and then "Yes, queue them" after being told the cost (about $0.20–0.30 of Gemini usage) and the SQL. This covered every page and question box that lacked a vector. It was done (section 2). It does not authorize other production writes.
+- **2026-11-07, show unembedded pages:** owner: "app should show unembeded pages as unembeded". Implemented on `claude/embeddings-backfill-handoff`; merge and deploy still need the owner's OK.
+
 - **2026-11-07, deployment:** owner explicitly said `deploy` after reviewing PR #57's passing CI and requested merge/deployment. This authorizes the normal code rollout and its required docs-only deployment record; it does not authorize replacing the empty PDF, retrying jobs, or merging unrelated PR #21.
 
 - **2026-11-07, failed-file inspection:** owner reports a Drive sync file marked Failed cannot be found in Inspect. Diagnose and prepare the visibility/navigation/error-state repair; no merge, deployment, re-download, replacement or production retry instruction was given.
@@ -622,6 +638,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 5. Judgment calls (made without asking)
 
+- **2026-11-07, backfill rounds:** after the approved 137-file round, Claude Code queued two more rounds without asking again, because they covered gaps already inside the approved scope: 2 files whose embedding hit a short 429, and 22 files whose question boxes (part of the 992 counted at approval) lacked vectors.
+- **2026-11-07, what counts as "embedded":** a read page counts as embedded when it has a vector and every question box on it has one. Answer and other boxes never get vectors, so they don't count. Pages not read yet and files that aren't `ready` are never marked, because they're not expected to have vectors yet.
+
 - **2026-11-07, failed-file recovery:** include failed zero-page files while preserving the existing visibility of other statuses. Use existing Upload management for recovery instead of adding a second retry implementation. An empty stored file needs a valid replacement, so do not suggest Re-run AI for it. Remote Drive content is unknown; do not replace or download it implicitly.
 
 - **2026-11-07, decoder dependency:** repair the missing Ubuntu plugin rather than replacing the converter or changing retry policy. Test the actual production converter stage with a small synthetic HEVC image; checking that the executable exists cannot detect a missing decoder.
@@ -647,6 +666,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **2026-10-28, Codex:** as explicitly directed, model text is passed through unchanged and the old server leak filter is removed. The no-written-answers instruction remains in the model prompt; compliance therefore relies on the model. This is a material change from the previous server guardrail and is not yet verified with live DeepSeek.
 
 ## 6. File inventory
+
+**Unembedded markers (this branch):** `src/DriveAlt.Api/Files/FileEndpoints.cs` (`FileDto.Unembedded`, `IsEmbedded`, `UnembeddedAsync`), `src/DriveAlt.Api/Inspect/InspectEndpoints.cs` (`InspectPageDto.Embedded`), `web/src/lib/api.ts`, `web/src/screens/Inspect.tsx`, `web/src/styles/app.css` (`.pdot.unemb`, `.badge.unemb`); tests `tests/DriveAlt.Api.Tests/UnembeddedApiTests.cs`, `web/src/screens/InspectTree.test.tsx`. No migration.
 
 **Failed-file inspection repair:** `web/src/screens/Inspect.tsx` lists zero-page failures and shows their file error/recovery action; `web/src/ui/DriveSyncPanel.tsx` links failed imports to Inspect. `InspectTree.test.tsx` covers zero-page tree/search/problem counts, empty-copy diagnosis and nonempty recovery; `DriveSyncPanel.test.tsx` checks the Failed destination. No API, migration or processing changes.
 
@@ -699,6 +720,13 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**New, 2026-11-07 (Claude Code):**
+- **Silent embedding skips:** a Gemini 429 during tagging still marks the job `done` with no vectors (`ProcessingService.cs:276-281`). Once this branch deploys, Inspect shows such pages; nothing re-queues them automatically yet. A possible fix is to re-queue a `reembed` job with a delay instead of finishing; that needs owner approval.
+- **400-page cap truncates textbooks:** `Processing:MaxPagesPerFile = 400` (`appsettings.json`, `Infrastructure/Options.cs:82`). Exactly two files hit it, both Probability and Statistics books in the `book` folder: *Introductory Statistics (7th Ed)* and Walpole's *Probability & Statistics for Engineers & Scientists (9th Ed)*. **Hypothesis:** the real books are longer, so their later pages were never imported. Not checked against the PDFs. Raising the cap means more processing and Terra usage; that is the owner's call.
+- **Chat says "no match" poorly:** in the maps conversation (section 3) the bot kept offering wider searches and attached loose results instead of saying plainly that no DS paper covers maps. Under the owner's AI-only rule, a fix belongs in the prompt, not a server filter. Not started.
+- **DS - Summary is in the app twice** (Drive has both a Google Doc and a PDF copy, 121 and 88 pages). Not changed.
+- **Year 1:** set aside by the owner (section 4).
+
 **PR #57 deployed:** failed zero-page files are visible in Inspect, Drive sync Failed links open Inspect, and failure/recovery details are included in the served bundle. Final PR and main CI passed. Empty Database Systems original `59dce332-fd3d-4495-9517-1e6d2e46275d` still requires a valid replacement; no source replacement/requeue is authorized or performed. `codex/handoff-inspect-live` records this rollout with a docs-only `[skip ci]` merge.
 
 **HEIC rollout complete:** PR #55 passed CI and is deployed as bbf5633. PR #56 is this final docs-only reconciliation, merged after #54/#55 with [skip ci]. Failed uploads still need uploader Retry; no automatic retry was performed. Authenticated upload/processing behavior remains unverified.
@@ -707,7 +735,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 **Latest state:** PRs #44–#55 are merged; #55 deployment is verified. This dependent docs correction merges with [skip ci]; PR #21 remains open. The Year 1 ownership/checkpoints below are historical claims not revalidated by this deployment task; do not overlap their files or treat preparation as import-ready.
 
-**Current failure:** the latest file snapshot has 411 ready / 1 failed (Database Systems empty PDF, 0 bytes / 0 pages); seven old HEIC failures have completed. Latest pre-#57-deploy job snapshot has 545 done / 15 failed / 85 queued / 2 running and no held/paused rows. Queue counts are dynamic; Codex did not enqueue/retry that work. Do not replace the empty file or alter jobs implicitly.
+**Current failure:** the latest file snapshot has 411 ready / 1 failed (Database Systems empty PDF, 0 bytes / 0 pages); seven old HEIC failures have completed. Latest pre-#57-deploy job snapshot has 545 done / 15 failed / 85 queued / 2 running and no held/paused rows. Queue counts are dynamic; Codex did not enqueue/retry that work. Those queued/running jobs were Claude Code's owner-approved `reembed` backfill (section 2), all done by ~16:30 UTC. Do not replace the empty file or alter jobs implicitly.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
@@ -740,6 +768,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
+**2026-11-07, Claude Code, `claude/embeddings-backfill-handoff`:** PR #59 is open for the unembedded markers; once CI passes it waits for the owner's merge OK (code change, so a normal merge, not `[skip ci]`). After deploy, Inspect should show no "not embedded" markers, because the backfill left zero gaps. Next candidates, each needing the owner: re-queue embedding on 429 instead of skipping; the 400-page cap; the chat's no-match wording. Year 1 is paused by the owner.
+
 **Current task complete (2026-11-07):** PR #57 is deployed as `b839ab0`; main test/build/deploy, running image, public/AI health and served recovery text are verified. Merge this docs-only rollout record with `[skip ci]` under the existing deployment authorization. The failed PDF is 0 bytes on disk and in metadata and needs a valid replacement. Remote Drive content is unverified; do not re-download/replace or retry production jobs implicitly. Authenticated live UI inspection remains unverified because the browser lacked a signed-in session.
 
 Latest rollout is complete: PR #55 merged/deployed as bbf5633, main run 42384722126 passed, running image/HEIC decoder/health verified. Docs #54 merged first with [skip ci]; PR #56 records final evidence and also merges with [skip ci]. Resume checks below compare the live image with the latest first-parent code commit so subsequent docs merges do not require a restart.
@@ -762,6 +792,7 @@ git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
 # Latest verified code/image: b839ab03ddd941890a3e51cb002226da186b29d0 (2026-11-07).
 # git merge-base --is-ancestor 2a5b7fbd21c622e8a8b1f589257e00c43aceb49e origin/main must exit 0 (PR #57).
+# Once PR #59 (claude/embeddings-backfill-handoff) merges and deploys, expect its merge commit here and as the image tag.
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
@@ -790,12 +821,14 @@ docker compose --env-file generated.env --env-file .env exec -T db psql -U drive
   -c "select count(*) filter (where error is null and extracted) read_ok, count(*) filter (where error is not null) read_offline from pages" \
   -c "select state, count(*), count(*) filter (where error like 'Held:%') held, count(*) filter (where error like 'Paused:%') paused from jobs group by state order by state" \
   -c "select c.slug, count(*) filter (where not p.extracted) unread from pages p join files f on f.id=p.file_id join courses c on c.id=f.course_id where c.semester=1 and c.slug <> 'its' group by c.slug order by c.slug" \
-  -c "select label, count(*) from regions group by label order by 1"
+  -c "select label, count(*) from regions group by label order by 1" \n  -c "select (select count(*) from pages where embedding is null) pages_unembedded, (select count(*) from regions where label='question' and embedding is null) questions_unembedded"
+# Expect 0 and 0 (backfilled 2026-11-07). New gaps mean Gemini 429s during tagging; see open threads.
 # Latest verified image: b839ab0; read-only laptop SSH succeeded 2026-11-07.
 # Snapshot (dynamic, investigate changes rather than requiring exact counts):
 # files ready 411 / 9682 pages, failed 1 / 0 pages;
 # pages read_ok 9678 / with error 4; regions question 2719;
-# jobs done 545, failed 15, queued 85, running 2; no held/paused rows (pre-deploy snapshot).
+# jobs done 545, failed 15, queued 85, running 2; no held/paused rows (pre-deploy snapshot; the queued/running rows were the reembed backfill).
+# After the backfill (~16:30 UTC): reembed 161 done, nothing queued/held/paused.
 # Semester 1 excluding ITS: zero unread; messages.more_commentary exists.
 # Earlier held-job/sync-switch counts are historical; current sync switches were not queried.
 # These aggregate checks do not establish answer-text safety or crop quality.

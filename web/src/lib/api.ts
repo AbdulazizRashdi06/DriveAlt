@@ -52,6 +52,8 @@ export interface FileDto {
   parts: number
   /** Why an unfinished file isn't moving (server-side job state). */
   wait?: FileWait | null
+  /** Read pages semantic search can't see yet (no embedding); keyword search still finds them. Only for ready files. */
+  unembedded?: number
 }
 
 export interface FileWait {
@@ -188,6 +190,8 @@ export interface InspectPage {
   originalUrl: string
   pageUrl: string
   regions: RegionDto[]
+  /** False when the page or one of its question boxes has no embedding, so only keyword search finds it. */
+  embedded: boolean
 }
 
 export interface SavedGroup { course: string; name: string; color: string; items: ResultCard[] }
