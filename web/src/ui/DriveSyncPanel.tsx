@@ -166,7 +166,7 @@ function FolderView({ folders, path, busy, onMode, onNavigate }: { folders: Fold
                 <span className="ellipsis" title={f.name}>{f.name}</span>
                 {f.fileId
                   ? f.fileStatus && f.fileStatus !== 'ready'
-                    ? <Link className="tg drive-sync-working" to={`/files/${f.fileId}`}>{f.fileStatus === 'failed' ? 'Failed' : 'Processing'}</Link>
+                    ? <Link className="tg drive-sync-working" to={f.fileStatus === 'failed' ? `/inspect/${f.fileId}` : `/files/${f.fileId}`}>{f.fileStatus === 'failed' ? 'Failed' : 'Processing'}</Link>
                     : <Link className="tg drive-sync-up" to={`/files/${f.fileId}`}>Uploaded</Link>
                   : <span className={`tg ${f.importable ? 'drive-sync-down' : 'drive-sync-skip'}`}>{f.importable ? 'Not uploaded' : 'Skipped type'}</span>}
               </li>)}
