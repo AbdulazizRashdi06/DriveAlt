@@ -4,6 +4,8 @@
 
 ## 1. Header
 
+**Current update: 2026-11-07, Claude Code, `claude/refusal-names-abdulaziz`; base main `08cc8b4` (PR #60, which follows PR #59).** The owner approved merging #59 and #60 ("Yes, merge both"), and both are merged; their deploy evidence is in section 2. This branch makes refusals say, in the model's own words, that Abdulaziz told it not to (owner: "he didnt say abdulaziz told me not to"). Written for after it merges and deploys; merge needs the owner's OK.
+
 **Current update: 2026-11-07, Claude Code, `claude/chat-show-only-asked`, stacked on PR #59 (`claude/embeddings-backfill-handoff`); merge #59 first.** Owner: "take over the fact that the agent gave me stuff i didnt ask for". The chat prompt now treats search results as nearest neighbours, not matches, and keeps offering and showing in separate turns. Each search result also tells the model which of its keywords it really contains. Written for after it merges and deploys; merge needs the owner's OK. Real DeepSeek behaviour is unverified until live use.
 
 **Current update: 2026-11-07, Claude Code, `claude/embeddings-backfill-handoff`; merged with main `4c0212c` (PR #58, docs) on live code `b839ab0` (PR #57):** owner-approved production embeddings backfill is finished (every page and question box now has a vector; section 2). This branch adds "not embedded" markers to Inspect and the upload list and reconciles this page with live data. Written for after it merges and deploys; merge needs the owner's OK. Owner set Year 1 aside on 2026-11-07 (section 4).
@@ -35,6 +37,10 @@
 
 **In one line (Codex, PR #58):** Inspect repair PR #57 is deployed as `b839ab0`, with passing CI and healthy public/AI endpoints. Seven earlier HEIC failures are ready; the remaining zero-byte PDF needs a valid replacement. PR #21 remains separate open work.
 ## 2. State of the world
+
+**Refusals name Abdulaziz (Claude Code, `claude/refusal-names-abdulaziz`, not deployed):** the owner saw "1 + 1" refused without the bot saying Abdulaziz told it not to. Cause: prompt rule 10 said "avoid canned slogans and blaming the owner", and the reply writer said "Do not blame anyone" (`ChatService.cs`, before this branch). Both were added after the owner rejected the hardcoded Abdulaziz refusal line on 2026-10-28. Now rule 1 tells the model to say, in its own words each time, that Abdulaziz told it not to, with no fixed line. Rule 10 and the reply writer allow mentioning him only when declining. The fallback refusal action asks for the same thing. Plain arithmetic is named as a solve request. New test `Refusals_are_told_to_name_abdulaziz_in_the_models_own_words` runs in CI; locally only `dotnet build` passed (0 errors). Real DeepSeek wording is unverified until live.
+
+**PRs #59 and #60 merged, 2026-11-07 (Claude Code, owner: "Yes, merge both"):** PR #59 head `2f8c193` passed CI run `42391558443` (backend `Passed! - Failed: 0, Passed: 110`; frontend 10 test files passed) and merged as `89a685ac4e92195a16e5f8f6fd6614c2b436aede`. PR #60 head `5c997b3` passed CI run `42391869442` (backend `Passed! - Failed: 0, Passed: 111`; frontend 10 files) and, retargeted to `main`, merged as `08cc8b45d04d96045394298bad0f87705e9bfa21`. Main deploy runs: `42392049572` for `89a685a`; the run for `08cc8b4` follows. Run `42392049572` passed test (`128461475121`), build (`128461475301`) and deploy (`128462305584`). Run `42392066905` for `08cc8b4`: DEPLOY60_PLACEHOLDER
 
 **Chat shows only what was asked (Claude Code, `claude/chat-show-only-asked`, not deployed):** cause, from the DS maps conversation (section 3): semantic search (`SearchService.SearchAsync`, vector `OrderBy(CosineDistance)…Take`) always returns the nearest pages even when none is relevant, and the model got no sign of match strength. Prompt rule 6 already forbade showing offered material, but the model offered and showed in the same turn. Changes:
 - prompt rule 4: being returned is not a match; judge by topic, tags, snippet and `matched_keywords`; a passing mention in a list or heading doesn't count; widening a search keeps the topic and kind.
@@ -385,6 +391,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Claude Code - merged #59/#60; refusals name Abdulaziz:** after both PRs passed CI, merged #59 normally, retargeted #60 to `main` and merged it. On the owner's screenshot of "1 + 1" refused without naming him, traced the cause to the "don't blame the owner" wording and changed the prompt on `claude/refusal-names-abdulaziz`.
+
 **2026-11-07, Claude Code - chat stops showing unasked-for material:** traced the maps conversation's off-topic results to nearest-neighbour search plus offer-and-show in one turn. Changed the prompt (rules 4, 6, 8) and added `matched_keywords` evidence to search results, with no server filtering. Stacked on PR #59 because that PR also edits this page.
 
 **2026-11-07, Claude Code - embeddings backfill, unembedded markers, maps chat review:** ran the Resume check (all matched; PR #56 had already merged as `fc9cef7`; counts had moved, see section 2). Owner asked about a chat (user 24-0161, conversation `f378493a…`, "Any questions about maps in the past ds papers"). Read-only SQL found **no DS question about maps in the app**: DS past papers are only `midterm 1 (photos)`, `midterm 2 (photos)` and `time complexity (photos)` (2024), and quizzes 1–3; none of their topics or tags mention maps, hashing or sets. There is no DS final on the Drive (`final rev` holds only a recording, which the app skips), and Sets and Maps is lecture 16. The bot's first "couldn't find any" was correct. Its later picks were misses: DS - Summary pages 2 and 4 (tables of contents that merely contain the word), cpp4 Q5 (unrelated), Sets and Maps slide 13 and Hashing exercises. It also never said plainly that maps aren't in any DS paper. The investigation found the missing embeddings, which were backfilled in production with the owner's OK (section 2). On request ("app should show unembeded pages as unembeded"), added the markers on this branch.
@@ -574,6 +582,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-07, refusals name Abdulaziz:** owner, on a screenshot of the bot refusing "1 + 1": "he didnt say abdulaziz told me not to". The bot should say Abdulaziz told it not to when it declines to solve, hint or check. This supersedes the 2026-10-28 prompt wording against "blaming the owner" but not that decision's core: the line is still written by the model each time, never a fixed server string.
+- **2026-11-07, merge both:** owner said "Yes, merge both" for PRs #59 and #60, after #60's CI. Done.
 - **2026-11-07, unasked-for results:** owner: "take over the fact that the agent gave me stuff i didnt ask for". Fixed in the prompt plus evidence for the model, keeping the AI-only rule (no server filter). Merge and deploy need the owner's OK.
 - **2026-11-07, Year 1 set aside:** owner: "ignore year one files i have other issues now". Don't work on Year 1 preparation, the random-15 gate or a Year 1 import unless the owner brings it back. The Year 1 notes below stay as history.
 - **2026-11-07, embeddings backfill:** owner chose "Embeddings backfill" and then "Yes, queue them" after being told the cost (about $0.20–0.30 of Gemini usage) and the SQL. This covered every page and question box that lacked a vector. It was done (section 2). It does not authorize other production writes.
@@ -681,6 +691,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 6. File inventory
 
+**Refusals name Abdulaziz (`claude/refusal-names-abdulaziz`):** `src/DriveAlt.Api/Chat/ChatService.cs` (prompt rules 1 and 10, reply writer, fallback refusal action), `docs/AI-AGENTS.md`, test `tests/DriveAlt.Api.Tests/RefusalPromptApiTests.cs`.
+
 **Show-only-asked chat (`claude/chat-show-only-asked`):** `src/DriveAlt.Api/Chat/ChatService.cs` (prompt rules 4/6/8, tool `note`, `matched_keywords`), `src/DriveAlt.Api/Search/SearchService.cs` (`MatchedKeywordsAsync`), `docs/AI-AGENTS.md`, test `tests/DriveAlt.Api.Tests/ChatRelevanceApiTests.cs`.
 
 **Unembedded markers (this branch):** `src/DriveAlt.Api/Files/FileEndpoints.cs` (`FileDto.Unembedded`, `IsEmbedded`, `UnembeddedAsync`), `src/DriveAlt.Api/Inspect/InspectEndpoints.cs` (`InspectPageDto.Embedded`), `web/src/lib/api.ts`, `web/src/screens/Inspect.tsx`, `web/src/styles/app.css` (`.pdot.unemb`, `.badge.unemb`); tests `tests/DriveAlt.Api.Tests/UnembeddedApiTests.cs`, `web/src/screens/InspectTree.test.tsx`. No migration.
@@ -739,7 +751,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 **New, 2026-11-07 (Claude Code):**
 - **Silent embedding skips:** a Gemini 429 during tagging still marks the job `done` with no vectors (`ProcessingService.cs:276-281`). Once this branch deploys, Inspect shows such pages; nothing re-queues them automatically yet. A possible fix is to re-queue a `reembed` job with a delay instead of finishing; that needs owner approval.
 - **400-page cap truncates textbooks:** `Processing:MaxPagesPerFile = 400` (`appsettings.json`, `Infrastructure/Options.cs:82`). Exactly two files hit it, both Probability and Statistics books in the `book` folder: *Introductory Statistics (7th Ed)* and Walpole's *Probability & Statistics for Engineers & Scientists (9th Ed)*. **Hypothesis:** the real books are longer, so their later pages were never imported. Not checked against the PDFs. Raising the cap means more processing and Terra usage; that is the owner's call.
-- **Chat says "no match" poorly:** fixed in the prompt on `claude/chat-show-only-asked` (stacked on PR #59), not deployed. After deploy, re-ask "any questions about maps in the past ds papers" and check that it shows nothing unrelated and says no DS paper matched.
+- **Chat says "no match" poorly:** fixed in the prompt by PR #60 (merged). After deploy, re-ask "any questions about maps in the past ds papers" and check that it shows nothing unrelated and says no DS paper matched.
 - **DS - Summary is in the app twice** (Drive has both a Google Doc and a PDF copy, 121 and 88 pages). Not changed.
 - **Year 1:** set aside by the owner (section 4).
 
@@ -784,6 +796,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
+**2026-11-07, Claude Code, `claude/refusal-names-abdulaziz`:** PR open; after CI it waits for the owner's merge OK (a normal merge, since it changes code). After deploy, check live: "1 + 1" should get a refusal naming Abdulaziz, and the maps question (PR #60) should show nothing unrelated.
+
 **2026-11-07, Claude Code, `claude/chat-show-only-asked`:** PR stacked on #59. Merge #59 first, then this one (both are code, so normal merges). After deploy, repeat the maps conversation live and record what the bot does.
 
 **2026-11-07, Claude Code, `claude/embeddings-backfill-handoff`:** PR #59 is open for the unembedded markers; once CI passes it waits for the owner's merge OK (code change, so a normal merge, not `[skip ci]`). After deploy, Inspect should show no "not embedded" markers, because the backfill left zero gaps. Next candidates, each needing the owner: re-queue embedding on 429 instead of skipping; the 400-page cap; the chat's no-match wording. Year 1 is paused by the owner.
@@ -810,7 +824,8 @@ git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
 # Latest verified code/image: b839ab03ddd941890a3e51cb002226da186b29d0 (2026-11-07).
 # git merge-base --is-ancestor 2a5b7fbd21c622e8a8b1f589257e00c43aceb49e origin/main must exit 0 (PR #57).
-# Once PR #59 (claude/embeddings-backfill-handoff) merges and deploys, expect its merge commit here and as the image tag.
+# PR #59 merged as 89a685a and PR #60 as 08cc8b4 (2026-11-07); expect 08cc8b4 or later here and as the image tag.
+# Once claude/refusal-names-abdulaziz merges and deploys, expect its merge commit.
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
