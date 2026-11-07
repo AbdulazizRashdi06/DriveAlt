@@ -4,6 +4,10 @@
 
 ## 1. Header
 
+**Current update: 2026-11-07, Codex, `codex/handoff-inspect-live`; base/latest main code/live image `b839ab03ddd941890a3e51cb002226da186b29d0` (PR #57).** Owner-authorized Inspect rollout is complete: main run `42391021555` passed test/build/deploy, live image and public/AI health independently verified. This follow-up changes only Markdown and merges with `[skip ci]` to avoid another restart. The empty PDF still needs a valid replacement; no source replacement or job retry was performed.
+
+**Deployment authorized, 2026-11-07, Codex:** owner said `deploy` for PR #57. Exact head `2a5b7fbd21c622e8a8b1f589257e00c43aceb49e` is mergeable and its final CI run `42390667253` test job `128457373595` passed. Merge and deployment are now authorized; source replacement and production job retries remain outside scope.
+
 **Current update: 2026-11-07, Codex, `codex/inspect-failed-files`, PR #57; base main `fc9cef7` (docs PR #56), live code `bbf5633`.** Failed zero-page discovery/navigation and Inspect error-state repair is complete; code `4133fbb` passed full online CI. This final documentation record changes no tested code. Remaining production failure is an empty stored Database Systems PDF, not HEIC. No production writes or merge/deployment authorized.
 
 **Current update: 2026-11-07, Codex, `codex/verify-latest-deployment` (PR #56); base main `bbf5633` (PR #55):** owner requested "merge latest and deploy". PR #54 merged with [skip ci]; latest code PR #55 merged and deployed as `bbf5633a07b170795ada2382f32bd90bcc70ec76`. Main run `42384722126` passed test/build/deploy. Independent SSH confirms the running image, libde265 decoder and healthy public/AI endpoints. This docs-only follow-up merges after #54/#55 with [skip ci]. Older dated claims below are historical; the current snapshot at the start of section 2 takes precedence.
@@ -14,17 +18,21 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `codex/verify-latest-deployment` (docs only), based on PR #54 `afde373`, integrated main `bbf5633` (PR #55). |
-| Updated | 2026-11-07, Codex; latest merge and production verification |
+| Branch / base | `codex/handoff-inspect-live` (docs only), based on main `b839ab0` (PR #57). |
+| Updated | 2026-11-07, Codex; failed-file Inspect rollout verified |
 
-| Purpose of this update | Reconcile latest PR/deployment and replace stale resume expectations. |
+| Purpose of this update | Record successful deployment of failed-file inspection and preserve pending source replacement. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
 **PR #32 merged and deployed:** `main` contains `18a6b605ec768a54c83fde6583e90db0f7afb2f5` and merge `56bd76b585e6540bdd25645760b2a640dc37efa0` (reader, sharing, duplicate checks and reader regression fixes). **PR #21 remains open** and belongs to Claude Code; its typed-pick and fixed-code login changes are not deployed.
 
-**In one line:** HEIC repair PR #55 is deployed as `bbf5633`; decoder availability and health are verified. Existing failed files still need uploader Retry. PR #21 remains separate open work.
+**In one line:** Inspect repair PR #57 is deployed as `b839ab0`, with passing CI and healthy public/AI endpoints. Seven earlier HEIC failures are ready; the remaining zero-byte PDF needs a valid replacement. PR #21 remains separate open work.
 ## 2. State of the world
+
+**Inspect rollout complete, 2026-11-07 (Codex):** owner said `deploy`. Verified PR #57's exact head `2a5b7fbd21c622e8a8b1f589257e00c43aceb49e` passed final run `42390667253` (test job `128457373595`), then merged it normally as `b839ab03ddd941890a3e51cb002226da186b29d0`. Main run `42391021555` completed success: build `128458411454`, test `128458411609`, deploy `128458943563`. Independent SSH reports `ghcr.io/abdulazizrashdi06/drivealt:b839ab03ddd941890a3e51cb002226da186b29d0 running`; public health `{"ok":true}`, gateway `{"signedIn":true}`, gateway hash prefix `ef0e322e17be2943`. Home HTTP 200 serves `/assets/index-DCJAp7Nr.js`, which contains both the new failed-page explanation and `Upload a replacement` / zero-byte recovery copy. Authenticated live UI inspection is **unknown**: the in-app browser redirected to `/login` and no sign-in was attempted. Online regressions passed; no local tests were run. This docs-only record must merge with `[skip ci]`; live code/image stays `b839ab0` afterward. Empty Database Systems file `59dce332-fd3d-4495-9517-1e6d2e46275d` still needs a valid source copy. No file replacement or production retry occurred.
+
+**Pre-deployment resume, 2026-11-07:** Git/main image/health/gateway/decoder and feature ancestor checks still match the verified `bbf5633` rollout. SQL files remain 411 ready / 1 failed, 9,682 pages; 9,678 read_ok / 4 errors; 2,719 question regions and zero unread in-scope pages. Jobs have advanced to 545 done / 15 failed / 85 queued / 2 running (no held or paused rows), so work is now active; who queued it and why are unknown. Codex did not enqueue or retry it. Preserve normal resumable-job behavior during the owner-approved deployment. Open PRs #21 and #57 only; no overlapping handoff PR.
 
 **PR #57 validated online (2026-11-07, Codex):** GitHub run `42390391704`, test job `128456542696`, completed success on code `4133fbb9a084fc5b3c74c5bea3a0b17f240dd03e`. Backend/API tests, production HEIC converter-stage check, gateway checks and frontend test/TypeScript/Vite step all report success; publication/deploy jobs skipped as expected for a PR. Exact test counts are unknown in this record: two bounded job-log reads returned HTTP 502, while check/step metadata confirms success. `git diff --check` and Impeccable detector (`[]`) passed. Three new frontend regressions cover zero-page failure tree/search/problem counts and empty/nonempty failure detail actions; the existing Drive sync case now verifies Failed links to Inspect. No local tests/browser run or production mutation. Only this final handoff results commit is newer; watch its ordinary CI rerun, then hand back without another docs commit. After an owner-approved merge/deployment, failed zero-page files are visible in Inspect and Failed sync badges open their error details; the empty PDF still requires a valid replacement.
 
@@ -357,6 +365,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Codex - deployed PR #57:** merged the tested head under the owner's `deploy` instruction; watched main test/build/deploy success; independently verified the running image, app/AI health and the actual public bundle's failed-file recovery copy. Prepared this docs-only post-deployment reconciliation; it merges with `[skip ci]` to avoid restarting active jobs again. Browser access stopped at sign-in, so authenticated live interaction remains unverified.
+
 **2026-11-07, Codex - PR #57 ready for owner review:** published/attached the repair, verified full online run `42390391704` passed on `4133fbb`, and recorded evidence. Preserved the empty original and all jobs; no merge/deploy or re-download. Exact counts unavailable due the job-log endpoint's 502; no guessed counts.
 
 **2026-11-07, Codex - failed-file discovery repaired:** diagnosed the remaining failed PDF as an empty stored original, then corrected Inspect's zero-page filter, failed detail state and Drive sync navigation. Preserved successful/processing navigation and existing page editing. Added tree/search/detail/error-action regressions; validation is online only.
@@ -540,6 +550,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-07, deployment:** owner explicitly said `deploy` after reviewing PR #57's passing CI and requested merge/deployment. This authorizes the normal code rollout and its required docs-only deployment record; it does not authorize replacing the empty PDF, retrying jobs, or merging unrelated PR #21.
+
 - **2026-11-07, failed-file inspection:** owner reports a Drive sync file marked Failed cannot be found in Inspect. Diagnose and prepare the visibility/navigation/error-state repair; no merge, deployment, re-download, replacement or production retry instruction was given.
 
 - **2026-11-07, latest merge/deployment:** owner said "merge latest and deploy". This authorizes merging latest PR #55, docs #54 and the necessary handoff reconciliation. PR #55 appeared while initial verification was running and is the latest code repair. Merge code normally; follow the required `[skip ci]` merge for documentation. PR #21 is not the latest and remains outside this request.
@@ -687,7 +699,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
-**Ready for owner review: Codex, `codex/inspect-failed-files`, PR #57:** zero-page failure tree/search/detail/navigation fix passed full online CI on `4133fbb`. Only final handoff results docs are newer. Watch that rerun and hand back without another documentation commit. Owner controls merge/deploy. Empty Database Systems original `59dce332-fd3d-4495-9517-1e6d2e46275d` requires replacement; no source replacement/requeue is authorized or performed.
+**PR #57 deployed:** failed zero-page files are visible in Inspect, Drive sync Failed links open Inspect, and failure/recovery details are included in the served bundle. Final PR and main CI passed. Empty Database Systems original `59dce332-fd3d-4495-9517-1e6d2e46275d` still requires a valid replacement; no source replacement/requeue is authorized or performed. `codex/handoff-inspect-live` records this rollout with a docs-only `[skip ci]` merge.
 
 **HEIC rollout complete:** PR #55 passed CI and is deployed as bbf5633. PR #56 is this final docs-only reconciliation, merged after #54/#55 with [skip ci]. Failed uploads still need uploader Retry; no automatic retry was performed. Authenticated upload/processing behavior remains unverified.
 
@@ -695,7 +707,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 **Latest state:** PRs #44–#55 are merged; #55 deployment is verified. This dependent docs correction merges with [skip ci]; PR #21 remains open. The Year 1 ownership/checkpoints below are historical claims not revalidated by this deployment task; do not overlap their files or treat preparation as import-ready.
 
-**Current failures:** eight failed files have zero pages and fourteen jobs are failed (read-only SQL, 2026-11-07). PR #55 diagnosed thirteen jobs across seven files as missing HEIC decoding; the remaining failure was not investigated. Earlier references to one failed file and two held queued jobs are obsolete; there are currently no queued/held/paused rows. Investigate separately without implicit retry or deletion.
+**Current failure:** the latest file snapshot has 411 ready / 1 failed (Database Systems empty PDF, 0 bytes / 0 pages); seven old HEIC failures have completed. Latest pre-#57-deploy job snapshot has 545 done / 15 failed / 85 queued / 2 running and no held/paused rows. Queue counts are dynamic; Codex did not enqueue/retry that work. Do not replace the empty file or alter jobs implicitly.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
 
@@ -728,7 +740,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 8. Continuation plan
 
-**Current task (2026-11-07):** PR #57 code `4133fbb` passed full online CI. Watch only the final docs rerun, then stop for owner review; no more result commits once it passes. Merge/deploy need owner approval. The failed PDF is 0 bytes on disk and in metadata; user needs a valid replacement. Remote Drive content is unverified; do not re-download/replace or retry production jobs implicitly.
+**Current task complete (2026-11-07):** PR #57 is deployed as `b839ab0`; main test/build/deploy, running image, public/AI health and served recovery text are verified. Merge this docs-only rollout record with `[skip ci]` under the existing deployment authorization. The failed PDF is 0 bytes on disk and in metadata and needs a valid replacement. Remote Drive content is unverified; do not re-download/replace or retry production jobs implicitly. Authenticated live UI inspection remains unverified because the browser lacked a signed-in session.
 
 Latest rollout is complete: PR #55 merged/deployed as bbf5633, main run 42384722126 passed, running image/HEIC decoder/health verified. Docs #54 merged first with [skip ci]; PR #56 records final evidence and also merges with [skip ci]. Resume checks below compare the live image with the latest first-parent code commit so subsequent docs merges do not require a restart.
 
@@ -748,14 +760,15 @@ git merge-base --is-ancestor 1e13a87ec9b5833e14ee893f8db7b5df90c4349c origin/mai
 git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
 # Expect count 2 (PR #53, merged 2026-11-07), unless later code changes it.
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
-# Latest verified code/image: bbf5633a07b170795ada2382f32bd90bcc70ec76 (2026-11-07).
+# Latest verified code/image: b839ab03ddd941890a3e51cb002226da186b29d0 (2026-11-07).
+# git merge-base --is-ancestor 2a5b7fbd21c622e8a8b1f589257e00c43aceb49e origin/main must exit 0 (PR #57).
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
 # After ordered docs merges, #21 remains open. Re-check rather than assuming this list is fixed.
-# PRs #25–#55 are merged; this dependent correction is a docs-only [skip ci] merge.
+# PRs #25–#57 are merged; this rollout record is a docs-only [skip ci] merge.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with
 # query repo:AbdulazizRashdi06/DriveAlt is:open instead. Do not read auth files.
 ```
@@ -778,16 +791,16 @@ docker compose --env-file generated.env --env-file .env exec -T db psql -U drive
   -c "select state, count(*), count(*) filter (where error like 'Held:%') held, count(*) filter (where error like 'Paused:%') paused from jobs group by state order by state" \
   -c "select c.slug, count(*) filter (where not p.extracted) unread from pages p join files f on f.id=p.file_id join courses c on c.id=f.course_id where c.semester=1 and c.slug <> 'its' group by c.slug order by c.slug" \
   -c "select label, count(*) from regions group by label order by 1"
-# Latest verified image: bbf5633; read-only laptop SSH succeeded 2026-11-07.
+# Latest verified image: b839ab0; read-only laptop SSH succeeded 2026-11-07.
 # Snapshot (dynamic, investigate changes rather than requiring exact counts):
-# files ready 404 / 9675 pages, failed 8 / 0 pages;
-# pages read_ok 9673 / with error 2; regions question 2700;
-# jobs done 488, failed 14, no queued/held/paused rows.
+# files ready 411 / 9682 pages, failed 1 / 0 pages;
+# pages read_ok 9678 / with error 4; regions question 2719;
+# jobs done 545, failed 15, queued 85, running 2; no held/paused rows (pre-deploy snapshot).
 # Semester 1 excluding ITS: zero unread; messages.more_commentary exists.
 # Earlier held-job/sync-switch counts are historical; current sync switches were not queried.
 # These aggregate checks do not establish answer-text safety or crop quality.
 docker compose --env-file generated.env --env-file .env logs --since 24h --no-log-prefix app 2>&1 | grep -c 'AI paused'
-# Count unknown on 2026-11-07 (SSH returned no count). grep exits 1 for zero matches.
+# Latest count 0 on 2026-11-07. grep exits 1 for zero matches.
 ```
 
 SSH identity: `~/.ssh/zarqa_vps`, account `deploy@173.249.40.122`. Port 22 can be blocked on campus Wi-Fi. These checks are reads; rollback commands below mutate the VPS and require owner approval.
