@@ -15,7 +15,7 @@ public sealed record FileDto(
     Guid Id, string Title, string OriginalName, string SourceKind, long SizeBytes, int PageCount,
     string Status, int Step, int Progress, string? Error,
     int? CourseId, string? CourseSlug, string? CourseName, string? CourseColor, string MaterialType, int? Year, string? AssessmentLabel,
-    string? Folder, string[] Guessed, DateTime CreatedAt, string? ThumbUrl, int Parts, FileWait? Wait = null);
+    string? Folder, string[] Guessed, DateTime CreatedAt, string? ThumbUrl, int Parts, FileWait? Wait = null, int Unembedded = 0);
 
 /// <summary>
 /// Why an unfinished file isn't moving, from its processing job: <c>reading</c> (a worker has it now), <c>queued</c>
@@ -47,6 +47,26 @@ public static class FileEndpoints
         return new FileDto(f.Id, f.Title, f.OriginalName, f.SourceKind, f.SizeBytes, f.PageCount, f.Status, FileStatuses.Step(f.Status),
             f.Progress, f.Error, f.CourseId, f.Course?.Slug, f.Course?.Name, f.Course?.Color, f.MaterialType, f.AcademicYear,
             f.AssessmentLabel, f.Folder, f.Guessed, f.CreatedAt, thumb, f.Parts.Length);
+    }
+
+    /// <summary>
+    /// Read pages that semantic search can't see: the page has no vector, or one of its question boxes has none.
+    /// Such pages are still found by keyword search. Happens when Gemini was over quota or unreachable while the file was
+    /// tagged (<see cref="ProcessingService.EmbedAsync"/> keeps the file and skips the vectors).
+    /// </summary>
+    public static bool IsEmbedded(Page p) =>
+        p.Embedding != null && p.Regions.All(r => r.Label != RegionLabels.Question || r.Embedding != null);
+
+    /// <summary>How many read pages of each file aren't embedded (see <see cref="IsEmbedded"/>); files with none are left out.</summary>
+    internal static async Task<Dictionary<Guid, int>> UnembeddedAsync(AppDb db, IReadOnlyCollection<Guid> fileIds, CancellationToken ct)
+    {
+        if (fileIds.Count == 0) return [];
+        return await db.Pages.AsNoTracking()
+            .Where(p => fileIds.Contains(p.FileId) && p.Extracted
+                && (p.Embedding == null || p.Regions.Any(r => r.Label == RegionLabels.Question && r.Embedding == null)))
+            .GroupBy(p => p.FileId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
     }
 
     /// <summary>The reason each in-progress file is waiting, read from its latest processing job.</summary>
@@ -167,7 +187,8 @@ public static class FileEndpoints
             // Inspect (all=true) browses the whole drive as a tree, so it needs every file, not just the latest 200.
             var files = await q.OrderByDescending(f => f.CreatedAt).Take(all == true ? 10_000 : 200).ToListAsync(ct);
             var waits = await WaitsAsync(db, files.Where(f => FileStatuses.InProgress(f.Status)).Select(f => f.Id).ToList(), ct);
-            return files.Select(f => ToDto(f) with { Wait = waits.GetValueOrDefault(f.Id) });
+            var unembedded = await UnembeddedAsync(db, files.Where(f => f.Status == FileStatuses.Ready).Select(f => f.Id).ToList(), ct);
+            return files.Select(f => ToDto(f) with { Wait = waits.GetValueOrDefault(f.Id), Unembedded = unembedded.GetValueOrDefault(f.Id) });
         });
 
         up.MapPatch("/files/{id:guid}", async (Guid id, FilePatch patch, AppDb db, CancellationToken ct) =>

@@ -32,7 +32,7 @@ function regionTitle(r: Draft, i: number) {
 }
 
 /** One page: original next to what the AI understood, with an editable region overlay. */
-function PageEditor({ page, onSaved }: { page: InspectPage; onSaved: (p: InspectPage) => void }) {
+function PageEditor({ page, ready, onSaved }: { page: InspectPage; ready: boolean; onSaved: (p: InspectPage) => void }) {
   const { toast } = useApp()
   const [regions, setRegions] = useState<Draft[]>(() => toDrafts(page.regions))
   const [text, setText] = useState(page.text)
@@ -163,7 +163,8 @@ function PageEditor({ page, onSaved }: { page: InspectPage; onSaved: (p: Inspect
       <section aria-label="What the AI understood" style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className="lbl">AI's understanding</span>
-          <div className="ai-box">{page.aiSummary || 'No summary.'}{page.error && <><br /><b style={{ color: '#9B2C5E' }}>AI hiccup: {page.error}</b></>}</div>
+          <div className="ai-box">{page.aiSummary || 'No summary.'}{page.error && <><br /><b style={{ color: '#9B2C5E' }}>AI hiccup: {page.error}</b></>}
+            {ready && !page.embedded && <><br /><b style={{ color: '#8A6100' }}>Not embedded: search finds this page by its words only, not by meaning.</b></>}</div>
         </div>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -275,6 +276,8 @@ function InspectFile({ id }: { id: string }) {
   if (q.isLoading) return <div className="skeleton" style={{ height: 480 }} />
   if (!q.data) return <div className="empty"><Mascot size={84} />Couldn't load that file.</div>
   const { file } = q.data
+  const ready = file.status === 'ready'
+  const unembedded = ready ? pages.filter(p => !p.embedded).length : 0
 
   const rerun = async () => {
     if (!confirm('Re-run the AI on every page? Your manual fixes on this file will be replaced.')) return
@@ -300,8 +303,11 @@ function InspectFile({ id }: { id: string }) {
       </div>
 
       {file.status !== 'ready' && <div className="err" style={{ background: '#FFF3C4', color: '#5E4329' }}>This file is still {file.status}. Pages appear here as they're read.</div>}
+      {unembedded > 0 && <div className="err" role="status" style={{ background: '#FFF3C4', color: '#5E4329' }}>
+        {unembedded === pages.length ? `None of the ${count(pages.length, 'page')} are` : `${unembedded} of ${pages.length} pages aren't`} embedded yet.
+        Students can still find {unembedded === 1 ? 'it' : 'them'} by keyword, but not by meaning.</div>}
       {page ? (
-        <PageEditor key={page.id + (page.editedAt ?? '')} page={page}
+        <PageEditor key={page.id + (page.editedAt ?? '')} page={page} ready={ready}
           onSaved={p => qc.setQueryData<{ file: FileDto; pages: InspectPage[] }>(['inspect', id], old => old && { ...old, pages: old.pages.map(x => (x.id === p.id ? p : x)) })} />
       ) : (
         <div className="empty"><Mascot size={84} />No pages read yet.</div>
@@ -312,8 +318,9 @@ function InspectFile({ id }: { id: string }) {
           <button className="candy c-white rnd sm" type="button" aria-label="Previous page" disabled={index === 0} onClick={() => go(pages[index - 1].number)}><IconLeft /></button>
           <nav aria-label="Pages" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, justifyContent: 'center' }}>
             {pages.map(p => (
-              <button key={p.id} className={`pdot ${p.number === page?.number ? 'on' : p.error ? 'warn' : ''}`} type="button"
-                aria-label={`Page ${p.number}${p.error ? ', read without AI' : ''}`} aria-current={p.number === page?.number ? 'page' : undefined} onClick={() => go(p.number)}>
+              <button key={p.id} className={`pdot ${p.number === page?.number ? 'on' : p.error ? 'warn' : ''} ${ready && !p.embedded ? 'unemb' : ''}`} type="button"
+                aria-label={`Page ${p.number}${p.error ? ', read without AI' : ''}${ready && !p.embedded ? ', not embedded' : ''}`}
+                aria-current={p.number === page?.number ? 'page' : undefined} onClick={() => go(p.number)}>
                 {p.number}
               </button>
             ))}
@@ -350,10 +357,10 @@ function InspectList() {
     : under.filter(x => x.p.length === path.length)
   const folders = f ? [] : [...under.filter(x => x.p.length > path.length).reduce((m, x) => {
     const name = x.p[path.length]
-    const e = m.get(name) ?? { name, files: 0, issues: 0 }
-    e.files++; if (x.f.error) e.issues++
+    const e = m.get(name) ?? { name, files: 0, issues: 0, unembedded: 0 }
+    e.files++; if (x.f.error) e.issues++; if (x.f.unembedded) e.unembedded++
     return m.set(name, e)
-  }, new Map<string, { name: string; files: number; issues: number }>()).values()]
+  }, new Map<string, { name: string; files: number; issues: number; unembedded: number }>()).values()]
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
   return (
     <>
@@ -379,14 +386,16 @@ function InspectList() {
         {folders.map(d => (
           <button key={d.name} type="button" className="file folder" onClick={() => setPath([...path, d.name])}>
             <span className="ftype" style={{ background: '#FFD34D' }}><IconFolder size={20} /></span>
-            <span className="meta"><b title={d.name}>{d.name}</b><span>{count(d.files, 'file')}{d.issues ? ` · ${d.issues} with problems` : ''}</span></span>
+            <span className="meta"><b title={d.name}>{d.name}</b><span>{count(d.files, 'file')}{d.issues ? ` · ${d.issues} with problems` : ''}{d.unembedded ? ` · ${d.unembedded} not embedded` : ''}</span></span>
           </button>
         ))}
         {files.map(({ f: x, p }, i) => (
           <Link key={x.id} to={`/inspect/${x.id}`} className="file" style={{ animation: `pop-in 300ms var(--ease-out) ${Math.min(i, 10) * 40}ms both` }}>
             <FileBadge file={x} />
-            <span className="meta"><b title={x.title}>{x.title}</b><span>{(f ? [p.join(' › ')] : [fileMeta(x)]).filter(Boolean).join(' · ')}</span></span>
+            <span className="meta"><b title={x.title}>{x.title}</b><span>{[...(f ? [p.join(' › ')] : [fileMeta(x)]),
+              x.unembedded ? `${count(x.unembedded, 'page')} not embedded` : ''].filter(Boolean).join(' · ')}</span></span>
             {x.error && <span className="badge" title={x.error}>!</span>}
+            {!x.error && x.unembedded ? <span className="badge unemb" title="Some pages aren't embedded: keyword search only">!</span> : null}
           </Link>
         ))}
       </div>
