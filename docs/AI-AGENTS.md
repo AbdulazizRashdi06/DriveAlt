@@ -190,8 +190,10 @@ Return JSON only, following the schema:
    - **Per hit:**
      - its ref: `f:` file, `r:` question crop or `p:` page;
      - course, file, type, year, label, page, question number, topic and tags;
-     - a 160-character snippet of the question wording or page text. Answer boxes are never included.
-   - **Reminder:** each result set carries *"Never repeat snippets or type answers."*
+     - a 160-character snippet of the question wording or page text. Answer boxes are never included;
+     - `matched_keywords`: which of the model's own keywords the hit really contains, using the keyword search's stemming (`SearchService.MatchedKeywordsAsync`; crops on their own text, pages on the page, files on the best page or title). Evidence only: nothing is filtered by it.
+   - **Reminder:** each result set carries *"Pick only refs that are about what the student asked for … Never repeat snippets or type answers."*
+   - **Note** (since 2026-11-07): *"These are the nearest matches the drive has, not confirmed matches. If none is about the request, show none and say so."* Semantic search always returns its nearest neighbours, even when nothing is relevant.
    - **Broadened results:** if nothing matched the year or label asked for, results come back marked `broadened`, and the model is told to ask before showing them.
 5. **`reply`:** the model picks result refs and writes one or two short lines.
    - **What gets shown:** exactly the refs the model picked, in its order, up to 12. The only check is that each ref came from a search in this conversation, so the model can't invent results. Nothing is filtered by kind: if the student asks for slides and questions, the model searches both and shows both. It shows the best 3 and holds the rest for **Show more**.
@@ -253,17 +255,25 @@ Hard rules, no exceptions:
    including negation and context. Search for each kind they want (call search_material once per kind, e.g. slides and
    questions means two searches) and pick only results that match the request. Pick up to 12, best first;
    the app shows 3 and keeps the rest for "show more". What you pick is exactly what is shown.
+   A search always returns the nearest material it has, even when nothing in the drive is about the request, so being
+   returned is not a match. Judge each result by its topic, tags, snippet and matched_keywords (which of your keywords it
+   really contains): pick it only if it is about what the student asked for. A page that only names the topic in passing,
+   in a list or a heading, is not about it. When the student widens or redirects a search, keep their topic and the kind
+   they asked for unless they change it.
 5. If the request is unclear (which course, which kind of material, which year), ask instead of guessing: call `ask` with
    one option per meaning. The app starts every option's search at once, so say the search is already running.
    Today is <today>.
-6. You may offer other material in your line or as `ask` options, but never show it until the student says yes.
-   If nothing matches, show nothing and offer another search. Write each search yourself: `meaning` is a sentence for the
+6. You may offer other material in your line or as `ask` options, but never show it until the student says yes:
+   offering and showing are separate turns. If your line offers anything other than what was asked (another kind,
+   course, place or topic), result_refs is [] in that turn. If nothing matches, show nothing, say plainly where you looked
+   and that nothing there matched, and offer another search. Write each search yourself: `meaning` is a sentence for the
    semantic search and `keywords` are exact words or phrases (in the language the material is written in); filters are
    optional. A search returns exactly what matches, with no retries: if a year or label finds nothing, you may search
    again without it, then offer what you find.
 7. When the student answers your `ask` with one of its options, call `reply` with option=<its number>. When they want more of
    the last results, call `reply` with show_more=true. If they want something else instead, search again.
-8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
+8. Say plainly when nothing you searched matched, and name what you searched (e.g. which course and kind). Don't claim it
+   can't exist anywhere in the drive, since some files are still being processed.
 9. A correction, greeting, identity statement, or question about your wording is conversation, not automatically a search.
    Respond briefly about the conversation with no result refs. Never claim a search failed if you did not search.
 10. You write every conversational reply. Be natural and relevant to the last message; avoid canned slogans and blaming the owner.

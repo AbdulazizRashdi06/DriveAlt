@@ -442,17 +442,25 @@ public sealed partial class ChatService(
                including negation and context. Search for each kind they want (call search_material once per kind, e.g. slides and
                questions means two searches) and pick only results that match the request. Pick up to {{MaxResults}}, best first;
                the app shows {{FirstBatch}} and keeps the rest for "show more". What you pick is exactly what is shown.
+               A search always returns the nearest material it has, even when nothing in the drive is about the request, so being
+               returned is not a match. Judge each result by its topic, tags, snippet and matched_keywords (which of your keywords it
+               really contains): pick it only if it is about what the student asked for. A page that only names the topic in passing,
+               in a list or a heading, is not about it. When the student widens or redirects a search, keep their topic and the kind
+               they asked for unless they change it.
             5. If the request is unclear (which course, which kind of material, which year), ask instead of guessing: call `ask` with
                one option per meaning. The app starts every option's search at once, so say the search is already running.
                Today is {{today:yyyy-MM-dd}}.
-            6. You may offer other material in your line or as `ask` options, but never show it until the student says yes.
-               If nothing matches, show nothing and offer another search. Write each search yourself: `meaning` is a sentence for the
+            6. You may offer other material in your line or as `ask` options, but never show it until the student says yes:
+               offering and showing are separate turns. If your line offers anything other than what was asked (another kind,
+               course, place or topic), result_refs is [] in that turn. If nothing matches, show nothing, say plainly where you looked
+               and that nothing there matched, and offer another search. Write each search yourself: `meaning` is a sentence for the
                semantic search and `keywords` are exact words or phrases (in the language the material is written in); filters are
                optional. A search returns exactly what matches, with no retries: if a year or label finds nothing, you may search
                again without it, then offer what you find.
             7. When the student answers your `ask` with one of its options, call `reply` with option=<its number>. When they want more of
                the last results, call `reply` with show_more=true. If they want something else instead, search again.
-            8. Never claim something doesn't exist in the drive: say you couldn't find it yet (some files are still being processed).
+            8. Say plainly when nothing you searched matched, and name what you searched (e.g. which course and kind). Don't claim it
+               can't exist anywhere in the drive, since some files are still being processed.
             9. A correction, greeting, identity statement, or question about your wording is conversation, not automatically a search.
                Respond briefly about the conversation with no result refs. Never claim a search failed if you did not search.
             10. You write every conversational reply. Be natural and relevant to the last message; avoid canned slogans and blaming the owner.
@@ -728,9 +736,11 @@ public sealed partial class ChatService(
         if (hits.Count > 0)
         {
             var info = await SnippetsAsync(hits, ct);
+            var matched = await search.MatchedKeywordsAsync(hits, keywords, ct);
             foreach (var h in hits)
             {
                 if (!info.TryGetValue(h.Ref, out var i)) continue;
+                i["matched_keywords"] = new JsonArray(matched.GetValueOrDefault(h.Ref, []).Select(k => (JsonNode)k).ToArray());
                 turn.Allowed.Add(h.Ref);
                 results.Add(i);
             }
@@ -740,7 +750,8 @@ public sealed partial class ChatService(
             ["count"] = results.Count,
             ["results"] = results,
             ["reminder"] = want is MaterialWants.Slides or MaterialWants.Files ? "Return f: refs for the matching whole files. Each is one complete file with open/download actions; never describe them as question crops."
-                : "Pick the refs that match what the student asked for via reply.result_refs. Never repeat snippets or type answers.",
+                : "Pick only refs that are about what the student asked for via reply.result_refs. Never repeat snippets or type answers.",
+            ["note"] = "These are the nearest matches the drive has, not confirmed matches. If none is about the request, show none and say so.",
         };
         return output;
     }
