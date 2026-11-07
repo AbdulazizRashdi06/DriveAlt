@@ -4,16 +4,18 @@
 
 ## 1. Header
 
-**Current update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; owner now requires AI-only interpretation with no keyword overrides. AI-only code `94046e1` passed full GitHub CI; this final update records the results. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
+**Current update: 2026-11-07, Claude Code, `claude/drive-scan-interval` on `main` `bb38e1e` (PR #52):** automatic Drive sync scans now start one minute after the previous scan finishes instead of five minutes after it started (see section 3, 2026-11-07). Not merged or deployed; owner approval needed. **Caution:** the rest of this header and section 2 still describe 2026-10-30 and were not reconciled with PRs #47–#52, which merged after it.
+
+**Previous update: 2026-10-30, Codex, `fix/chat-asked-material-kind`; base PR #45 `0c77a80` on main code `083b6d1`.** Asked-for contract implemented; owner now requires AI-only interpretation with no keyword overrides. AI-only code `94046e1` passed full GitHub CI; this final update records the results. Root checkout's unrelated dirty AI/deployment files remain untouched. PR #46 is open for GitHub CI; merge/deployment are not authorized. Older dated state claims below are historical.
 
 | | |
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `fix/chat-asked-material-kind`, based on PR #45 `0c77a80`; main code base `083b6d1`. Merge #45 before this feature PR. |
-| Updated | 2026-10-30, Codex; asked-for material contract and online CI validation |
+| Branch / base | `claude/drive-scan-interval`, based on `main` `bb38e1e` (PR #52). |
+| Updated | 2026-11-07, Claude Code; Drive sync scan interval |
 
-| Purpose of this update | Enforce requested material kinds in search/replies/options/Show more; open a PR for full GitHub CI. |
+| Purpose of this update | Check Drive for new files about once a minute instead of every five minutes. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -337,6 +339,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-07, Claude Code - faster automatic Drive scans (`claude/drive-scan-interval`, not merged or deployed):** `DriveSyncService.AutoScanDue` (`src/DriveAlt.Api/Import/DriveSync.cs`) starts an automatic scan once sync is on and one minute has passed since the previous scan *finished* (or started, if it never recorded a finish). Before, scans started five minutes after the previous *start*. Counting from the finish means a slow scan never runs straight into the next one. The panel text and README now say about once a minute. Cost reasoning: a scan only lists folder metadata (`files.list`, fields `id,name,mimeType`, `DriveImporter.ApiListAsync`), which Google doesn't charge for. Known Drive IDs are skipped before any download (`DriveSync.cs`, `KnownIds`), and the course mapping is checked before downloading (`DriveImporter.ImportNewAsync`). Paid work (download, Terra, embeddings) happens only once, for new files in enabled folders. With about 118 folders, one scan is roughly 120 list requests. Local results: `dotnet test --filter` covering DriveListingTests, CodexTests, DeepSeekTests, MappingTests and GuardrailTests gave `Passed: 33, Failed: 0`; frontend `npx tsc -b` passed and `npm test` passed 10 files / 33 tests. Database/API tests were not run locally (no Postgres); CI runs them.
+
 **2026-10-30, Codex - AI-only intent verified:** run `41072080669` passed 115 backend/API tests (including multilingual/negation and typed-follow-up regressions), 31 frontend tests, 3 gateway checks, TypeScript and production build on `94046e1`. Removed keyword-specific tests intentionally replaced by behavior tests that honor model declarations. Updated PR/handoff; no local tests, merge or deployment.
 
 **2026-10-30, Codex - removed hardcoded intent:** removed all asked-kind keyword checks and routed normal/typed follow-up responses through model declarations. Preserved metadata validation and explicit button selection. Updated multilingual/negation regression coverage and AI docs; full online validation passed on `94046e1` (run `41072080669`).
@@ -508,6 +512,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-07, Drive scan interval:** the owner thought scans ran hourly. When told the interval was five minutes and that scans are free, they asked for it "as low as we can" and then chose "More often" over less often. Merge and deploy still need the owner's OK.
+
 - **2026-10-30, superseding keyword checks:** owner: "or talked in arabic ... it should be 100% no hardcoding stuff". AI alone interprets request language, negation, keywords and requested material kind; no deterministic keyword override. Keep database/ref validation enforcing that declared kind. This supersedes the initial brief's keyword cross-check and subsequent exercise/lecture keyword exceptions.
 
 - **2026-10-30, testing:** "test online no need locally use the old method in the handoff md". Use the PR's GitHub Actions tests with Postgres/pgvector; do not set up/run local tests. This authorizes publishing the feature branch/PR to trigger CI, not merging/deploying.
@@ -571,6 +577,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 - **Sign-in (2026-10-25):** whether to keep requiring sign-in remains undecided. PR #21 implements the owner's fixed-code student-view account using the GitHub secret `FIXED_CODES`; the secret value must never appear in this public repo. The PR is still open.
 
 ## 5. Judgment calls (made without asking)
+
+- **2026-11-07, one-minute gap after a scan finishes:** chosen as the shortest sensible interval. Continuous scanning would keep the panel permanently in "scanning", reset the `imported` count every few seconds and rewrite all ~118 folder rows constantly, for little gain. To change it, edit `AutoScanGap` in `DriveSync.cs`.
 
 - **2026-10-30, contract durability:** encode an optional validated page number in whole-file refs instead of a new database column, so best-page opening survives saved history/options. Revalidate stored chip/held refs as well as normal replies. The original vocabulary cross-check was removed by the subsequent owner decision: only AI interprets intent, while server metadata checks enforce its declaration.
 
@@ -637,6 +645,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**Ready for owner review: Claude Code, `claude/drive-scan-interval`:** automatic Drive scans start one minute after the previous scan finishes. Needs CI (database tests) and an owner-approved merge. After deployment, check the uploader panel's "Last checked" time moves about once a minute while sync is on.
+
 **Ready for owner review: Codex, `fix/chat-asked-material-kind`, PR #46:** contract, vocabulary corrections, best-slide file cards, regressions and AI docs are complete; AI-only intent code `94046e1` passed full online CI. Only this documentation result record is newer. Built on PR #45; merge #45 first. Leave #21/#44 branches intact. No production writes. Only final documentation CI and owner-controlled merge/deployment remain.
 
 **Parallel partition ownership:** coordinator `/root/terra_year1_resume` owns root photo/scan outputs and canonical merge; `/root/year1_calculus_native` owns Calculus native PDFs and `workers/year1_calculus_native/`; reused `/root/terra_batch8` owns all other native PDFs and `workers/year1_other_native/`. Do not run the coordinator's generic native queue over either partition. Preserve completed results/aliases; resolve question/crop and answer-safety flags before calling preparation complete. Parent still owns the independent recorded random-15 check and conditional import.
@@ -701,6 +711,8 @@ git fetch -q
 git status --short --branch
 git merge-base --is-ancestor 1e13a87ec9b5833e14ee893f8db7b5df90c4349c origin/main
 # Expect exit 0: main contains the PR #34 features and PR #37 corrective rollout.
+git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
+# After the claude/drive-scan-interval PR merges: a count of 3 or more. No output means it isn't merged yet.
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
 # Latest verified code/image: 083b6d1ef7cb1269b05a8d1e6081ec2a64be70fc (2026-10-30).
 # Later docs-only merges must not change the running image.

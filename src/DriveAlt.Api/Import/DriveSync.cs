@@ -12,6 +12,12 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
     private const long LockId = 738129405;
     internal const int ListingConcurrency = 6;
     internal const int PhotosPerFile = 40;
+    // A scan only lists folder metadata (free Drive API calls) and skips known files, so it can run often.
+    // The gap is counted from the end of the previous scan, so a slow scan never leads straight into the next.
+    internal static readonly TimeSpan AutoScanGap = TimeSpan.FromMinutes(1);
+
+    internal static bool AutoScanDue(DriveSyncState state, DateTime now) =>
+        state.Enabled && !((state.FinishedAt ?? state.StartedAt) > now - AutoScanGap);
 
     internal sealed record FolderListing(List<DriveImporter.DriveItem>? Items, Exception? Error);
 
@@ -53,7 +59,7 @@ public sealed class DriveSyncService(AppDb db, DriveImporter importer, ILogger<D
             locked = (await db.Database.SqlQueryRaw<bool>($"SELECT pg_try_advisory_lock({LockId}) AS \"Value\"").ToListAsync(ct)).Single();
             if (!locked) return;
             var state = await StateAsync(ct);
-            if (!state.ScanRequested && (!state.Enabled || state.StartedAt > DateTime.UtcNow.AddMinutes(-5))) return;
+            if (!state.ScanRequested && !AutoScanDue(state, DateTime.UtcNow)) return;
             state.ScanRequested = false;
             state.StartedAt = DateTime.UtcNow;
             state.FinishedAt = null;
