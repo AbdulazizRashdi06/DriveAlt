@@ -20,6 +20,8 @@
 #   DEEPSEEK_MODEL default deepseek-chat
 #   CODEX_BASE_URL e.g. http://codex:8090/v1: read pages through the Zarqa stack's Codex gateway (ChatGPT login)
 #   CODEX_MODEL    default gpt-6.1-sol
+#   GUEST_ACCESS, GUEST_CHAT                  true/false, default true: "Continue as a guest" and whether guests may chat
+#   GUEST_CHAT_PER_HOUR, GUEST_CHAT_PER_DAY   guest chat turns per IP per hour (default 30) and for all guests per day (1000)
 # Every deploy also runs deploy/ensure-caddy.sh on the VPS: Zarqa's deploys replace the shared Caddyfile and have
 # dropped DriveAlt's site before (Cloudflare 525). caddy-guard.yml runs the same check every 15 minutes.
 name: Test and deploy
@@ -180,6 +182,10 @@ jobs:
           PUBLIC_URL: ${{ vars.PUBLIC_URL }}
           APP_PORT: ${{ vars.APP_PORT }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GUEST_ACCESS: ${{ vars.GUEST_ACCESS }}
+          GUEST_CHAT: ${{ vars.GUEST_CHAT }}
+          GUEST_CHAT_PER_HOUR: ${{ vars.GUEST_CHAT_PER_HOUR }}
+          GUEST_CHAT_PER_DAY: ${{ vars.GUEST_CHAT_PER_DAY }}
         run: |
           umask 077
           {
@@ -190,6 +196,10 @@ jobs:
             echo "Auth__EmailTemplate={id}@student.gutech.edu.om"
             i=0
             for id in $(echo "${UPLOADERS:-}" | tr ',' ' '); do echo "Auth__Uploaders__${i}=${id}"; i=$((i+1)); done
+            echo "Auth__GuestAccess=${GUEST_ACCESS:-true}"
+            echo "Auth__GuestChat=${GUEST_CHAT:-true}"
+            echo "Auth__GuestChatPerHour=${GUEST_CHAT_PER_HOUR:-30}"
+            echo "Auth__GuestChatPerDay=${GUEST_CHAT_PER_DAY:-1000}"
             echo "Resend__ApiKey=$RESEND_API_KEY"
             echo "Resend__From=DriveAlt <noreply@tryzarqa.com>"
             echo "Gemini__ApiKey=$GEMINI_API_KEY"

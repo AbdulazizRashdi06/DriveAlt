@@ -4,6 +4,7 @@ using DriveAlt.Api.Auth;
 using DriveAlt.Api.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Options;
 
 namespace DriveAlt.Api.Infrastructure;
 
@@ -28,7 +29,10 @@ public static class RoleCache
             Cache[id.Value] = entry;
         }
 
-        if (entry.Role is null)
+        // Turning guest access off (Auth:GuestAccess) also ends guest sessions that already exist.
+        var guestsOff = entry.Role == Roles.Guest
+            && !ctx.HttpContext.RequestServices.GetRequiredService<IOptions<AuthOptions>>().Value.GuestAccess;
+        if (entry.Role is null || guestsOff)
         {
             ctx.RejectPrincipal();
             await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type Me } from '../lib/api'
 import { useApp } from '../lib/app'
+import { homePath } from '../lib/home'
 import { Mascot } from '../ui/Mascot'
 
 const ID_PATTERN = /^\d{2}-\d{4}$/
@@ -61,7 +62,8 @@ export function Login() {
   const qc = useQueryClient()
   const nav = useNavigate()
   const location = useLocation()
-  const from = (location.state as { from?: string } | null)?.from ?? '/chat'
+  const from = (location.state as { from?: string } | null)?.from
+  const isGuest = me?.role === 'guest'
   const [uniId, setUniId] = useState('')
   const [stage, setStage] = useState<'id' | 'code'>('id')
   const [email, setEmail] = useState('')
@@ -76,7 +78,8 @@ export function Login() {
     return () => window.clearTimeout(t)
   }, [cooldown])
 
-  if (me) return <Navigate to={from} replace />
+  // A guest who opens this screen came to sign in, so only a signed-in student is sent on.
+  if (me && !isGuest) return <Navigate to={from ?? homePath(me, config)} replace />
 
   const requestCode = async (e?: FormEvent) => {
     e?.preventDefault()
@@ -97,10 +100,25 @@ export function Login() {
     try {
       const user = await api.post<Me>('/api/auth/verify', { uniId, code: value })
       qc.setQueryData(['me'], user)
-      nav(from, { replace: true })
+      // A guest's chats move to the account on the server; refetch everything that was loaded as the guest.
+      if (isGuest) void qc.invalidateQueries({ predicate: q => q.queryKey[0] !== 'me' && q.queryKey[0] !== 'config' })
+      nav(from ?? homePath(user, config), { replace: true })
     } catch (err) {
       setError((err as Error).message)
       setCode('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const continueAsGuest = async () => {
+    setBusy(true); setError(null)
+    try {
+      const guest = isGuest ? me : await api.post<Me>('/api/auth/guest')
+      qc.setQueryData(['me'], guest)
+      nav(from ?? homePath(guest, config), { replace: true })
+    } catch (err) {
+      setError((err as Error).message)
     } finally {
       setBusy(false)
     }
@@ -139,8 +157,19 @@ export function Login() {
             </div>
             {error && <div className="err" role="alert">{error}</div>}
             <p style={{ margin: 0, font: "700 14px/1.5 'Nunito', sans-serif", color: '#7A5A3A' }}>
-              We'll send a 6-digit code to your uni email. Only students on the batch list can get in. Not on it? Ping your batch rep.
+              We'll send a 6-digit code to your uni email. Only students on the batch list can sign in. Not on it? Ping your batch rep.
             </p>
+            {config.guestAccess && (
+              <div className="login-guest">
+                <div className="login-or" aria-hidden="true"><span>or</span></div>
+                <button className="candy c-white lg" type="button" disabled={busy} onClick={() => void continueAsGuest()} style={{ width: '100%' }}>
+                  {isGuest ? 'Keep going as a guest' : 'Continue as a guest'}
+                </button>
+                <p style={{ margin: 0, font: "700 14px/1.5 'Nunito', sans-serif", color: '#7A5A3A' }}>
+                  {config.guestChat ? 'Guests can browse, open files and chat with the bot.' : 'Guests can browse and open files.'} Sign in to save pages and report problems.
+                </p>
+              </div>
+            )}
           </form>
         ) : (
           <form onSubmit={e => { e.preventDefault(); if (code.length === 6) void verify(code) }}

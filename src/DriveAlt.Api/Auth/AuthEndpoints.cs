@@ -14,6 +14,10 @@ namespace DriveAlt.Api.Auth;
 public static partial class AuthEndpoints
 {
     public const string UploaderPolicy = "uploader";
+    /// <summary>Signed in with a uni ID: anyone but a guest. Saving and reporting need it.</summary>
+    public const string MemberPolicy = "member";
+    public const string GuestRateLimit = "guest";
+    public const string ChatTurnRateLimit = "chat-turn";
 
     [GeneratedRegex(@"^\d{2}-\d{4}$")]
     private static partial Regex UniIdPattern();
@@ -34,7 +38,9 @@ public static partial class AuthEndpoints
     public sealed record VerifyBody(string UniId, string Code);
     public sealed record MeDto(Guid Id, string UniId, string Email, string Role, string Initials);
 
-    public static MeDto ToDto(User u) => new(u.Id, u.UniId, u.Email, u.Role, Initials(u.UniId));
+    public static MeDto ToDto(User u) => u.Role == Roles.Guest
+        ? new(u.Id, "Guest", "", u.Role, "G")
+        : new(u.Id, u.UniId, u.Email, u.Role, Initials(u.UniId));
 
     private static string Initials(string uniId) => uniId.Replace("-", "")[^2..];
 
@@ -107,12 +113,33 @@ public static partial class AuthEndpoints
             user.LastLoginAt = now;
             await db.SaveChangesAsync(ct);
 
+            // Signing in from a guest session keeps the guest's chats; the guest row itself is no longer needed.
+            if (http.User.IsGuest() && http.User.UserId() is { } guestId && guestId != user.Id)
+                await ForgetGuestAsync(db, guestId, keepChatsFor: user.Id, ct);
+
             await SignInAsync(http, user);
             return Results.Ok(ToDto(user));
         }).RequireRateLimiting("otp");
 
-        g.MapPost("/logout", async (HttpContext http) =>
+        // "Continue as a guest": a session backed by a guest row, so chats work like a student's without a uni ID.
+        g.MapPost("/guest", async (AppDb db, IOptions<AuthOptions> opts, HttpContext http, CancellationToken ct) =>
         {
+            if (!opts.Value.GuestAccess)
+                return Results.Json(new { error = "Guest access is off. Sign in with your uni ID." }, statusCode: 403);
+            if (http.User.UserId() is { } id && await db.Users.FindAsync([id], ct) is { } current)
+                return Results.Ok(ToDto(current));
+            var guest = new User { UniId = "guest-" + Guid.NewGuid().ToString("N"), Email = "", Role = Roles.Guest, LastLoginAt = DateTime.UtcNow };
+            db.Users.Add(guest);
+            await db.SaveChangesAsync(ct);
+            await SignInAsync(http, guest);
+            return Results.Ok(ToDto(guest));
+        }).RequireRateLimiting(GuestRateLimit);
+
+        g.MapPost("/logout", async (HttpContext http, AppDb db, CancellationToken ct) =>
+        {
+            // A guest's chats can't be reached again once the cookie is gone, so they go with it.
+            if (http.User.IsGuest() && http.User.UserId() is { } guestId)
+                await ForgetGuestAsync(db, guestId, keepChatsFor: null, ct);
             await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.Ok();
         });
@@ -133,6 +160,20 @@ public static partial class AuthEndpoints
                     ? Results.Ok(new { code })
                     : Results.NotFound());
         }
+    }
+
+    /// <summary>Removes a guest row, moving its chats to <paramref name="keepChatsFor"/> or deleting them.</summary>
+    private static async Task ForgetGuestAsync(AppDb db, Guid guestId, Guid? keepChatsFor, CancellationToken ct)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == guestId && u.Role == Roles.Guest, ct)) return;
+        var chats = db.Conversations.Where(c => c.UserId == guestId);
+        if (keepChatsFor is { } owner) await chats.ExecuteUpdateAsync(x => x.SetProperty(c => c.UserId, owner), ct);
+        else await chats.ExecuteDeleteAsync(ct);
+        // Guests can't save or report, but clear anything left from before a policy change so the row can go.
+        await db.Bookmarks.Where(b => b.UserId == guestId).ExecuteDeleteAsync(ct);
+        if (await db.MaterialReports.AnyAsync(r => r.UserId == guestId, ct)) return;
+        await db.Users.Where(u => u.Id == guestId).ExecuteDeleteAsync(ct);
+        RoleCache.Forget(guestId);
     }
 
     public static Task SignInAsync(HttpContext http, User user)
@@ -157,4 +198,6 @@ public static class ClaimsExtensions
         p.UserId() ?? throw new UnauthorizedAccessException();
 
     public static bool IsUploader(this ClaimsPrincipal p) => p.IsInRole(Roles.Uploader);
+
+    public static bool IsGuest(this ClaimsPrincipal p) => p.IsInRole(Roles.Guest);
 }

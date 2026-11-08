@@ -11,6 +11,7 @@ The Year 2 batch drive (CS / CYS / AI, GUtech) as a web app. Students ask a bot 
 - **Browse:** the Drive's Year 2 tree:
   - Semester 1 is grouped into AI / ALL / CS & CYS, then course → type → folders → files → pages.
   - It also has keyword search and tag filters.
+- **Sign-in is optional:** students sign in with a 6-digit code sent to their uni email, or press **Continue as a guest**. Guests can browse, open files and chat; saving and reporting need a uni ID. Guest chat is limited per IP (`Auth:GuestChatPerHour`, default 30) and for all guests together (`Auth:GuestChatPerDay`, default 1000). `Auth:GuestAccess=false` turns guest mode off (and ends guest sessions); `Auth:GuestChat=false` keeps guests to browsing. Signing in from a guest session keeps the guest's chats.
 - **Saved:** bookmarked crops grouped by course, downloadable one by one or as a ZIP.
 - **Report a problem:** students can flag a clipped crop, wrong course/label, missing or unreadable page, or irrelevant result from the viewer or original page, with an optional note. Uploaders review open/resolved reports in Account → People & reports and jump straight to Inspect to fix them. Reports stay separate from searchable material and are never sent to AI.
 - **Upload** (uploaders):
@@ -105,6 +106,7 @@ Optional **Variables** (same page, Variables tab):
 - `APP_PORT` (default 8080)
 - `DEPLOY_DIR` (default `~/drivealt`)
 - `GEMINI_MODEL`
+- `GUEST_ACCESS`, `GUEST_CHAT` (`true`/`false`, default `true`), `GUEST_CHAT_PER_HOUR` (default 30), `GUEST_CHAT_PER_DAY` (default 1000)
 
 The database password and the sign-in secret are not secrets you set: the first deploy generates them on the VPS (`generated.env`) and keeps them. The VPS needs Docker with the compose plugin.
 

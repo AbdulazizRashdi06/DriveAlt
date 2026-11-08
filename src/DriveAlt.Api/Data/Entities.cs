@@ -51,6 +51,8 @@ public static class Roles
 {
     public const string Student = "student";
     public const string Uploader = "uploader";
+    /// <summary>"Continue as a guest": a session with no uni ID. Can browse, view and chat; can't save or report.</summary>
+    public const string Guest = "guest";
 }
 
 public static class MaterialTypes

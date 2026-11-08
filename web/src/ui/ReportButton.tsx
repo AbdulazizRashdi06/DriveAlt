@@ -14,6 +14,7 @@ export const REPORT_REASONS = {
 export interface ReportTarget { ref: string; fileTitle: string; pageNumber: number }
 
 export function ReportButton({ target, compact = false }: { target: ReportTarget; compact?: boolean }) {
+  const { me, toast } = useApp()
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
   const close = () => {
@@ -22,7 +23,7 @@ export function ReportButton({ target, compact = false }: { target: ReportTarget
     window.setTimeout(() => trigger.current?.focus(), 0)
   }
   return <>
-    <button ref={trigger} className="candy c-white sm" type="button" aria-label="Report a problem" title="Report a problem" onClick={() => setOpen(true)}>
+    <button ref={trigger} className="candy c-white sm" type="button" aria-label="Report a problem" title="Report a problem" onClick={() => me?.role === 'guest' ? toast('Sign in with your uni ID to report a problem.') : setOpen(true)}>
       <IconFlag size={16} /><span className={compact ? 'hide-phone' : undefined}>Report a problem</span>
     </button>
     {open && <ReportForm target={target} onClose={close} />}

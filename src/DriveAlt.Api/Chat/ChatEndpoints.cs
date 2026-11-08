@@ -2,7 +2,9 @@ using System.Text.Json;
 using DriveAlt.Api.Auth;
 using DriveAlt.Api.Data;
 using DriveAlt.Api.Search;
+using DriveAlt.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace DriveAlt.Api.Chat;
 
@@ -58,9 +60,15 @@ public static class ChatEndpoints
 
         // Streams Server-Sent Events: "status" while searching, then "message" with the bot reply, then for a clarifying
         // question one "options" event per option search that finishes.
-        g.MapPost("/{id:guid}/messages", async (Guid id, SendBody body, HttpContext http, AppDb db, ChatService chat, CancellationToken ct) =>
+        g.MapPost("/{id:guid}/messages", async (Guid id, SendBody body, HttpContext http, AppDb db, ChatService chat, IOptions<AuthOptions> auth, CancellationToken ct) =>
         {
             var uid = http.User.RequiredUserId();
+            if (http.User.IsGuest() && !auth.Value.GuestChat)
+            {
+                http.Response.StatusCode = 403;
+                await http.Response.WriteAsJsonAsync(new { error = "Sign in with your uni ID to chat with the bot." }, ct);
+                return;
+            }
             var convo = await db.Conversations.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid, ct);
             if (convo is null) { http.Response.StatusCode = 404; return; }
             if (string.IsNullOrWhiteSpace(body.Text)) { http.Response.StatusCode = 400; return; }
@@ -90,6 +98,6 @@ public static class ChatEndpoints
                 await Send("error", new { error = "The AI couldn't complete this reply. Please try again." });
             }
             await Send("done", new { });
-        });
+        }).WithMetadata(new ChatTurnEndpoint()); // guest limits: GuestLimits.ChatTurns
     }
 }

@@ -12,7 +12,7 @@ public static class BookmarkEndpoints
 
     public static void Map(WebApplication app)
     {
-        var g = app.MapGroup("/api/bookmarks").RequireAuthorization();
+        var g = app.MapGroup("/api/bookmarks").RequireAuthorization(AuthEndpoints.MemberPolicy);
 
         // Saved crops grouped by course.
         g.MapGet("/", async (HttpContext http, AppDb db, ResultCards cards, CancellationToken ct) =>

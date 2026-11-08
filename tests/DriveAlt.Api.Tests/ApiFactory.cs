@@ -21,6 +21,7 @@ namespace DriveAlt.Api.Tests;
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string Uploader = "24-0161";
+    public const int GuestChatPerHour = 3;
     private static readonly string Admin = Environment.GetEnvironmentVariable("DRIVEALT_TEST_PG")
         ?? "Host=localhost;Username=postgres;Password=postgres;Database=postgres";
 
@@ -57,6 +58,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("Processing__Workers", "0");
         Environment.SetEnvironmentVariable("DriveSync__WorkerEnabled", "false");
         Environment.SetEnvironmentVariable("Auth__Uploaders__0", Uploader);
+        // Small enough for GuestApiTests to reach; signed-in students are never limited by it.
+        Environment.SetEnvironmentVariable("Auth__GuestChatPerHour", GuestChatPerHour.ToString());
         Environment.SetEnvironmentVariable("Gemini__ApiKey", "");
         Environment.SetEnvironmentVariable("DeepSeek__ApiKey", "");
         Environment.SetEnvironmentVariable("Codex__BaseUrl", "");

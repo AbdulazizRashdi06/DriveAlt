@@ -84,14 +84,30 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         o.Events.OnValidatePrincipal = RoleCache.ValidateAsync;
     });
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(AuthEndpoints.UploaderPolicy, p => p.RequireRole(Roles.Uploader));
+    .AddPolicy(AuthEndpoints.UploaderPolicy, p => p.RequireRole(Roles.Uploader))
+    .AddPolicy(AuthEndpoints.MemberPolicy, p => p.RequireAuthenticatedUser().RequireAssertion(c => !c.User.IsGuest()));
 
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = 429;
     o.AddPolicy("otp", ctx => RateLimitPartition.GetFixedWindowLimiter(
-        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        GuestLimits.ClientIp(ctx),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(10) }));
+    // Starting guest sessions: each one is a database row.
+    o.AddPolicy(AuthEndpoints.GuestRateLimit, ctx => RateLimitPartition.GetFixedWindowLimiter(
+        GuestLimits.ClientIp(ctx),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromHours(1) }));
+    // Guest chat turns cost DeepSeek/Gemini calls on a public site: a per-IP hourly limit and a shared daily ceiling.
+    // Students who signed in with a uni ID are not limited here.
+    o.GlobalLimiter = GuestLimits.ChatTurns(cfg.GetValue("Auth:GuestChatPerHour", 30), cfg.GetValue("Auth:GuestChatPerDay", 1000));
+    o.OnRejected = async (ctx, ct) =>
+    {
+        if (!GuestLimits.IsGuestChatTurn(ctx.HttpContext)) return;
+        await ctx.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "Guests have used up their chat messages for now. Sign in with your uni ID to keep chatting, or try again later.",
+        }, ct);
+    };
 });
 
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
@@ -148,9 +164,10 @@ app.Use(async (context, next) =>
 });
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+// After authentication: the guest chat limits need to know who is asking.
+app.UseRateLimiter();
 
 app.MapGet("/api/health", () => Results.Ok(new { ok = true }));
 app.MapGet("/api/config", (Microsoft.Extensions.Options.IOptions<AppOptions> a, Microsoft.Extensions.Options.IOptions<AuthOptions> au,
@@ -160,6 +177,8 @@ app.MapGet("/api/config", (Microsoft.Extensions.Options.IOptions<AppOptions> a, 
     name = a.Value.Name,
     emailDomain = au.Value.EmailTemplate.Replace("{id}", ""),
     aiOnline = g.Value.Enabled || d.Value.Enabled || cx.Value.Enabled,
+    guestAccess = au.Value.GuestAccess,
+    guestChat = au.Value.GuestAccess && au.Value.GuestChat,
 });
 AuthEndpoints.Map(app);
 FileEndpoints.Map(app);
