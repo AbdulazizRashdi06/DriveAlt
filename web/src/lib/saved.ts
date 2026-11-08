@@ -1,6 +1,9 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { api } from './api'
 
+/** What a guest sees on Save: saving needs a uni ID (the server answers 403 for guests). */
+export const GUEST_SAVE_TEXT = 'Sign in with your uni ID to save pages and questions.'
+
 // Shared bookmark state so a card, the viewer and the Saved page agree without refetching.
 const overrides = new Map<string, boolean>()
 const listeners = new Set<() => void>()

@@ -45,7 +45,7 @@ public static class ReportEndpoints
                 return Results.Conflict(new { error = "You've already reported this problem. Thanks!" });
             }
             return Results.Ok(new { report.Id, alreadyReported = false });
-        });
+        }).RequireAuthorization(AuthEndpoints.MemberPolicy);
 
         g.MapGet("/", async (string? status, int? page, AppDb db, CancellationToken ct) =>
         {

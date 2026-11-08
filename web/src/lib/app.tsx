@@ -16,7 +16,7 @@ interface AppCtx {
 
 const Ctx = createContext<AppCtx | null>(null)
 
-const defaultConfig: AppConfig = { name: 'DriveAlt', emailDomain: '@student.gutech.edu.om', aiOnline: false }
+const defaultConfig: AppConfig = { name: 'DriveAlt', emailDomain: '@student.gutech.edu.om', aiOnline: false, guestAccess: false, guestChat: false }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()

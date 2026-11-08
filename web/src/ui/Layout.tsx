@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router'
 import { useApp } from '../lib/app'
+import { homePath } from '../lib/home'
 import { IconBookmark, IconChat, IconCheck, IconGrid, IconUpload } from './Icons'
 import { Mascot } from './Mascot'
 
-interface TabDef { to: string; label: string; icon: ReactNode; uploader?: boolean }
+interface TabDef { to: string; label: string; icon: ReactNode; uploader?: boolean; chat?: boolean }
 
 const TABS: TabDef[] = [
-  { to: '/chat', label: 'Chat', icon: <IconChat size={20} /> },
+  { to: '/chat', label: 'Chat', icon: <IconChat size={20} />, chat: true },
   { to: '/browse', label: 'Browse', icon: <IconGrid size={20} /> },
   { to: '/saved', label: 'Saved', icon: <IconBookmark size={20} /> },
   { to: '/upload', label: 'Upload', icon: <IconUpload size={20} />, uploader: true },
@@ -59,7 +60,9 @@ function AvatarMenu() {
     document.addEventListener('keydown', esc)
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc) }
   }, [open])
+  const location = useLocation()
   if (!me) return null
+  const guest = me.role === 'guest'
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button className="avatar" type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Account" onClick={() => setOpen(o => !o)}>
@@ -67,9 +70,14 @@ function AvatarMenu() {
       </button>
       {open && (
         <div className="menu" role="menu">
-          <div className="lbl">{me.uniId} · {me.role === 'uploader' ? 'Uploader' : 'Student'}</div>
+          <div className="lbl">{guest ? 'Browsing as a guest' : `${me.uniId} · ${me.role === 'uploader' ? 'Uploader' : 'Student'}`}</div>
           {me.role === 'uploader' && <Link role="menuitem" to="/admin" onClick={() => setOpen(false)}>People & reports</Link>}
-          <button role="menuitem" type="button" onClick={() => void signOut()}>Sign out</button>
+          {guest && (
+            <Link role="menuitem" to="/login" state={{ from: location.pathname + location.search }} onClick={() => setOpen(false)}>
+              Sign in with uni ID
+            </Link>
+          )}
+          <button role="menuitem" type="button" onClick={() => void signOut()}>{guest ? 'End guest session' : 'Sign out'}</button>
         </div>
       )}
     </div>
@@ -82,16 +90,21 @@ export function Layout() {
   if (loading) return <div className="empty" style={{ minHeight: '100dvh', justifyContent: 'center' }}><Mascot size={84} /></div>
   if (!me) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
 
-  const tabs = TABS.filter(t => !t.uploader || me.role === 'uploader')
+  const tabs = TABS.filter(t => (!t.uploader || me.role === 'uploader') && (!t.chat || homePath(me, config) === '/chat'))
   return (
     <div className="shell">
       <header className="topbar">
-        <Link to="/chat" className="brand" aria-label={`${config.name} home`}>
+        <Link to={homePath(me, config)} className="brand" aria-label={`${config.name} home`}>
           <Mascot size={48} />
           <span className="disp">{config.name}</span>
         </Link>
         <Tabs tabs={tabs} />
-        <AvatarMenu />
+        <div className="topbar-end">
+          {me.role === 'guest' && (
+            <Link className="candy sm" to="/login" state={{ from: location.pathname + location.search }}>Sign in</Link>
+          )}
+          <AvatarMenu />
+        </div>
       </header>
       <Outlet />
       <nav className="bottombar" aria-label="Main">
@@ -106,7 +119,26 @@ export function Layout() {
 }
 
 export function RequireUploader({ children }: { children: ReactNode }) {
-  const { me } = useApp()
-  if (me?.role !== 'uploader') return <Navigate to="/chat" replace />
+  const { me, config } = useApp()
+  if (me?.role !== 'uploader') return <Navigate to={homePath(me, config)} replace />
   return <>{children}</>
+}
+
+/** Chat, unless this is a guest and guest chat is switched off on the server (Auth:GuestChat). */
+export function RequireChat({ children }: { children: ReactNode }) {
+  const { me, config } = useApp()
+  if (homePath(me, config) !== '/chat') return <Navigate to="/browse" replace />
+  return <>{children}</>
+}
+
+/** The sign-in nudge shown where a guest meets a students-only feature. */
+export function SignInPrompt({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  return (
+    <div className="empty">
+      <Mascot size={96} mood="happy" />
+      {children}
+      <Link className="candy" to="/login" state={{ from: location.pathname + location.search }}>Sign in with uni ID</Link>
+    </div>
+  )
 }

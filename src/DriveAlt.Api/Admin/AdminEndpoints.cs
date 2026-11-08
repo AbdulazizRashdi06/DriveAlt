@@ -17,7 +17,7 @@ public static class AdminEndpoints
         g.MapGet("/users", async (AppDb db, IOptions<AuthOptions> opts, CancellationToken ct) =>
         {
             var pinned = opts.Value.Uploaders.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var users = await db.Users.AsNoTracking().OrderByDescending(u => u.Role).ThenBy(u => u.UniId).ToListAsync(ct);
+            var users = await db.Users.AsNoTracking().Where(u => u.Role != Roles.Guest).OrderByDescending(u => u.Role).ThenBy(u => u.UniId).ToListAsync(ct);
             return users.Select(u => new { u.Id, u.UniId, u.Email, u.Role, u.LastLoginAt, pinned = pinned.Contains(u.UniId) });
         });
 
@@ -25,7 +25,7 @@ public static class AdminEndpoints
         {
             if (body.Role is not (Roles.Student or Roles.Uploader)) return Results.BadRequest();
             var user = await db.Users.FindAsync([id], ct);
-            if (user is null) return Results.NotFound();
+            if (user is null || user.Role == Roles.Guest) return Results.NotFound();
             if (body.Role == Roles.Student && opts.Value.Uploaders.Contains(user.UniId, StringComparer.OrdinalIgnoreCase))
                 return Results.BadRequest(new { error = "This uploader is set in the server config." });
             user.Role = body.Role;
@@ -42,7 +42,8 @@ public static class AdminEndpoints
             failed = await db.Files.CountAsync(f => f.Status == FileStatuses.Failed, ct),
             pages = await db.Pages.CountAsync(ct),
             questions = await db.Regions.CountAsync(r => r.Label == RegionLabels.Question, ct),
-            users = await db.Users.CountAsync(ct),
+            users = await db.Users.CountAsync(u => u.Role != Roles.Guest, ct),
+            guests = await db.Users.CountAsync(u => u.Role == Roles.Guest, ct),
         });
     }
 }

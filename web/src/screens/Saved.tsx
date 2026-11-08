@@ -5,6 +5,7 @@ import { useApp } from '../lib/app'
 import { useSaved } from '../lib/saved'
 import { IconBookmark, IconDownload, IconExternal } from '../ui/Icons'
 import { Mascot } from '../ui/Mascot'
+import { SignInPrompt } from '../ui/Layout'
 import { originalHref, resultLabel } from '../ui/Viewer'
 
 function SavedCard({ card, index, all, color }: { card: ResultCard; index: number; all: ResultCard[]; color: string }) {
@@ -43,7 +44,16 @@ function SavedCard({ card, index, all, color }: { card: ResultCard; index: numbe
 }
 
 export function Saved() {
-  const q = useQuery({ queryKey: ['bookmarks'], queryFn: () => api.get<SavedGroup[]>('/api/bookmarks') })
+  const { me } = useApp()
+  const guest = me?.role === 'guest'
+  const q = useQuery({ queryKey: ['bookmarks'], queryFn: () => api.get<SavedGroup[]>('/api/bookmarks'), enabled: !guest })
+
+  if (guest) return (
+    <main className="page-main">
+      <h1 className="disp" style={{ margin: 0, fontSize: 44, lineHeight: 1 }}>Saved</h1>
+      <SignInPrompt>Saving is for signed-in students. Sign in with your uni ID and every page or question you save lands here, grouped by course.</SignInPrompt>
+    </main>
+  )
   const total = q.data?.reduce((n, g) => n + g.items.length, 0) ?? 0
 
   return (

@@ -4,7 +4,7 @@ import { TransformComponent, TransformWrapper, type ReactZoomPanPinchContentRef 
 import type { ResultCard } from '../lib/api'
 import { CARD_COLORS } from '../lib/api'
 import { useApp } from '../lib/app'
-import { useSaved } from '../lib/saved'
+import { GUEST_SAVE_TEXT, useSaved } from '../lib/saved'
 import { IconBookmark, IconClose, IconExternal, IconLeft, IconMinus, IconPlus, IconRight, IconShare } from './Icons'
 import { ReportButton } from './ReportButton'
 
@@ -42,8 +42,12 @@ export function Viewer({ items, start, onClose }: { items: ResultCard[]; start: 
   const zoomRef = useRef<ReactZoomPanPinchContentRef | null>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const item = items[index]
-  const { toast } = useApp()
-  const [saved, toggleSaved] = useSaved(item.ref, item.saved)
+  const { me, toast } = useApp()
+  const [saved, toggle] = useSaved(item.ref, item.saved)
+  const toggleSaved = async () => {
+    if (me?.role === 'guest') { toast(GUEST_SAVE_TEXT); return }
+    try { await toggle() } catch { toast("Couldn't save that. Try again?") }
+  }
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null

@@ -4,6 +4,8 @@
 
 ## 1. Header
 
+**Current update: 2026-11-08, Claude Code, `claude/guest-mode`; base main `298e4f6` (PR #61, refusals name Abdulaziz, merged).** The owner decided sign-in is optional: "i wanna make login optional in home screen you can continue as a guest". This branch adds **Continue as a guest** (section 2). Written for after it merges and deploys; merge needs the owner's OK. **Overlaps open PR #21** (same auth/login files; section 7). **Guest chat is on by default with limits; the owner has not yet confirmed that cost choice** (section 7).
+
 **Current update: 2026-11-07, Claude Code, `claude/refusal-names-abdulaziz`; base main `08cc8b4` (PR #60, which follows PR #59).** The owner approved merging #59 and #60 ("Yes, merge both"), and both are merged; their deploy evidence is in section 2. This branch makes refusals say, in the model's own words, that Abdulaziz told it not to (owner: "he didnt say abdulaziz told me not to"). Written for after it merges and deploys; merge needs the owner's OK.
 
 **Current update: 2026-11-07, Claude Code, `claude/chat-show-only-asked`, stacked on PR #59 (`claude/embeddings-backfill-handoff`); merge #59 first.** Owner: "take over the fact that the agent gave me stuff i didnt ask for". The chat prompt now treats search results as nearest neighbours, not matches, and keeps offering and showing in separate turns. Each search result also tells the model which of its keywords it really contains. Written for after it merges and deploys; merge needs the owner's OK. Real DeepSeek behaviour is unverified until live use.
@@ -24,10 +26,10 @@
 |---|---|
 | Project | DriveAlt: the GUtech Year 2 batch drive (CS / CYS / AI) as a web app. Live at https://drivealt.tryzarqa.com |
 | Repo | `AbdulazizRashdi06/DriveAlt` (**public**), local `C:\Projects\DriveAlt` |
-| Branch / base | `claude/embeddings-backfill-handoff` (code + docs, PR #59), main `4c0212c` merged in; live code `b839ab0` (PR #57). |
-| Updated | 2026-11-07, Claude Code; embeddings backfill and "not embedded" markers |
+| Branch / base | `claude/guest-mode` (code + docs), base main `298e4f6` (PR #61). Live code per the 2026-11-07 deploy record: `298e4f6`; not re-checked by SSH on 2026-11-08 (port 22 refused). |
+| Updated | 2026-11-08, Claude Code; optional sign-in / guest mode |
 
-| Purpose of this update | Record the production embeddings backfill, add the unembedded markers, refresh live counts and open threads. |
+| Purpose of this update | Record the owner's sign-in decision and the guest mode that implements it. |
 
 **2026-10-26/27 outage, fixed and deployed (PR #22, run 40590404639, 2026-10-27 ~21:58 UTC):** https://drivealt.tryzarqa.com returned **Cloudflare 525** after a Zarqa deploy replaced the shared Caddyfile without DriveAlt's route. Every DriveAlt deploy now restores the block (`deploy/ensure-caddy.sh`), and `caddy-guard.yml` re-checks it every 15 minutes. Details in section 3, 2026-10-27. **The permanent fix (Zarqa PR #6, `abebc56`) is merged and present in the owner's local checkout.** Keep the guard until a later authorized Zarqa deploy is verified to preserve the route (open thread 2).
 
@@ -37,6 +39,15 @@
 
 **In one line (Codex, PR #58):** Inspect repair PR #57 is deployed as `b839ab0`, with passing CI and healthy public/AI endpoints. Seven earlier HEIC failures are ready; the remaining zero-byte PDF needs a valid replacement. PR #21 remains separate open work.
 ## 2. State of the world
+
+**Guest mode (Claude Code, `claude/guest-mode`, not deployed):** the sign-in screen offers **Continue as a guest** next to the uni-ID email code.
+- **How a guest exists:** `POST /api/auth/guest` creates a `users` row with role `guest` (`UniId` `guest-<32 hex>`, empty email) and signs it in with the normal 30-day cookie (`Auth/AuthEndpoints.cs`). Every existing endpoint therefore works unchanged (`RequiredUserId()`, `conversations.user_id`). No migration: conversations and bookmarks have no FK to `users`. `/api/auth/me` shows a guest as uniId `Guest`, initials `G`.
+- **What guests can do:** browse, search, open files and pages, download, and chat. **Saving and reporting need a uni ID:** `/api/bookmarks` and `POST /api/reports` use the new `member` policy (signed in and not a guest), so guests get 403. The UI keeps the Save and Report buttons, but they show a "Sign in with your uni ID…" toast; the Saved tab shows a sign-in prompt and doesn't call the API.
+- **Uploader pages stay closed:** the `uploader` policy is unchanged; guests get 403 on uploads, Inspect, admin, Drive sync and the reports inbox (tested). Guests are left out of Admin → People and can't be given a role (404).
+- **Guest chat limits** (`Auth/GuestLimits.cs`, the global rate limiter, applied only to `POST /api/chats/{id}/messages` from a guest): `Auth:GuestChatPerHour` turns per IP per hour (default 30) and `Auth:GuestChatPerDay` turns for all guests together (default 1000). Over the limit → 429 with "Sign in with your uni ID to keep chatting, or try again later." Students with a uni ID are not limited. Starting guest sessions is limited to 10 per IP per hour. The IP is Cloudflare's `CF-Connecting-IP`, passed by Caddy as `X-Forwarded-For` (`deploy/ensure-caddy.sh`). `UseRateLimiter` now runs after authentication (`Program.cs`) so the limiter can tell guests apart.
+- **Switches:** `Auth:GuestAccess` (default true; false hides the button, refuses `/api/auth/guest` and ends existing guest sessions in `RoleCache`) and `Auth:GuestChat` (default true; false gives guests 403 on chat turns, and the UI hides Chat and lands guests on Browse). `/api/config` reports `guestAccess` and `guestChat`. `deploy.yml` writes them from the optional GitHub variables `GUEST_ACCESS`, `GUEST_CHAT`, `GUEST_CHAT_PER_HOUR`, `GUEST_CHAT_PER_DAY` (none are set yet, so the defaults apply).
+- **Signing in from a guest session** moves the guest's chats to the account and deletes the guest row. **Ending a guest session** (menu → End guest session) deletes the guest row and its chats.
+- **Tests:** backend `GuestApiTests.cs` (5 API cases; they need Postgres and **run in CI only**) and `GuestLimitTests.cs` (3 unit cases). Frontend `web/src/screens/Guest.test.tsx` (9 cases). Local results, 2026-11-08: `dotnet build` succeeded; `dotnet test --filter "...GuestLimitTests|CodexTests|DeepSeekTests|MappingTests|GuardrailTests"` → `Passed! - Failed: 0, Passed: 32`; `npx tsc -b` exit 0; `npx vitest run` → `Test Files 11 passed`, `Tests 47 passed`; `BASE_URL=http://127.0.0.1:5177 node e2e/guest.mjs` (stand-in API, Edge) → desktop and phone, guest chat on and off, all `ok`. API tests: **unknown** until CI runs on the PR.
 
 **Refusals name Abdulaziz (Claude Code, `claude/refusal-names-abdulaziz`, not deployed):** the owner saw "1 + 1" refused without the bot saying Abdulaziz told it not to. Cause: prompt rule 10 said "avoid canned slogans and blaming the owner", and the reply writer said "Do not blame anyone" (`ChatService.cs`, before this branch). Both were added after the owner rejected the hardcoded Abdulaziz refusal line on 2026-10-28. Now rule 1 tells the model to say, in its own words each time, that Abdulaziz told it not to, with no fixed line. Rule 10 and the reply writer allow mentioning him only when declining. The fallback refusal action asks for the same thing. Plain arithmetic is named as a solve request. New test `Refusals_are_told_to_name_abdulaziz_in_the_models_own_words` runs in CI; locally only `dotnet build` passed (0 errors). Real DeepSeek wording is unverified until live.
 
@@ -391,6 +402,8 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 3. What was done
 
+**2026-11-08, Claude Code (`claude/guest-mode`):** implemented optional sign-in with a guest mode, as described in section 2. Resume check on 2026-11-08: `origin/main` contains `1e13a87` (exit 0), `AutoScanGap` count 2, latest code commit `298e4f6` (PR #61 merge), open PRs only #21, public health `{"ok":true}`. SSH to the VPS was refused (port 22), so the running image, gateway and SQL checks were not repeated.
+
 **2026-11-07, Claude Code - merged #59/#60; refusals name Abdulaziz:** after both PRs passed CI, merged #59 normally, retargeted #60 to `main` and merged it. On the owner's screenshot of "1 + 1" refused without naming him, traced the cause to the "don't blame the owner" wording and changed the prompt on `claude/refusal-names-abdulaziz`.
 
 **2026-11-07, Claude Code - chat stops showing unasked-for material:** traced the maps conversation's off-topic results to nearest-neighbour search plus offer-and-show in one turn. Changed the prompt (rules 4, 6, 8) and added `matched_keywords` evidence to search results, with no server filtering. Stacked on PR #59 because that PR also edits this page.
@@ -582,6 +595,7 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 4. User decisions
 
+- **2026-11-08, sign-in optional:** owner: "i wanna make login optional in home screen you can continue as a guest". This settles the "sign-in requirement" that section 7 listed as pending since 2026-10-25. Guest chat cost and limits were chosen by Claude Code (section 5) and still need the owner's confirmation (section 7). Merge needs the owner's OK.
 - **2026-11-07, refusals name Abdulaziz:** owner, on a screenshot of the bot refusing "1 + 1": "he didnt say abdulaziz told me not to". The bot should say Abdulaziz told it not to when it declines to solve, hint or check. This supersedes the 2026-10-28 prompt wording against "blaming the owner" but not that decision's core: the line is still written by the model each time, never a fixed server string.
 - **2026-11-07, merge both:** owner said "Yes, merge both" for PRs #59 and #60, after #60's CI. Done.
 - **2026-11-07, unasked-for results:** owner: "take over the fact that the agent gave me stuff i didnt ask for". Fixed in the prompt plus evidence for the model, keeping the AI-only rule (no server filter). Merge and deploy need the owner's OK.
@@ -657,10 +671,14 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
   - *"he can ask question while fethcing is happening … i asked about algo analysis i wanted only ds, he searched also for efficient algos … search for both while i reply and decide then what to abandon, but let the user know that the search is started"*: for an ambiguous course, say the search has started, ask which course, search both in parallel, and keep only what the student picks.
   - *"even when not spcified "gimme every thing about ..." ask the bot to ouput a couple of the right answer and tell the user that he have more so it does not get overwhelming"*: show a couple of the right results (crops, never typed answers) and say more are ready.
 - **Merges:** PR #5 was explicitly approved with “Merge and deploy after CI passes.” The original full import was also authorized and its test-file validation completed. New PR merges and any new VPS changes still need the owner's OK.
-- **Sign-in (2026-10-25):** whether to keep requiring sign-in remains undecided. PR #21 implements the owner's fixed-code student-view account using the GitHub secret `FIXED_CODES`; the secret value must never appear in this public repo. The PR is still open.
+- **Sign-in (2026-10-25, superseded 2026-11-08):** whether to keep requiring sign-in was undecided until the 2026-11-08 decision above (sign-in optional). PR #21 implements the owner's fixed-code student-view account using the GitHub secret `FIXED_CODES`; the secret value must never appear in this public repo. The PR is still open.
 
 ## 5. Judgment calls (made without asking)
 
+- **2026-11-08, guest as a real row:** a guest gets a `users` row (role `guest`) instead of anonymous endpoints. Chats need a `user_id`, and a row lets every existing endpoint, the cookie and `RoleCache` work unchanged with no migration. Cost: one small row per guest session; nothing prunes old guest rows yet (section 7).
+- **2026-11-08, guest chat on, with limits:** guests can chat because chat is the home screen. Bounded by 30 turns per IP per hour and 1000 guest turns per day in total. Rough worst case (**hypothesis**, not measured): a turn is a few DeepSeek calls plus one Gemini embedding, so on the order of a cent at most, and the daily ceiling caps guest spend at a few dollars a day. The owner can lower the numbers or switch guest chat off with the GitHub variables in section 2.
+- **2026-11-08, saving and reporting need sign-in:** Saved is personal and would vanish with a guest cookie; reports from anonymous visitors could flood the uploader's inbox. The buttons stay visible and explain why, rather than disappearing.
+- **2026-11-08, guest data on sign-in/out:** signing in keeps the guest's chats; ending a guest session deletes them, since nobody could reach them again.
 - **2026-11-07, no relevance threshold:** a cosine-similarity cut-off would be the server deciding relevance, which the owner's AI-only rule forbids, and its value would need tuning. Instead the model gets evidence (`matched_keywords`, the "nearest, not confirmed" note) and decides. Rule 8's "never claim something doesn't exist" was softened so the model can say plainly that nothing it searched matched.
 - **2026-11-07, backfill rounds:** after the approved 137-file round, Claude Code queued two more rounds without asking again, because they covered gaps already inside the approved scope: 2 files whose embedding hit a short 429, and 22 files whose question boxes (part of the 992 counted at approval) lacked vectors.
 - **2026-11-07, what counts as "embedded":** a read page counts as embedded when it has a vector and every question box on it has one. Answer and other boxes never get vectors, so they don't count. Pages not read yet and files that aren't `ready` are never marked, because they're not expected to have vectors yet.
@@ -691,7 +709,9 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 6. File inventory
 
-**Refusals name Abdulaziz (`claude/refusal-names-abdulaziz`):** `src/DriveAlt.Api/Chat/ChatService.cs` (prompt rules 1 and 10, reply writer, fallback refusal action), `docs/AI-AGENTS.md`, test `tests/DriveAlt.Api.Tests/RefusalPromptApiTests.cs`.
+**Guest mode (`claude/guest-mode`):** `src/DriveAlt.Api/Auth/AuthEndpoints.cs` (`/api/auth/guest`, `MemberPolicy`, guest merge/cleanup), `Auth/GuestLimits.cs` (new), `Program.cs` (policies, limiters, middleware order, `/api/config`), `Data/Entities.cs` (`Roles.Guest`), `Infrastructure/Options.cs` (`AuthOptions.Guest*`), `Infrastructure/RoleCache.cs`, `Chat/ChatEndpoints.cs`, `Bookmarks/BookmarkEndpoints.cs`, `Reports/ReportEndpoints.cs`, `Admin/AdminEndpoints.cs`; `.github/workflows/deploy.yml` (optional `GUEST_*` variables); `web/src/screens/{Login,Saved}.tsx`, `web/src/ui/{Layout,ReportButton,ResultCard,Viewer}.tsx`, `web/src/lib/{api.ts,app.tsx,home.ts,saved.ts}`, `web/src/App.tsx`, `web/src/styles/app.css`; tests `tests/DriveAlt.Api.Tests/{GuestApiTests,GuestLimitTests}.cs`, `ApiFactory.cs` (`GuestChatPerHour=3`), `web/src/screens/Guest.test.tsx`, `web/e2e/guest.mjs`; `README.md`.
+
+**Refusals name Abdulaziz (`claude/refusal-names-abdulaziz`, merged as PR #61):** `src/DriveAlt.Api/Chat/ChatService.cs` (prompt rules 1 and 10, reply writer, fallback refusal action), `docs/AI-AGENTS.md`, test `tests/DriveAlt.Api.Tests/RefusalPromptApiTests.cs`.
 
 **Show-only-asked chat (`claude/chat-show-only-asked`):** `src/DriveAlt.Api/Chat/ChatService.cs` (prompt rules 4/6/8, tool `note`, `matched_keywords`), `src/DriveAlt.Api/Search/SearchService.cs` (`MatchedKeywordsAsync`), `docs/AI-AGENTS.md`, test `tests/DriveAlt.Api.Tests/ChatRelevanceApiTests.cs`.
 
@@ -748,6 +768,12 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 
 ## 7. Open threads
 
+**New, 2026-11-08 (Claude Code, `claude/guest-mode`):**
+- **Owner to confirm guest chat cost:** guest chat is on with 30 turns per IP per hour and 1000 per day for all guests. If the owner wants guests to browse only, set the GitHub variable `GUEST_CHAT=false`; to change the limits, set `GUEST_CHAT_PER_HOUR` / `GUEST_CHAT_PER_DAY`. Variables apply on the next deploy.
+- **Overlap with PR #21** (`claude/pick-fix-and-owner-login`, open): both change `Auth/AuthEndpoints.cs`, `Infrastructure/Options.cs`, `web/src/screens/Login.tsx`, `web/src/styles/app.css`, `tests/DriveAlt.Api.Tests/ApiFactory.cs`, `.github/workflows/deploy.yml` and this page. Whichever merges second needs a rebase. PR #21's fixed-code "student view" account may be less needed now that anyone can look around as a guest; that's the owner's call. Nobody pushed to #21's branch.
+- **Guest rows are never pruned:** each guest session adds one `users` row (plus its chats). **Hypothesis:** small enough to ignore for now. Cleaning up guests not seen for 30+ days (the cookie lifetime) would delete data, so it needs the owner's OK. Admin → stats now reports `guests` separately.
+- **After deploy, check live:** the sign-in page shows Continue as a guest; a guest can browse and chat; Save/Report show the sign-in toast; `/upload` and `/inspect` send a guest back to chat.
+
 **New, 2026-11-07 (Claude Code):**
 - **Silent embedding skips:** a Gemini 429 during tagging still marks the job `done` with no vectors (`ProcessingService.cs:276-281`). Once this branch deploys, Inspect shows such pages; nothing re-queues them automatically yet. A possible fix is to re-queue a `reembed` job with a delay instead of finishing; that needs owner approval.
 - **400-page cap truncates textbooks:** `Processing:MaxPagesPerFile = 400` (`appsettings.json`, `Infrastructure/Options.cs:82`). Exactly two files hit it, both Probability and Statistics books in the `book` folder: *Introductory Statistics (7th Ed)* and Walpole's *Probability & Statistics for Engineers & Scientists (9th Ed)*. **Hypothesis:** the real books are longer, so their later pages were never imported. Not checked against the PDFs. Raising the cap means more processing and Terra usage; that is the owner's call.
@@ -792,9 +818,11 @@ Pre-import baseline was one ready file, seven AI-read pages, zero offline pages,
 6. **Usage-limit report:** actual 429 pauses occurred during the import (dated evidence in section 2). The exact cumulative wall-clock delay and last in-scope completion time are unknown. The 2026-11-07 snapshot has no queued/held/paused jobs; do not infer who released earlier held jobs or requeue anything. Do not add overlapping per-file retry intervals as independent elapsed time. Earlier notes named the automation `monitor-drivealt-import-and-codex-usage-limits`; its present configuration was not checked here.
 7. **README and embeddings:** README's model table is current, but deploy instructions and the Gemini secret/offline descriptions need review. The 2026-10-24 import finished 105 files without embeddings using keyword search; present embedding coverage was not queried. Paid Gemini usage remains an owner decision.
 8. **Other-checkout prompt (unverified):** the 2026-10-24 note about `C:/Users/abdul/DriveAlt` had a prompt excluding answers from boxes. That checkout belongs to another agent and was not inspected or changed here.
-9. **Owner decisions pending:** sign-in requirement; whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
+9. **Owner decisions pending:** guest chat cost (sign-in itself was decided on 2026-11-08, see above); whether to enable paid Gemini usage; any Docker cache pruning. No approval is implied by this orientation.
 
 ## 8. Continuation plan
+
+**2026-11-08, Claude Code, `claude/guest-mode`:** PR open into `main`; CI must pass (it runs the Postgres API tests). Then it waits for the owner's merge OK (code change: normal merge, not `[skip ci]`) and the owner's answer on guest chat cost. If PR #21 merges first, rebase this branch on it and keep both the fixed codes and the guest button.
 
 **2026-11-07, Claude Code, `claude/refusal-names-abdulaziz`:** PR open; after CI it waits for the owner's merge OK (a normal merge, since it changes code). After deploy, check live: "1 + 1" should get a refusal naming Abdulaziz, and the maps question (PR #60) should show nothing unrelated.
 
@@ -824,13 +852,17 @@ git grep -c "AutoScanGap" origin/main -- src/DriveAlt.Api/Import/DriveSync.cs
 git log -1 --first-parent --format=%H origin/main -- . ':(exclude)*.md'
 # Latest verified code/image: b839ab03ddd941890a3e51cb002226da186b29d0 (2026-11-07).
 # git merge-base --is-ancestor 2a5b7fbd21c622e8a8b1f589257e00c43aceb49e origin/main must exit 0 (PR #57).
-# PR #59 merged as 89a685a and PR #60 as 08cc8b4 (2026-11-07); expect 08cc8b4 or later here and as the image tag.
-# Once claude/refusal-names-abdulaziz merges and deploys, expect its merge commit.
+# PR #59 merged as 89a685a, PR #60 as 08cc8b4, PR #61 as 298e4f6 (2026-11-07); expect 298e4f6 or later here and as the image tag.
+# Once claude/guest-mode merges and deploys, expect its merge commit, and
+#   curl -s https://drivealt.tryzarqa.com/api/config   → contains "guestAccess":true
+git grep -c "GuestChatPerDay" origin/main -- src/DriveAlt.Api/Infrastructure/Options.cs
+# Expect 1 once claude/guest-mode is merged (no match before).
 # Later docs-only merges must not change the running image.
 git -C C:/Projects/LostraAi merge-base --is-ancestor abebc56 HEAD
 # Expect exit 0: local Zarqa contains the permanent Caddy fix.
 gh pr list -R AbdulazizRashdi06/DriveAlt --state open --json number,headRefName
 # #21 claude/pick-fix-and-owner-login remains open unless owner merges/closes it.
+# claude/guest-mode stays open until the owner merges it.
 # After ordered docs merges, #21 remains open. Re-check rather than assuming this list is fixed.
 # PRs #25–#57 are merged; this rollout record is a docs-only [skip ci] merge.
 # gh is unauthenticated in this Codex runtime: use GitHub search_prs with

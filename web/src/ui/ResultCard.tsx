@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import type { ResultCard as Card } from '../lib/api'
 import { CARD_COLORS, onDark, TYPE_SINGULAR } from '../lib/api'
 import { useApp } from '../lib/app'
-import { useSaved } from '../lib/saved'
+import { GUEST_SAVE_TEXT, useSaved } from '../lib/saved'
 import { IconDownload, IconExpand, IconExternal, IconShare } from './Icons'
 import { copyShareLink, originalHref, resultLabel } from './Viewer'
 
@@ -37,7 +37,7 @@ function FileResultCard({ card, index }: Pick<Props, 'card' | 'index'>) {
 }
 
 function QuestionResultCard({ card, index, all }: Props) {
-  const { openViewer, toast } = useApp()
+  const { me, openViewer, toast } = useApp()
   const [saved, toggle] = useSaved(card.ref, card.saved)
   const color = CARD_COLORS[index % CARD_COLORS.length]
   const dark = onDark(color)
@@ -49,6 +49,7 @@ function QuestionResultCard({ card, index, all }: Props) {
   const top = card.sourceKind === 'images' && card.pageCount === 1 ? `PHOTO · ${card.courseName}` : card.courseName
 
   const save = async () => {
+    if (me?.role === 'guest') { toast(GUEST_SAVE_TEXT); return }
     try {
       const now = await toggle()
       toast(now ? 'Saved! Find it in the Saved tab.' : 'Removed from Saved.')

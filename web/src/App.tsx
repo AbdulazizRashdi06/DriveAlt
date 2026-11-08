@@ -2,7 +2,7 @@ import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-qu
 import { ApiError } from './lib/api'
 import { createBrowserRouter, Navigate, RouterProvider, Outlet } from 'react-router'
 import { AppProvider } from './lib/app'
-import { Layout, RequireUploader } from './ui/Layout'
+import { Layout, RequireChat, RequireUploader } from './ui/Layout'
 import { Login } from './screens/Login'
 import { Chat } from './screens/Chat'
 import { Browse } from './screens/Browse'
@@ -44,8 +44,8 @@ const router = createBrowserRouter([
         element: <Layout />,
         children: [
           { index: true, element: <Navigate to="/chat" replace /> },
-          { path: '/chat', element: <Chat /> },
-          { path: '/chat/:id', element: <Chat /> },
+          { path: '/chat', element: <RequireChat><Chat /></RequireChat> },
+          { path: '/chat/:id', element: <RequireChat><Chat /></RequireChat> },
           { path: '/browse', element: <Browse /> },
           { path: '/browse/:slug', element: <Browse /> },
           { path: '/files/:id', element: <FileView /> },

@@ -22,6 +22,18 @@ public sealed class AuthOptions
 
     public int OtpMinutes { get; set; } = 10;
     public int OtpMaxAttempts { get; set; } = 5;
+
+    /// <summary>Shows "Continue as a guest" on the sign-in screen. Off = sign-in required, as before.</summary>
+    public bool GuestAccess { get; set; } = true;
+
+    /// <summary>Guests may use the chat bot (each turn costs DeepSeek/Gemini calls). Off = guests browse only.</summary>
+    public bool GuestChat { get; set; } = true;
+
+    /// <summary>Chat turns one IP may send as a guest per hour.</summary>
+    public int GuestChatPerHour { get; set; } = 30;
+
+    /// <summary>Chat turns all guests together may send per day: a ceiling on what guests can cost.</summary>
+    public int GuestChatPerDay { get; set; } = 1000;
 }
 
 public sealed class ResendOptions

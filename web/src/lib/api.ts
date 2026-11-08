@@ -1,4 +1,4 @@
-export type Role = 'student' | 'uploader'
+export type Role = 'student' | 'uploader' | 'guest'
 
 export interface Me {
   id: string
@@ -12,6 +12,10 @@ export interface AppConfig {
   name: string
   emailDomain: string
   aiOnline: boolean
+  /** "Continue as a guest" is offered on the sign-in screen. */
+  guestAccess: boolean
+  /** Guests may chat with the bot (otherwise they browse only). */
+  guestChat: boolean
 }
 
 export interface Course {
@@ -254,7 +258,14 @@ export async function sendChat(conversationId: string, text: string, h: StreamHa
     body: JSON.stringify({ text, ...extra }),
     signal,
   })
-  if (!res.ok || !res.body) throw new ApiError(res.status, 'The bot tripped over something. Try again?')
+  if (!res.ok || !res.body) {
+    let message = 'The bot tripped over something. Try again?'
+    try {
+      const j = await res.json()
+      if (j?.error) message = j.error
+    } catch { /* not JSON */ }
+    throw new ApiError(res.status, message)
+  }
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
